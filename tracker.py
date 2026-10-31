@@ -15,6 +15,8 @@ DeepState: зміни за добу — Донецька і Луганська �
 from __future__ import annotations
 
 import csv
+import html
+import re
 import json
 import os
 import sys
@@ -58,6 +60,12 @@ OBLASTS = {
 
 # Які шари DeepState вважаємо окупованими
 OCCUPIED_MARKERS = ("geoJSON.status.occupied", "geoJSON.territories.ordlo")
+# Сіра зона — «територія, що потребує уточнення»
+UNKNOWN_MARKERS = ("geoJSON.status.unknown",)
+
+# Текстові повідомлення DeepState («Оновлення мапи»)
+DEEPSTATE_HISTORY_URL = "https://deepstatemap.live/api/history/public"
+MAX_MESSAGES_IN_POST = 12
 
 # Ділянки змін, менші за цю площу, ігноруємо (шум від перемальовування меж)
 MIN_CHANGE_KM2 = float(os.getenv("MIN_CHANGE_KM2", "0.01"))
@@ -296,26 +304,38 @@ def get_deepstate() -> dict:
 # ============================ ANALYSIS ============================
 
 
-def occupied_by_oblast(deepstate: dict, oblasts: dict) -> dict:
-    occupied = []
+def log_layer_names(deepstate: dict) -> None:
+    """У журнал — які шари є на карті (щоб помітити, якщо DeepState змінить формат)."""
+    counts: dict[str, int] = {}
     for f in deepstate["map"]["features"]:
         name = (f.get("properties") or {}).get("name") or ""
-        if not f.get("geometry") or not any(m in name for m in OCCUPIED_MARKERS):
+        m = re.search(r"geoJSON\.[\w.]+", name)
+        key = m.group(0) if m else (name[:40] or "<без назви>")
+        counts[key] = counts.get(key, 0) + 1
+    top = sorted(counts.items(), key=lambda kv: -kv[1])[:15]
+    log("Шари на карті: " + "; ".join(f"{k} × {v}" for k, v in top))
+
+
+def layer_by_oblast(deepstate: dict, oblasts: dict, markers: tuple, label: str, required: bool) -> dict:
+    layer = []
+    for f in deepstate["map"]["features"]:
+        name = (f.get("properties") or {}).get("name") or ""
+        if not f.get("geometry") or not any(m in name for m in markers):
             continue
         try:
             g = clean_polygonal(shape(f["geometry"]))
         except Exception:  # noqa: BLE001
             continue
         if g is not None:
-            occupied.append(g)
-    if not occupied:
-        raise RuntimeError("На карті DeepState не знайдено жодного окупованого шару — схоже, змінився формат даних")
-    log(f"Окупованих шарів на карті: {len(occupied)}")
+            layer.append(g)
+    if not layer and required:
+        raise RuntimeError(f"На карті DeepState не знайдено шару «{label}» — схоже, змінився формат даних")
+    log(f"Шар «{label}»: {len(layer)} полігонів на всій карті")
 
     result = {}
     for key, oblast in oblasts.items():
         parts = []
-        for g in occupied:
+        for g in layer:
             if not g.intersects(oblast):
                 continue
             inter = clean_polygonal(g.intersection(oblast))
@@ -323,9 +343,116 @@ def occupied_by_oblast(deepstate: dict, oblasts: dict) -> dict:
                 parts.append(inter)
         merged = normalize(unary_union(parts)) if parts else None
         result[key] = merged
-        log(f"{OBLASTS[key]['title']}: позначено окупованими {fmt_km2(area_km2(merged))} км² "
+        log(f"{OBLASTS[key]['title']}: «{label}» {fmt_km2(area_km2(merged))} км² "
             f"({area_km2(merged) / area_km2(oblast) * 100:.2f}% області)")
     return result
+
+
+def occupied_by_oblast(deepstate: dict, oblasts: dict) -> dict:
+    return layer_by_oblast(deepstate, oblasts, OCCUPIED_MARKERS, "окуповано", required=True)
+
+
+def unknown_by_oblast(deepstate: dict, oblasts: dict) -> dict:
+    return layer_by_oblast(deepstate, oblasts, UNKNOWN_MARKERS, "сіра зона", required=False)
+
+
+# ============================ MESSAGES ============================
+
+
+_ALT = str.maketrans({"і": "*", "е": "*", "о": "*", "и": "*", "ї": "*", "є": "*", "'": "", "’": "", "ʼ": ""})
+
+
+def _norm(word: str) -> str:
+    return word.lower().translate(_ALT)
+
+
+def _name_key(name: str) -> str:
+    """Основа назви для пошуку у відмінках: Гранів → «гр*н*», Майське → «м*йськ»."""
+    n = _norm(name)
+    k = max(5, len(n) - 3) if len(n) > 5 else max(3, len(n) - 1)
+    return n[:k]
+
+
+def build_name_index(places: list[dict]) -> dict:
+    idx: dict[str, set] = {}
+    for pl in places:
+        idx.setdefault(_name_key(pl["name"]), set()).add(pl["oblast"])
+    return idx
+
+
+def clean_description(text: str) -> str:
+    text = re.sub(r"<br\s*/?>", "\n", text or "", flags=re.I)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)   # markdown-посилання → текст
+    text = re.sub(r"<[^>]+>", "", text)                       # HTML-теги
+    text = html.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    return " ".join(line.strip() for line in text.splitlines() if line.strip())
+
+
+def message_oblasts(raw: str, oblasts: dict, name_idx: dict) -> set:
+    """До яких наших областей стосується повідомлення: за координатами в посиланнях або за назвами."""
+    found = set()
+    coords = re.findall(r"(4[4-9]\.\d{3,})[/,\s]+(3[0-9]\.\d{3,}|4[0-1]\.\d{3,})", raw or "")
+    if coords:
+        for lat, lon in coords:
+            pt = Point(float(lon), float(lat))
+            for key, poly in oblasts.items():
+                if poly.contains(pt):
+                    found.add(key)
+        return found
+    text = clean_description(raw)
+    low = text.lower()
+    if "донеччин" in low or "донецьк" in low:
+        found.add("donetsk")
+    if "луганщин" in low or "луганськ" in low:
+        found.add("luhansk")
+    name_to_key = {cfg["name_ua"]: k for k, cfg in OBLASTS.items()}
+    # слова з великої літери, разом із дефісами й складеними назвами (Нового Донбасу, Рай-Олександрівці)
+    for m in re.finditer(r"[А-ЯҐЄІЇ][а-яґєіїʼ’'\-]+(?:\s+[А-ЯҐЄІЇ][а-яґєіїʼ’'\-]+)?", text):
+        for cand in {m.group(0), m.group(0).split()[-1]}:
+            key = _name_key(cand)
+            for k, obl in ((k, o) for k, o in name_idx.items() if len(k) >= 4 and _norm(cand).startswith(k)):
+                for o in obl:
+                    if o in name_to_key:
+                        found.add(name_to_key[o])
+    return found
+
+
+def get_messages(since_id: int | None, until_id: int | None, oblasts: dict, places: list) -> list[dict]:
+    """Повідомлення DeepState між двома версіями карти, що стосуються Донеччини/Луганщини."""
+    if not since_id or not until_id or until_id <= since_id:
+        return []
+    try:
+        if os.getenv("HISTORY_FILE"):
+            items = load_json(Path(os.environ["HISTORY_FILE"]))
+        else:
+            items = http_get_json(DEEPSTATE_HISTORY_URL)
+    except Exception as e:  # noqa: BLE001
+        log(f"Не вдалося отримати повідомлення DeepState (пост вийде без них): {e}")
+        return []
+    if not isinstance(items, list):
+        log("Повідомлення DeepState: неочікуваний формат, пропускаю.")
+        return []
+    name_idx = build_name_index(places)
+    out = []
+    for it in items:
+        try:
+            mid = int(it.get("id"))
+        except (TypeError, ValueError):
+            continue
+        if not (since_id < mid <= until_id) or it.get("status") is False:
+            continue
+        raw = it.get("description") or ""
+        text = clean_description(raw)
+        if not text:
+            continue
+        obl = message_oblasts(raw, oblasts, name_idx)
+        log(f"Повідомлення {datetime.fromtimestamp(mid, KYIV):%d.%m %H:%M}: {text[:120]} → "
+            f"{', '.join(sorted(obl)) or 'не наші області'}")
+        if obl:
+            out.append({"id": mid, "time": datetime.fromtimestamp(mid, KYIV), "text": text, "oblasts": sorted(obl)})
+    out.sort(key=lambda m: m["id"])
+    return out
 
 
 def nearest_places(polys: list, places: list, oblast_name: str) -> list[str]:
@@ -378,20 +505,50 @@ def change_sentence(km2: float, kind: str, places: list[str]) -> str:
     return s
 
 
-def build_text(period: str, results: dict) -> str:
+def grey_sentence(g: dict | None) -> str:
+    if not g:
+        return ""
+    net = g["net_km2"]
+    if abs(net) < 0.01 and not g["added_km2"]:
+        return ""
+    if net >= 0.01:
+        s = f"Сіра зона (території, що потребують уточнення) збільшилася на {fmt_km2(net)} км²"
+    elif net <= -0.01:
+        s = f"Сіра зона (території, що потребують уточнення) зменшилася на {fmt_km2(-net)} км²"
+    else:
+        s = "Сіра зона (території, що потребують уточнення) змінила обриси"
+    if g["places"]:
+        s += f", нові сірі ділянки — поблизу: {', '.join(g['places'])}"
+    return s + "."
+
+
+def esc(text: str) -> str:
+    return html.escape(text, quote=False)
+
+
+def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None) -> str:
     lines = ["<b>DeepState: зміни за добу</b>", "", f"Період: {period}", ""]
     for key, cfg in OBLASTS.items():
         r = results[key]
-        if r["newly_km2"] == 0 and r["deocc_km2"] == 0:
-            lines.append(f"<b>{cfg['title']}:</b> змін не зафіксовано.")
-        else:
-            parts = []
-            if r["newly_km2"] > 0:
-                parts.append(change_sentence(r["newly_km2"], "окуповані", r["newly_places"]))
-            if r["deocc_km2"] > 0:
-                parts.append(change_sentence(r["deocc_km2"], "деокуповані", r["deocc_places"]))
-            body = " ".join(parts)
-            lines.append(f"<b>{cfg['title']}:</b> {body[0].upper()}{body[1:]}")
+        parts = []
+        if r["newly_km2"] > 0:
+            parts.append(change_sentence(r["newly_km2"], "окуповані", r["newly_places"]))
+        if r["deocc_km2"] > 0:
+            parts.append(change_sentence(r["deocc_km2"], "деокуповані", r["deocc_places"]))
+        gs = grey_sentence((grey or {}).get(key))
+        if not parts:
+            parts.append("змін позначень окупованих територій не зафіксовано.")
+        if gs:
+            parts.append(gs)
+        body = " ".join(parts)
+        lines.append(f"<b>{cfg['title']}:</b> {body[0].upper()}{body[1:]}")
+        lines.append("")
+    if messages:
+        lines.append("<b>Повідомлення на сайті DeepState:</b>")
+        for m in messages[:MAX_MESSAGES_IN_POST]:
+            lines.append(f"• {m['time']:%d.%m, %H:%M} — {esc(m['text'])}")
+        if len(messages) > MAX_MESSAGES_IN_POST:
+            lines.append(f"…та ще {len(messages) - MAX_MESSAGES_IN_POST}.")
         lines.append("")
     lines.append(EDITOR_NOTE)
     return "\n".join(lines)
@@ -458,6 +615,9 @@ HISTORY_FIELDS = [
     "donetsk_occupied_percent", "luhansk_occupied_percent",
     "donetsk_newly_occupied_km2", "donetsk_deoccupied_km2",
     "luhansk_newly_occupied_km2", "luhansk_deoccupied_km2",
+    "donetsk_unknown_km2", "luhansk_unknown_km2",
+    "donetsk_unknown_net_km2", "luhansk_unknown_net_km2",
+    "messages_count", "messages",
     "donetsk_newly_places", "donetsk_deoccupied_places",
     "luhansk_newly_places", "luhansk_deoccupied_places",
 ]
@@ -531,11 +691,18 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             if deocc_pl:
                 body += f" Деокуповані — поблизу населених пунктів: {', '.join(deocc_pl)}."
             body = body[0].upper() + body[1:]
+        grey_net = round(sum(_f(r.get(f"{key}_unknown_net_km2")) for r in rows), 2)
+        if abs(grey_net) >= 0.01:
+            body += (f" Сіра зона {'збільшилася' if grey_net > 0 else 'зменшилася'} на {fmt_km2(abs(grey_net))} км².")
         last = rows[-1]
         pct = _f(last.get(f"{key}_occupied_percent"))
         total = f" Загалом позначено окупованими {fmt_km2(_f(last[f'{key}_occupied_km2']))} км²"
         total += f" ({str(round(pct, 1)).replace('.', ',')}% області)." if pct else "."
         lines.append(f"<b>{cfg['title']}:</b> {body}{total}")
+        lines.append("")
+    n_msg = sum(int(_f(r.get("messages_count"))) for r in rows)
+    if n_msg:
+        lines.append(f"Повідомлень на сайті DeepState про Донеччину й Луганщину за період: {n_msg}.")
         lines.append("")
     lines.append(EDITOR_NOTE)
     return "\n".join(lines)
@@ -616,7 +783,9 @@ def main() -> int:
     oblasts = get_oblasts()
     places = get_settlements()
     deepstate = get_deepstate()
+    log_layer_names(deepstate)
     occupied = occupied_by_oblast(deepstate, oblasts)
+    unknown = unknown_by_oblast(deepstate, oblasts)
 
     new_state = {
         "date": today,
@@ -628,6 +797,8 @@ def main() -> int:
         "occupied": {k: geom_to_json(v) for k, v in occupied.items()},
         "occupied_km2": {k: round(area_km2(v), 2) for k, v in occupied.items()},
         "occupied_percent": {k: round(area_km2(v) / area_km2(oblasts[k]) * 100, 2) for k, v in occupied.items()},
+        "unknown": {k: geom_to_json(v) for k, v in unknown.items()},
+        "unknown_km2": {k: round(area_km2(v), 2) for k, v in unknown.items()},
     }
 
     if base_state is None:
@@ -643,7 +814,26 @@ def main() -> int:
         log(f"{cfg['title']}: +{results[key]['newly_km2']} / −{results[key]['deocc_km2']} км²")
 
     period = f"{fmt_date(base_state['date'])}–{fmt_date(today)}"
-    text = build_text(period, results)
+    # Сіра зона: чиста зміна площі + нові сірі ділянки (якщо в попередньому знімку вона є)
+    grey = {}
+    if "unknown" in base_state:
+        for key, cfg in OBLASTS.items():
+            prev_u = geom_from_json(base_state["unknown"].get(key))
+            cur_u = unknown[key]
+            added = drop_slivers(cur_u if prev_u is None else clean_polygonal(cur_u.difference(prev_u))) if cur_u else []
+            grey[key] = {
+                "net_km2": round(area_km2(cur_u) - area_km2(prev_u), 2),
+                "added_km2": round(sum(area_km2(p) for p in added), 2),
+                "places": nearest_places(added, places, cfg["name_ua"]),
+            }
+            log(f"{cfg['title']}: сіра зона {grey[key]['net_km2']:+} км² (нових ділянок {grey[key]['added_km2']} км²)")
+    else:
+        log("У попередньому знімку немає сірої зони — її зміну покажемо з наступного дня.")
+
+    messages = get_messages(base_state.get("deepstate_id"), deepstate.get("id"), oblasts, places)
+    log(f"Повідомлень DeepState про Донеччину/Луганщину за період: {len(messages)}")
+
+    text = build_text(period, results, grey, messages)
 
     # Зберігаємо стан ДО публікації: якщо Telegram впаде, дані не загубляться
     if current_state and current_state["date"] < today:
@@ -671,6 +861,10 @@ def main() -> int:
         **{f"{k}_deoccupied_km2": results[k]["deocc_km2"] for k in OBLASTS},
         **{f"{k}_newly_places": "; ".join(results[k]["newly_places"]) for k in OBLASTS},
         **{f"{k}_deoccupied_places": "; ".join(results[k]["deocc_places"]) for k in OBLASTS},
+        **{f"{k}_unknown_km2": new_state["unknown_km2"][k] for k in OBLASTS},
+        **{f"{k}_unknown_net_km2": (grey.get(k) or {}).get("net_km2", "") for k in OBLASTS},
+        "messages_count": len(messages),
+        "messages": " | ".join(f"{m['time']:%d.%m %H:%M} {m['text']}" for m in messages),
     })
 
     publish(text, COVER_IMAGE)
