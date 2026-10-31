@@ -76,7 +76,24 @@ STATE_DIR = DATA / "state"
 REF_DIR = DATA / "reference"
 CHANGES_DIR = DATA / "changes"
 HISTORY_CSV = DATA / "history.csv"
-COVER_IMAGE = ROOT / "assets" / "cover.jpg"
+def _cover(name: str) -> Path:
+    """Картинку шукаємо в папці assets/, а якщо там немає — у корені репозиторію."""
+    p = ROOT / "assets" / name
+    return p if p.exists() else ROOT / name
+
+
+COVER_IMAGE = _cover("cover.jpg")          # щоденний пост
+COVER_WEEK = _cover("cover_week.jpg")      # тижневий підсумок
+COVER_MONTH = _cover("cover_month.jpg")    # місячний підсумок
+
+# Тижневий підсумок — у цей день тижня (0 = понеділок), місячний — 1-го числа
+WEEKLY_WEEKDAY = 0
+
+# Тестовий запуск: нічого не публікує і нічого не зберігає
+DRY_RUN = os.getenv("DRY_RUN") == "1"
+
+MONTHS_UA = ["січень", "лютий", "березень", "квітень", "травень", "червень",
+             "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"]
 
 EDITOR_NOTE = (
     "<blockquote><i>Примітка редакції: це автоматизований аналіз змін на карті "
@@ -121,6 +138,8 @@ def load_json(path: Path):
 
 
 def save_json(path: Path, obj) -> None:
+    if DRY_RUN:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(obj, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
@@ -163,7 +182,7 @@ def drop_slivers(geom):
 
 
 def fmt_km2(x: float) -> str:
-    return f"{x:.2f}".replace(".", ",")
+    return f"{x:,.2f}".replace(",", "\u00a0").replace(".", ",")  # 16 625,84
 
 
 def fmt_date(d: str) -> str:
@@ -389,22 +408,22 @@ def tg(method: str, token: str, data: dict, files: dict | None = None) -> dict:
     return js
 
 
-def publish(text: str) -> None:
+def publish(text: str, image: Path = COVER_IMAGE) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-    if os.getenv("DRY_RUN") == "1" or not token or not chat_id:
+    if DRY_RUN or not token or not chat_id:
         log("DRY_RUN або немає секретів Telegram — пост не надсилається. Текст:\n" + text)
         return
     base = {"chat_id": chat_id, "parse_mode": "HTML"}
-    if COVER_IMAGE.exists() and len(text) <= 1024:  # ліміт підпису до фото в Telegram
-        with COVER_IMAGE.open("rb") as fh:
+    if image.exists() and len(text) <= 1024:  # ліміт підпису до фото в Telegram
+        with image.open("rb") as fh:
             tg("sendPhoto", token, {**base, "caption": text}, {"photo": fh})
     else:
-        if COVER_IMAGE.exists():
-            with COVER_IMAGE.open("rb") as fh:
+        if image.exists():
+            with image.open("rb") as fh:
                 tg("sendPhoto", token, {"chat_id": chat_id}, {"photo": fh})
         tg("sendMessage", token, {**base, "text": text, "disable_web_page_preview": "true"})
-    log("Пост надіслано в Telegram.")
+    log(f"Пост надіслано в Telegram ({image.name if image.exists() else 'без картинки'}).")
 
 
 def alert(message: str) -> None:
@@ -433,30 +452,157 @@ def geom_from_json(j):
     return normalize(shape(j)) if j else None
 
 
-def append_history(row: dict) -> None:
-    new = not HISTORY_CSV.exists()
+HISTORY_FIELDS = [
+    "date", "compared_with", "deepstate_id",
+    "donetsk_occupied_km2", "luhansk_occupied_km2",
+    "donetsk_occupied_percent", "luhansk_occupied_percent",
+    "donetsk_newly_occupied_km2", "donetsk_deoccupied_km2",
+    "luhansk_newly_occupied_km2", "luhansk_deoccupied_km2",
+    "donetsk_newly_places", "donetsk_deoccupied_places",
+    "luhansk_newly_places", "luhansk_deoccupied_places",
+]
+
+
+def read_history() -> list[dict]:
+    if not HISTORY_CSV.exists():
+        return []
+    with HISTORY_CSV.open(encoding="utf-8", newline="") as fh:
+        return list(csv.DictReader(fh))
+
+
+def upsert_history(row: dict) -> None:
+    """Додає рядок за день або замінює наявний (повторний запуск того ж дня)."""
+    rows = [r for r in read_history() if r.get("date") != row["date"]] + [row]
+    rows.sort(key=lambda r: r["date"])
+    if DRY_RUN:
+        return
     HISTORY_CSV.parent.mkdir(parents=True, exist_ok=True)
-    with HISTORY_CSV.open("a", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(row.keys()))
-        if new:
-            w.writeheader()
-        w.writerow(row)
+    with HISTORY_CSV.open("w", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=HISTORY_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+
+
+# ============================ SUMMARIES ============================
+
+
+def _f(x) -> float:
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _places(rows: list[dict], col: str, limit: int = PLACES_MAX_IN_TEXT) -> list[str]:
+    """Населені пункти, що найчастіше траплялися за період (за кількістю днів)."""
+    counts: dict[str, int] = {}
+    order: list[str] = []
+    for r in rows:
+        for name in filter(None, (n.strip() for n in (r.get(col) or "").split(";"))):
+            if name not in counts:
+                order.append(name)
+            counts[name] = counts.get(name, 0) + 1
+    order.sort(key=lambda n: -counts[n])
+    return order[:limit]
+
+
+def build_summary(kind: str, rows: list[dict], period_start: str, period_end: str, label: str | None = None) -> str:
+    title = "DeepState: підсумки тижня" if kind == "week" else f"DeepState: підсумки місяця — {label}"
+    word = "За тиждень" if kind == "week" else "За місяць"
+    lines = [f"<b>{title}</b>", "", f"Період: {fmt_date(period_start)}–{fmt_date(period_end)}", ""]
+    for key, cfg in OBLASTS.items():
+        newly = round(sum(_f(r[f"{key}_newly_occupied_km2"]) for r in rows), 2)
+        deocc = round(sum(_f(r[f"{key}_deoccupied_km2"]) for r in rows), 2)
+        days = sum(1 for r in rows if _f(r[f"{key}_newly_occupied_km2"]) > 0 or _f(r[f"{key}_deoccupied_km2"]) > 0)
+        if newly == 0 and deocc == 0:
+            body = "змін не зафіксовано."
+        else:
+            parts = []
+            if newly > 0:
+                parts.append(f"{fmt_km2(newly)} км² територій змінили позначення на окуповані")
+            if deocc > 0:
+                parts.append(f"{fmt_km2(deocc)} км² — на деокуповані")
+            body = f"{word.lower()} на карті DeepState " + ", ".join(parts) + "."
+            body += f" Зміни фіксувалися в {days} із {len(rows)} днів."
+            newly_pl = _places(rows, f"{key}_newly_places")
+            deocc_pl = _places(rows, f"{key}_deoccupied_places")
+            if newly_pl:
+                body += f" Окуповані — поблизу населених пунктів: {', '.join(newly_pl)}."
+            if deocc_pl:
+                body += f" Деокуповані — поблизу населених пунктів: {', '.join(deocc_pl)}."
+            body = body[0].upper() + body[1:]
+        last = rows[-1]
+        pct = _f(last.get(f"{key}_occupied_percent"))
+        total = f" Загалом позначено окупованими {fmt_km2(_f(last[f'{key}_occupied_km2']))} км²"
+        total += f" ({str(round(pct, 1)).replace('.', ',')}% області)." if pct else "."
+        lines.append(f"<b>{cfg['title']}:</b> {body}{total}")
+        lines.append("")
+    lines.append(EDITOR_NOTE)
+    return "\n".join(lines)
+
+
+def due_summaries(now: datetime) -> list[dict]:
+    """Які підсумки належить опублікувати сьогодні."""
+    today = now.date()
+    due = []
+    if today.weekday() == WEEKLY_WEEKDAY:
+        due.append({"kind": "week", "start": (today - timedelta(days=7)).isoformat(), "image": COVER_WEEK})
+    if today.day == 1:
+        prev_last = today - timedelta(days=1)
+        due.append({"kind": "month", "start": prev_last.replace(day=1).isoformat(), "image": COVER_MONTH,
+                    "label": f"{MONTHS_UA[prev_last.month - 1]} {prev_last.year}"})
+    return due
+
+
+def run_summaries(now: datetime, state: dict) -> None:
+    today = now.strftime("%Y-%m-%d")
+    done = state.setdefault("summaries_done", {})
+    history = read_history()
+    for s in due_summaries(now):
+        if done.get(s["kind"]) == today:
+            continue
+        rows = [r for r in history if s["start"] < r["date"] <= today]
+        need = 6 if s["kind"] == "week" else 25
+        if len(rows) < need:
+            log(f"Підсумок ({s['kind']}): даних лише за {len(rows)} дн. (потрібно {need}) — пропускаю.")
+            done[s["kind"]] = today
+            continue
+        start = min(r["compared_with"] for r in rows)
+        text = build_summary(s["kind"], rows, start, today, s.get("label"))
+        publish(text, s["image"])
+        done[s["kind"]] = today
+
+
+# ============================ MAIN ============================
 
 
 def main() -> int:
     now = datetime.fromisoformat(os.environ["NOW"]).astimezone(KYIV) if os.getenv("NOW") else datetime.now(KYIV)
     today = now.strftime("%Y-%m-%d")
     force = os.getenv("FORCE_RUN") == "1"
+    if DRY_RUN:
+        log("ТЕСТОВИЙ ЗАПУСК: нічого не публікується і не зберігається.")
 
     current_path, base_path = STATE_DIR / "current.json", STATE_DIR / "base.json"
     current_state = load_json(current_path) if current_path.exists() else None
+
+    def all_done(st) -> bool:
+        if not st or st.get("date") != today or not st.get("published"):
+            return False
+        done = st.get("summaries_done", {})
+        return all(done.get(s["kind"]) == today for s in due_summaries(now))
 
     if not force:
         if now.hour < PUBLISH_HOUR:
             log(f"Зараз {now:%H:%M} за Києвом — ще рано (публікація о {PUBLISH_HOUR}:00). Вихід.")
             return 0
+        if all_done(current_state):
+            log("Сьогодні вже все опубліковано. Вихід.")
+            return 0
         if current_state and current_state.get("date") == today and current_state.get("published"):
-            log("Сьогодні вже опубліковано. Вихід.")
+            # Щоденний пост уже вийшов, лишилися тільки підсумки
+            run_summaries(now, current_state)
+            save_json(current_path, current_state)
             return 0
 
     # Визначаємо, з чим порівнювати
@@ -478,13 +624,16 @@ def main() -> int:
         "deepstate_id": deepstate.get("id"),
         "deepstate_datetime": deepstate.get("datetime"),
         "published": False,
+        "summaries_done": (current_state or {}).get("summaries_done", {}),
         "occupied": {k: geom_to_json(v) for k, v in occupied.items()},
         "occupied_km2": {k: round(area_km2(v), 2) for k, v in occupied.items()},
+        "occupied_percent": {k: round(area_km2(v) / area_km2(oblasts[k]) * 100, 2) for k, v in occupied.items()},
     }
 
     if base_state is None:
         save_json(current_path, new_state)
-        log("Це перший запуск: знімок збережено як точку відліку. Пост буде завтра.")
+        log("Це перший запуск: знімок збережено як точку відліку. Перший пост буде завтра о "
+            f"{PUBLISH_HOUR}:00.")
         return 0
 
     results = {}
@@ -501,7 +650,7 @@ def main() -> int:
         save_json(base_path, current_state)
     save_json(current_path, new_state)
 
-    # Геометрія змін — для майбутніх карт/тижневих підсумків
+    # Геометрія змін — для майбутніх карт
     feats = []
     for key, r in results.items():
         for kind in ("newly", "deocc"):
@@ -512,24 +661,24 @@ def main() -> int:
     if feats:
         save_json(CHANGES_DIR / f"{today}.geojson", {"type": "FeatureCollection", "features": feats})
 
-    publish(text)
+    upsert_history({
+        "date": today,
+        "compared_with": base_state["date"],
+        "deepstate_id": deepstate.get("id"),
+        **{f"{k}_occupied_km2": new_state["occupied_km2"][k] for k in OBLASTS},
+        **{f"{k}_occupied_percent": new_state["occupied_percent"][k] for k in OBLASTS},
+        **{f"{k}_newly_occupied_km2": results[k]["newly_km2"] for k in OBLASTS},
+        **{f"{k}_deoccupied_km2": results[k]["deocc_km2"] for k in OBLASTS},
+        **{f"{k}_newly_places": "; ".join(results[k]["newly_places"]) for k in OBLASTS},
+        **{f"{k}_deoccupied_places": "; ".join(results[k]["deocc_places"]) for k in OBLASTS},
+    })
+
+    publish(text, COVER_IMAGE)
     new_state["published"] = True
     save_json(current_path, new_state)
 
-    if not (current_state and current_state.get("date") == today):
-        append_history({
-            "date": today,
-            "compared_with": base_state["date"],
-            "deepstate_id": deepstate.get("id"),
-            "donetsk_occupied_km2": new_state["occupied_km2"]["donetsk"],
-            "luhansk_occupied_km2": new_state["occupied_km2"]["luhansk"],
-            "donetsk_newly_occupied_km2": results["donetsk"]["newly_km2"],
-            "donetsk_deoccupied_km2": results["donetsk"]["deocc_km2"],
-            "luhansk_newly_occupied_km2": results["luhansk"]["newly_km2"],
-            "luhansk_deoccupied_km2": results["luhansk"]["deocc_km2"],
-            "donetsk_places": "; ".join(results["donetsk"]["newly_places"] + results["donetsk"]["deocc_places"]),
-            "luhansk_places": "; ".join(results["luhansk"]["newly_places"] + results["luhansk"]["deocc_places"]),
-        })
+    run_summaries(now, new_state)
+    save_json(current_path, new_state)
     return 0
 
 
