@@ -1,4 +1,4 @@
-name: DeepState — зміни за добу
+name: DeepState — моніторинг змін
 
 on:
   schedule:
