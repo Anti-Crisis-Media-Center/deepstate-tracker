@@ -1,0 +1,62 @@
+name: DeepState — зміни за добу
+
+on:
+  schedule:
+    # Два запуски, щоб публікація була о 9:00 за Києвом і взимку, і влітку.
+    # Скрипт сам пропускає зайвий запуск (зарано або вже опубліковано).
+    - cron: "0 6 * * *"   # 08:00 зима / 09:00 літо (Київ)
+    - cron: "0 7 * * *"   # 09:00 зима / 10:00 літо (Київ)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Запустити зараз, ігноруючи час і перевірку «вже опубліковано»"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Тестовий запуск: порахувати, але не надсилати в Telegram"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deepstate-tracker
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Порівняти карти і опублікувати
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          FORCE_RUN: ${{ inputs.force && '1' || '0' }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: python tracker.py
+
+      - name: Зберегти знімок карти в репозиторій
+        if: always()
+        run: |
+          git config user.name "deepstate-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "Змін у даних немає"
+          else
+            git commit -m "Дані DeepState $(TZ=Europe/Kyiv date +%F)"
+            git pull --rebase
+            git push
+          fi
