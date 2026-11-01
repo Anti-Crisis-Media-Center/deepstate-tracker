@@ -43,6 +43,7 @@ KYIV = ZoneInfo("Europe/Kyiv")
 PUBLISH_HOUR = int(os.getenv("PUBLISH_HOUR", "9"))
 # GitHub стартує заплановані запуски із запізненням, тому запускаємося завчасно
 # і чекаємо до PUBLISH_HOUR:00. Якщо старт раніше, ніж за стільки хвилин, — виходимо.
+SUMMARY_DELAY_MINUTES = {"week": 5, "month": 10}  # тижневий о 9:05, місячний о 9:10
 SHOW_DISTRICT = True  # «Миколаївка (Краматорський р-н)»
 MAX_WAIT_MINUTES = int(os.getenv("MAX_WAIT_MINUTES", "100"))
 
@@ -728,7 +729,17 @@ def due_summaries(now: datetime) -> list[dict]:
     return due
 
 
-def run_summaries(now: datetime, state: dict) -> None:
+def wait_until(target: datetime) -> None:
+    """Чекає до вказаного часу (крім ручного запуску з force, тесту і dry run)."""
+    if os.getenv("FORCE_RUN") == "1" or os.getenv("NOW") or DRY_RUN:
+        return
+    left = (target - datetime.now(KYIV)).total_seconds()
+    if left > 0:
+        log(f"Чекаю до {target:%H:%M}, щоб опублікувати підсумок…")
+        time.sleep(left)
+
+
+def run_summaries(now: datetime, state: dict, save=None) -> None:
     today = now.strftime("%Y-%m-%d")
     done = state.setdefault("summaries_done", {})
     history = read_history()
@@ -743,8 +754,12 @@ def run_summaries(now: datetime, state: dict) -> None:
             continue
         start = min(r["compared_with"] for r in rows)
         text = build_summary(s["kind"], rows, start, today, s.get("label"))
+        publish_at = now.replace(hour=PUBLISH_HOUR, minute=0, second=0, microsecond=0)
+        wait_until(publish_at + timedelta(minutes=SUMMARY_DELAY_MINUTES.get(s["kind"], 0)))
         publish(text, s["image"])
         done[s["kind"]] = today
+        if save:
+            save()
 
 
 # ============================ MAIN ============================
@@ -788,7 +803,7 @@ def main() -> int:
             return 0
         if current_state and current_state.get("date") == today and current_state.get("published"):
             # Щоденний пост уже вийшов, лишилися тільки підсумки
-            run_summaries(now, current_state)
+            run_summaries(now, current_state, lambda: save_json(current_path, current_state))
             save_json(current_path, current_state)
             return 0
 
@@ -891,7 +906,7 @@ def main() -> int:
     new_state["published"] = True
     save_json(current_path, new_state)
 
-    run_summaries(now, new_state)
+    run_summaries(now, new_state, lambda: save_json(current_path, new_state))
     save_json(current_path, new_state)
     return 0
 
