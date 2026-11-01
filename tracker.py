@@ -41,6 +41,9 @@ KYIV = ZoneInfo("Europe/Kyiv")
 # О котрій годині за Києвом публікувати (скрипт не публікує раніше цієї години
 # і не публікує двічі за день).
 PUBLISH_HOUR = int(os.getenv("PUBLISH_HOUR", "9"))
+# GitHub стартує заплановані запуски із запізненням, тому запускаємося завчасно
+# і чекаємо до PUBLISH_HOUR:00. Якщо старт раніше, ніж за стільки хвилин, — виходимо.
+MAX_WAIT_MINUTES = int(os.getenv("MAX_WAIT_MINUTES", "100"))
 
 DEEPSTATE_URL = "https://deepstatemap.live/api/history/last"
 
@@ -760,9 +763,22 @@ def main() -> int:
         return all(done.get(s["kind"]) == today for s in due_summaries(now))
 
     if not force:
-        if now.hour < PUBLISH_HOUR:
-            log(f"Зараз {now:%H:%M} за Києвом — ще рано (публікація о {PUBLISH_HOUR}:00). Вихід.")
-            return 0
+        publish_at = now.replace(hour=PUBLISH_HOUR, minute=0, second=0, microsecond=0)
+        if now < publish_at:
+            wait = (publish_at - now).total_seconds()
+            if wait > MAX_WAIT_MINUTES * 60:
+                log(f"Зараз {now:%H:%M} за Києвом — ще зарано навіть для очікування. Вихід.")
+                return 0
+            if all_done(current_state):
+                log("Сьогодні вже все опубліковано. Вихід.")
+                return 0
+            log(f"Зараз {now:%H:%M:%S}. Чекаю до {publish_at:%H:%M} за Києвом, щоб опублікувати вчасно…")
+            if not os.getenv("NOW"):          # у тестах не чекаємо
+                time.sleep(wait)
+                now = datetime.now(KYIV)
+            else:
+                now = publish_at
+            today = now.strftime("%Y-%m-%d")
         if all_done(current_state):
             log("Сьогодні вже все опубліковано. Вихід.")
             return 0
