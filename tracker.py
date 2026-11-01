@@ -43,6 +43,7 @@ KYIV = ZoneInfo("Europe/Kyiv")
 PUBLISH_HOUR = int(os.getenv("PUBLISH_HOUR", "9"))
 # GitHub стартує заплановані запуски із запізненням, тому запускаємося завчасно
 # і чекаємо до PUBLISH_HOUR:00. Якщо старт раніше, ніж за стільки хвилин, — виходимо.
+SHOW_DISTRICT = True  # «Миколаївка (Краматорський р-н)»
 MAX_WAIT_MINUTES = int(os.getenv("MAX_WAIT_MINUTES", "100"))
 
 DEEPSTATE_URL = "https://deepstatemap.live/api/history/last"
@@ -468,7 +469,10 @@ def nearest_places(polys: list, places: list, oblast_name: str) -> list[str]:
                 continue
             d = poly_utm.distance(Point(pl["x"], pl["y"])) / 1000
             if d <= PLACES_RADIUS_KM:
-                candidates.append((d, pl["name"]))
+                label = pl["name"]
+                if SHOW_DISTRICT and pl.get("district"):
+                    label += f" ({pl['district']} р-н)"
+                candidates.append((d, label))
         for d, name in sorted(candidates)[:PLACES_PER_CHANGE]:
             found[name] = min(d, found.get(name, d))
     return [n for n, _ in sorted(found.items(), key=lambda kv: kv[1])][:PLACES_MAX_IN_TEXT]
