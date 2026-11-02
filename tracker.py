@@ -683,7 +683,7 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
         deocc = round(sum(_f(r[f"{key}_deoccupied_km2"]) for r in rows), 2)
         days = sum(1 for r in rows if _f(r[f"{key}_newly_occupied_km2"]) > 0 or _f(r[f"{key}_deoccupied_km2"]) > 0)
         if newly == 0 and deocc == 0:
-            body = "змін не зафіксовано."
+            body = "Змін позначень окупованих територій не зафіксовано."
         else:
             parts = []
             if newly > 0:
@@ -699,6 +699,18 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             if deocc_pl:
                 body += f" Деокуповані — поблизу населених пунктів: {', '.join(deocc_pl)}."
             body = body[0].upper() + body[1:]
+            # Чистий баланс: стан на кінець періоду мінус стан перед його початком
+            first, last_row = rows[0], rows[-1]
+            before = (_f(first[f"{key}_occupied_km2"]) - _f(first[f"{key}_newly_occupied_km2"])
+                      + _f(first[f"{key}_deoccupied_km2"]))
+            net = round(_f(last_row[f"{key}_occupied_km2"]) - before, 2)
+            period_word = "тиждень" if kind == "week" else "місяць"
+            if net >= 0.01:
+                body += f" У підсумку площа, позначена окупованою, за {period_word} зросла на {fmt_km2(net)} км²."
+            elif net <= -0.01:
+                body += f" У підсумку площа, позначена окупованою, за {period_word} зменшилася на {fmt_km2(-net)} км²."
+            else:
+                body += f" У підсумку площа, позначена окупованою, за {period_word} майже не змінилася."
         grey_net = round(sum(_f(r.get(f"{key}_unknown_net_km2")) for r in rows), 2)
         if abs(grey_net) >= 0.01:
             body += (f" Сіра зона {'збільшилася' if grey_net > 0 else 'зменшилася'} на {fmt_km2(abs(grey_net))} км².")
