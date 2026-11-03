@@ -2,7 +2,7 @@
 DeepState: зміни за добу — Донецька і Луганська області.
 
 Що робить скрипт (раз на добу, через GitHub Actions):
-1. Завантажує актуальну карту DeepState.
+1. Завантажує актуальну мапу DeepState.
 2. Вирізає окуповані території (включно з ОРДЛО) в межах Донецької та Луганської областей.
 3. Порівнює з попереднім збереженим знімком: що додалося (окуповані) і що зникло (деокуповані).
 4. Знаходить найближчі населені пункти до кожної зміни.
@@ -40,10 +40,10 @@ KYIV = ZoneInfo("Europe/Kyiv")
 
 # О котрій годині за Києвом публікувати (скрипт не публікує раніше цієї години
 # і не публікує двічі за день).
-PUBLISH_HOUR = int(os.getenv("PUBLISH_HOUR", "9"))
+PUBLISH_HOUR = int(os.getenv("PUBLISH_HOUR", "8"))  # щоденний пост о 8:00 за Києвом
 # GitHub стартує заплановані запуски із запізненням, тому запускаємося завчасно
 # і чекаємо до PUBLISH_HOUR:00. Якщо старт раніше, ніж за стільки хвилин, — виходимо.
-SUMMARY_DELAY_MINUTES = {"week": 5, "month": 10}  # тижневий о 9:05, місячний о 9:10
+SUMMARY_DELAY_MINUTES = {"week": 10, "month": 20}  # тижневий о 8:10, місячний о 8:20
 SHOW_DISTRICT = True  # «Миколаївка (Краматорський р-н)»
 MAX_WAIT_MINUTES = int(os.getenv("MAX_WAIT_MINUTES", "100"))
 
@@ -109,8 +109,8 @@ MONTHS_UA = ["січень", "лютий", "березень", "квітень",
              "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"]
 
 EDITOR_NOTE = (
-    "<blockquote><i>Примітка редакції: це автоматизований аналіз змін на карті "
-    "DeepState. Він показує, як змінилися позначення на карті порівняно з "
+    "<blockquote><i>Примітка редакції: це автоматизований аналіз змін на мапі "
+    "DeepState. Він показує, як змінилися позначення на мапі порівняно з "
     "попередньою версією, але не підтверджує фактичну зміну лінії фронту в "
     "реальному часі. DeepState не є офіційним джерелом інформації.</i></blockquote>"
 )
@@ -172,7 +172,7 @@ def clean_polygonal(geom):
 
 def normalize(geom):
     """Однакове округлення (~0,1 м) для поточного і збереженого знімка,
-    щоб ідентичні карти давали нульову різницю."""
+    щоб ідентичні мапи давали нульову різницю."""
     if geom is None or geom.is_empty:
         return None
     return clean_polygonal(set_precision(geom, 1e-6))
@@ -310,7 +310,7 @@ def get_deepstate() -> dict:
 
 
 def log_layer_names(deepstate: dict) -> None:
-    """У журнал — які шари є на карті (щоб помітити, якщо DeepState змінить формат)."""
+    """У журнал — які шари є на мапі (щоб помітити, якщо DeepState змінить формат)."""
     counts: dict[str, int] = {}
     for f in deepstate["map"]["features"]:
         name = (f.get("properties") or {}).get("name") or ""
@@ -318,7 +318,7 @@ def log_layer_names(deepstate: dict) -> None:
         key = m.group(0) if m else (name[:40] or "<без назви>")
         counts[key] = counts.get(key, 0) + 1
     top = sorted(counts.items(), key=lambda kv: -kv[1])[:15]
-    log("Шари на карті: " + "; ".join(f"{k} × {v}" for k, v in top))
+    log("Шари на мапі: " + "; ".join(f"{k} × {v}" for k, v in top))
 
 
 def layer_by_oblast(deepstate: dict, oblasts: dict, markers: tuple, label: str, required: bool) -> dict:
@@ -334,8 +334,8 @@ def layer_by_oblast(deepstate: dict, oblasts: dict, markers: tuple, label: str, 
         if g is not None:
             layer.append(g)
     if not layer and required:
-        raise RuntimeError(f"На карті DeepState не знайдено шару «{label}» — схоже, змінився формат даних")
-    log(f"Шар «{label}»: {len(layer)} полігонів на всій карті")
+        raise RuntimeError(f"На мапі DeepState не знайдено шару «{label}» — схоже, змінився формат даних")
+    log(f"Шар «{label}»: {len(layer)} полігонів на всій мапі")
 
     result = {}
     for key, oblast in oblasts.items():
@@ -424,7 +424,7 @@ def message_oblasts(raw: str, oblasts: dict, name_idx: dict) -> set:
 
 
 def get_messages(since_id: int | None, until_id: int | None, oblasts: dict, places: list) -> list[dict]:
-    """Повідомлення DeepState між двома версіями карти, що стосуються Донеччини/Луганщини."""
+    """Повідомлення DeepState між двома версіями мапи, що стосуються Донеччини/Луганщини."""
     if not since_id or not until_id or until_id <= since_id:
         return []
     try:
@@ -503,7 +503,7 @@ def compare(current, previous, places, oblast_name):
 
 
 def change_sentence(km2: float, kind: str, places: list[str]) -> str:
-    s = f"на карті DeepState {fmt_km2(km2)} км² територій змінили позначення на {kind}"
+    s = f"на мапі DeepState {fmt_km2(km2)} км² територій змінили позначення на {kind}"
     if SHOW_FOOTBALL_FIELDS:
         s += f" (≈ {football_fields(km2)} футбольних полів)"
     s += "."
@@ -690,7 +690,7 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
                 parts.append(f"{fmt_km2(newly)} км² територій змінили позначення на окуповані")
             if deocc > 0:
                 parts.append(f"{fmt_km2(deocc)} км² — на деокуповані")
-            body = f"{word.lower()} на карті DeepState " + ", ".join(parts) + "."
+            body = f"{word.lower()} на мапі DeepState " + ", ".join(parts) + "."
             body += f" Зміни фіксувалися в {days} із {len(rows)} днів."
             newly_pl = _places(rows, f"{key}_newly_places")
             deocc_pl = _places(rows, f"{key}_deoccupied_places")
@@ -720,10 +720,20 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
         total += f" ({str(round(pct, 1)).replace('.', ',')}% області)." if pct else "."
         lines.append(f"<b>{cfg['title']}:</b> {body}{total}")
         lines.append("")
-    n_msg = sum(int(_f(r.get("messages_count"))) for r in rows)
-    if n_msg:
-        lines.append(f"Повідомлень на сайті DeepState про Донеччину й Луганщину за період: {n_msg}.")
-        lines.append("")
+    if kind == "week":
+        # Тижневий підсумок: перелік повідомлень DeepState за тиждень (місячний — без них)
+        msgs = []
+        for r in rows:
+            for m in filter(None, (x.strip() for x in (r.get("messages") or "").split(" | "))):
+                mm = re.match(r"(\d{2}\.\d{2}) (\d{2}:\d{2}) (.*)", m)
+                msgs.append(f"• {mm.group(1)}, {mm.group(2)} — {esc(mm.group(3))}" if mm else f"• {esc(m)}")
+        msgs = list(dict.fromkeys(msgs))
+        if msgs:
+            lines.append("<b>Повідомлення на сайті DeepState за тиждень:</b>")
+            lines.extend(msgs[:MAX_MESSAGES_IN_POST])
+            if len(msgs) > MAX_MESSAGES_IN_POST:
+                lines.append(f"…та ще {len(msgs) - MAX_MESSAGES_IN_POST}.")
+            lines.append("")
     lines.append(EDITOR_NOTE)
     return "\n".join(lines)
 
