@@ -591,6 +591,126 @@ def publish(text: str, image: Path = COVER_IMAGE) -> None:
     log(f"Пост надіслано в Telegram ({image.name if image.exists() else 'без картинки'}).")
 
 
+# ============================ FACEBOOK-ТИЗЕР ============================
+# Короткий текст для ручної публікації у Facebook. Бот надсилає його у службовий
+# чат (TELEGRAM_ALERT_CHAT_ID): Юля копіює текст і обкладинку у Facebook,
+# а друге повідомлення — у перший коментар. Повна версія лишається в Telegram.
+
+FB_TELEGRAM_LINK = os.getenv("FB_TELEGRAM_LINK", "https://t.me/acmc_ua").strip() or "https://t.me/acmc_ua"
+FB_CTA = ("Сіра зона, повідомлення DeepState і щотижневі підсумки — щоранку о 8:00 "
+          "у Telegram-каналі Антикризового медіа-центру. Посилання в першому коментарі 👇")
+FB_COMMENT = f"Підписуйтеся на наш Telegram, щоб щоранку бачити зміни на мапі DeepState по Донеччині й Луганщині: {FB_TELEGRAM_LINK}"
+
+
+def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_pl: list) -> str | None:
+    parts = []
+    if newly > 0:
+        s = f"{fmt_km2(newly)} км² позначено окупованими"
+        if newly_pl:
+            s += f" — поблизу: {', '.join(newly_pl[:3])}"
+        parts.append(s)
+    if deocc > 0:
+        s = f"{fmt_km2(deocc)} км² — деокупованими"
+        if deocc_pl:
+            s += f" — поблизу: {', '.join(deocc_pl[:3])}"
+        parts.append(s)
+    return f"{title}: " + "; ".join(parts) + "." if parts else None
+
+
+def build_fb_teaser(day: str, results: dict) -> str:
+    lines = [f"DeepState: зміни за добу, {day}", ""]
+    found = [_teaser_line(cfg["title"], results[k]["newly_km2"], results[k]["deocc_km2"],
+                          results[k]["newly_places"], results[k]["deocc_places"]) for k, cfg in OBLASTS.items()]
+    found = [f for f in found if f]
+    lines += found or ["На Донеччині й Луганщині змін позначень окупованих територій за добу не зафіксовано."]
+    lines += ["", FB_CTA]
+    return "\n".join(lines)
+
+
+def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = None) -> str:
+    title = "DeepState: підсумки тижня" if kind == "week" else f"DeepState: підсумки місяця — {label}"
+    word = "тиждень" if kind == "week" else "місяць"
+    lines = [title, ""]
+    for key, cfg in OBLASTS.items():
+        first, last = rows[0], rows[-1]
+        before = (_f(first[f"{key}_occupied_km2"]) - _f(first[f"{key}_newly_occupied_km2"])
+                  + _f(first[f"{key}_deoccupied_km2"]))
+        net = round(_f(last[f"{key}_occupied_km2"]) - before, 2)
+        if net >= 0.01:
+            lines.append(f"{cfg['title']}: за {word} площа, позначена окупованою, зросла на {fmt_km2(net)} км².")
+        elif net <= -0.01:
+            lines.append(f"{cfg['title']}: за {word} площа, позначена окупованою, зменшилася на {fmt_km2(-net)} км².")
+        else:
+            lines.append(f"{cfg['title']}: за {word} помітних змін не зафіксовано.")
+    lines += ["", "Повний підсумок із населеними пунктами — у Telegram-каналі Антикризового медіа-центру. "
+              "Посилання в першому коментарі 👇"]
+    return "\n".join(lines)
+
+
+FB_GRAPH = "https://graph.facebook.com/" + (os.getenv("FB_GRAPH_VERSION", "v24.0").strip() or "v24.0")
+
+
+def post_facebook(text: str, image: Path) -> bool:
+    """Публікує тизер на сторінці Facebook і додає перший коментар із посиланням на Telegram.
+    Повертає True, якщо Facebook налаштований і пост вийшов."""
+    page_id = os.getenv("FACEBOOK_PAGE_ID", "").strip()
+    page_token = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
+    if not page_id or not page_token:
+        return False
+    if DRY_RUN:
+        log("DRY_RUN — у Facebook не публікується. Текст:\n" + text)
+        return True
+    try:
+        if image.exists():
+            with image.open("rb") as fh:
+                r = requests.post(f"{FB_GRAPH}/{page_id}/photos",
+                                  data={"caption": text, "published": "true", "access_token": page_token},
+                                  files={"source": fh}, timeout=120)
+        else:
+            r = requests.post(f"{FB_GRAPH}/{page_id}/feed",
+                              data={"message": text, "access_token": page_token}, timeout=60)
+        js = r.json()
+        if "error" in js:
+            raise RuntimeError(js["error"].get("message", str(js["error"]))[:300])
+        post_id = js.get("post_id") or js.get("id")
+        log(f"Пост у Facebook опубліковано: {post_id}")
+        c = requests.post(f"{FB_GRAPH}/{post_id}/comments",
+                          data={"message": FB_COMMENT, "access_token": page_token}, timeout=60).json()
+        if "error" in c:
+            log(f"Коментар у Facebook не додано: {c['error'].get('message')}")
+            alert(f"Пост у Facebook вийшов, але перший коментар не додано: {c['error'].get('message')}")
+        return True
+    except Exception as e:  # noqa: BLE001
+        log(f"Facebook: помилка — {e}")
+        alert(f"Не вдалося опублікувати у Facebook: {e}")
+        return True  # не дублюємо в службовий чат — помилка вже там
+
+
+def send_fb_teaser(text: str, image: Path) -> None:
+    """Тизер для Facebook: якщо є секрети Facebook — публікує автоматично,
+    інакше надсилає готовий текст у службовий чат. Помилка тут не зупиняє бота."""
+    if post_facebook(text, image):
+        return
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
+    if DRY_RUN or not token or not chat_id:
+        log("Тизер для Facebook (не надсилається):\n" + text)
+        return
+    try:
+        head = {"chat_id": chat_id, "caption": "📘 Для Facebook — обкладинка, нижче текст посту і перший коментар"}
+        if image.exists():
+            with image.open("rb") as fh:
+                tg("sendPhoto", token, head, {"photo": fh})
+        else:
+            tg("sendMessage", token, {"chat_id": chat_id, "text": head["caption"]})
+        tg("sendMessage", token, {"chat_id": chat_id, "text": text, "disable_web_page_preview": "true"})
+        tg("sendMessage", token, {"chat_id": chat_id, "text": "💬 Перший коментар:"})
+        tg("sendMessage", token, {"chat_id": chat_id, "text": FB_COMMENT, "disable_web_page_preview": "true"})
+        log("Тизер для Facebook надіслано в службовий чат.")
+    except Exception as e:  # noqa: BLE001
+        log(f"Не вдалося надіслати тизер для Facebook: {e}")
+
+
 def alert(message: str) -> None:
     """Повідомлення про помилку в окремий (службовий) чат, якщо він налаштований."""
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -779,6 +899,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         publish_at = now.replace(hour=PUBLISH_HOUR, minute=0, second=0, microsecond=0)
         wait_until(publish_at + timedelta(minutes=SUMMARY_DELAY_MINUTES.get(s["kind"], 0)))
         publish(text, s["image"])
+        send_fb_teaser(build_fb_summary_teaser(s["kind"], rows, s.get("label")), s["image"])
         done[s["kind"]] = today
         if save:
             save()
@@ -925,6 +1046,7 @@ def main() -> int:
     })
 
     publish(text, COVER_IMAGE)
+    send_fb_teaser(build_fb_teaser(fmt_date(today), results), COVER_IMAGE)
     new_state["published"] = True
     save_json(current_path, new_state)
 
