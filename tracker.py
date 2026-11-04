@@ -716,7 +716,7 @@ def send_fb_teaser(text: str, image: Path) -> None:
 MONTHS_GEN = ["січня", "лютого", "березня", "квітня", "травня", "червня",
               "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"]
 STORY_LABELS = {"donetsk": "ДОНЕЧЧИНА", "luhansk": "ЛУГАНЩИНА"}
-FB_STORIES = os.getenv("FB_STORIES", "0") == "1"  # сторіз вимкнено до схвалення Юлі
+FB_STORIES = os.getenv("FB_STORIES", "1") != "0"  # сторіз у Facebook увімкнено (4.11.2026)
 
 
 def _short_places(places: list, n: int = 3) -> str:
