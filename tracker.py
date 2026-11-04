@@ -597,8 +597,8 @@ def publish(text: str, image: Path = COVER_IMAGE) -> None:
 # а друге повідомлення — у перший коментар. Повна версія лишається в Telegram.
 
 FB_TELEGRAM_LINK = os.getenv("FB_TELEGRAM_LINK", "https://t.me/acmc_ua").strip() or "https://t.me/acmc_ua"
-FB_CTA = ("Сіра зона, повідомлення DeepState і щотижневі підсумки — щоранку о 8:00 "
-          "у Telegram-каналі Антикризового медіа-центру. Посилання в першому коментарі 👇")
+FB_CTA = ("Повідомлення DeepState, щодобові, щотижневі та щомісячні підсумки змін на мапі — "
+          "щоранку о 8:00 у нашому Telegram-каналі. Посилання в першому коментарі 👇")
 FB_COMMENT = f"Підписуйтеся на наш Telegram, щоб щоранку бачити зміни на мапі DeepState по Донеччині й Луганщині: {FB_TELEGRAM_LINK}"
 
 
