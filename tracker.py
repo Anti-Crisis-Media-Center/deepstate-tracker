@@ -711,6 +711,104 @@ def send_fb_teaser(text: str, image: Path) -> None:
         log(f"Не вдалося надіслати тизер для Facebook: {e}")
 
 
+# ============================ FACEBOOK-СТОРІЗ ============================
+
+MONTHS_GEN = ["січня", "лютого", "березня", "квітня", "травня", "червня",
+              "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"]
+STORY_LABELS = {"donetsk": "ДОНЕЧЧИНА", "luhansk": "ЛУГАНЩИНА"}
+FB_STORIES = os.getenv("FB_STORIES", "0") == "1"  # сторіз вимкнено до схвалення Юлі
+
+
+def _short_places(places: list, n: int = 3) -> str:
+    return ", ".join(re.sub(r"\s*\(.*?\)", "", p) for p in places[:n])
+
+
+def _date_label(d) -> str:
+    return f"{d.day} {MONTHS_GEN[d.month - 1]} {d.year}"
+
+
+def story_blocks_daily(results: dict) -> list[dict]:
+    blocks = []
+    for k in OBLASTS:
+        r = results[k]
+        if r["newly_km2"] > 0:
+            blocks.append({"label": STORY_LABELS[k], "big": f"+{fmt_km2(r['newly_km2'])} км²",
+                           "text": "позначено окупованими",
+                           "note": f"поблизу: {_short_places(r['newly_places'])}" if r["newly_places"] else ""})
+        if r["deocc_km2"] > 0:
+            blocks.append({"label": "" if r["newly_km2"] > 0 else STORY_LABELS[k],
+                           "big": f"−{fmt_km2(r['deocc_km2'])} км²", "text": "позначено деокупованими",
+                           "note": f"поблизу: {_short_places(r['deocc_places'])}" if r["deocc_places"] else ""})
+    if not blocks:
+        blocks.append({"big": "", "text": "На Донеччині й Луганщині змін позначень окупованих територій "
+                                          "за добу не зафіксовано."})
+    else:
+        for k in OBLASTS:
+            if results[k]["newly_km2"] <= 0 and results[k]["deocc_km2"] <= 0:
+                blocks.append({"label": STORY_LABELS[k], "big": "", "text": "змін не зафіксовано"})
+    return blocks
+
+
+def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
+    word = "тиждень" if kind == "week" else "місяць"
+    blocks = []
+    for k in OBLASTS:
+        first, last = rows[0], rows[-1]
+        before = (_f(first[f"{k}_occupied_km2"]) - _f(first[f"{k}_newly_occupied_km2"])
+                  + _f(first[f"{k}_deoccupied_km2"]))
+        net = round(_f(last[f"{k}_occupied_km2"]) - before, 2)
+        if abs(net) >= 0.01:
+            blocks.append({"label": STORY_LABELS[k], "big": f"{'+' if net > 0 else '−'}{fmt_km2(abs(net))} км²",
+                           "text": f"за {word} площа, позначена окупованою, "
+                                   f"{'зросла' if net > 0 else 'зменшилася'}"})
+        else:
+            blocks.append({"label": STORY_LABELS[k], "big": "", "text": f"за {word} помітних змін не зафіксовано"})
+    return blocks
+
+
+def post_facebook_story(image_path: Path) -> None:
+    """Публікує картинку як сторіз сторінки Facebook. Помилка не зупиняє бота."""
+    page_id = os.getenv("FACEBOOK_PAGE_ID", "").strip()
+    page_token = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
+    if not FB_STORIES or not page_id or not page_token or DRY_RUN:
+        if DRY_RUN:
+            log(f"DRY_RUN — сторіз не публікується ({image_path}).")
+        return
+    try:
+        with image_path.open("rb") as fh:
+            up = requests.post(f"{FB_GRAPH}/{page_id}/photos",
+                               data={"published": "false", "access_token": page_token},
+                               files={"source": fh}, timeout=120).json()
+        if "error" in up:
+            raise RuntimeError(up["error"].get("message", str(up["error"]))[:300])
+        st = requests.post(f"{FB_GRAPH}/{page_id}/photo_stories",
+                           data={"photo_id": up["id"], "access_token": page_token}, timeout=60).json()
+        if "error" in st:
+            raise RuntimeError(st["error"].get("message", str(st["error"]))[:300])
+        log(f"Сторіз у Facebook опубліковано: {st.get('post_id')}")
+    except Exception as e:  # noqa: BLE001
+        log(f"Facebook-сторіз: помилка — {e}")
+        alert(f"Пост у Facebook вийшов, але сторіз не опубліковано: {e}")
+
+
+def _period_label(start: str, end: str) -> str:
+    a, b = datetime.fromisoformat(start).date(), datetime.fromisoformat(end).date()
+    if a.month == b.month and a.year == b.year:
+        return f"{a.day}–{b.day} {MONTHS_GEN[b.month - 1]} {b.year}"
+    return f"{a.day} {MONTHS_GEN[a.month - 1]} – {b.day} {MONTHS_GEN[b.month - 1]} {b.year}"
+
+
+def make_and_post_story(cover: Path, date_label: str, blocks: list[dict]) -> None:
+    if not FB_STORIES or not os.getenv("FACEBOOK_PAGE_TOKEN", "").strip():
+        return
+    try:
+        from story import render_story
+        out = render_story(cover, date_label, blocks, DATA / "story.jpg")
+        post_facebook_story(out)
+    except Exception as e:  # noqa: BLE001
+        log(f"Не вдалося зробити сторіз: {e}")
+
+
 def alert(message: str) -> None:
     """Повідомлення про помилку в окремий (службовий) чат, якщо він налаштований."""
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -900,6 +998,9 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         wait_until(publish_at + timedelta(minutes=SUMMARY_DELAY_MINUTES.get(s["kind"], 0)))
         publish(text, s["image"])
         send_fb_teaser(build_fb_summary_teaser(s["kind"], rows, s.get("label")), s["image"])
+        story_date = (s["label"][0].upper() + s["label"][1:]) if s["kind"] == "month" and s.get("label") \
+            else _period_label(start, today)
+        make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows))
         done[s["kind"]] = today
         if save:
             save()
@@ -1047,6 +1148,7 @@ def main() -> int:
 
     publish(text, COVER_IMAGE)
     send_fb_teaser(build_fb_teaser(fmt_date(today), results), COVER_IMAGE)
+    make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results))
     new_state["published"] = True
     save_json(current_path, new_state)
 
