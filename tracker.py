@@ -502,6 +502,20 @@ def compare(current, previous, places, oblast_name):
 # ============================ TEXT ============================
 
 
+def join_places(places: list) -> str:
+    """«Русин Яр, Іллінівка (Краматорський р-н), Часів Яр (Бахмутський р-н)» —
+    район один раз після групи сусідніх пунктів з того самого району."""
+    groups: list[tuple[str, list[str]]] = []
+    for p in places:
+        m = re.match(r"^(.*?)\s*\((.+?)\)\s*$", p)
+        name, district = (m.group(1), m.group(2)) if m else (p, "")
+        if groups and groups[-1][0] == district:
+            groups[-1][1].append(name)
+        else:
+            groups.append((district, [name]))
+    return ", ".join(", ".join(names) + (f" ({d})" if d else "") for d, names in groups)
+
+
 def change_sentence(km2: float, kind: str, places: list[str]) -> str:
     s = f"на мапі DeepState {fmt_km2(km2)} км² територій змінили позначення на {kind}"
     if SHOW_FOOTBALL_FIELDS:
@@ -509,7 +523,7 @@ def change_sentence(km2: float, kind: str, places: list[str]) -> str:
     s += "."
     if places:
         label = "Найближчий населений пункт" if len(places) == 1 else "Найближчі населені пункти"
-        s += f" {label}: {', '.join(places)}."
+        s += f" {label}: {join_places(places)}."
     return s
 
 
@@ -526,7 +540,7 @@ def grey_sentence(g: dict | None) -> str:
     else:
         s = "Сіра зона (території, що потребують уточнення) змінила обриси"
     if g["places"]:
-        s += f", нові сірі ділянки — поблизу: {', '.join(g['places'])}"
+        s += f", нові сірі ділянки — поблизу: {join_places(g['places'])}"
     return s + "."
 
 
@@ -607,12 +621,12 @@ def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_p
     if newly > 0:
         s = f"{fmt_km2(newly)} км² позначено окупованими"
         if newly_pl:
-            s += f" — поблизу: {', '.join(newly_pl[:3])}"
+            s += f" — поблизу: {join_places(newly_pl[:3])}"
         parts.append(s)
     if deocc > 0:
         s = f"{fmt_km2(deocc)} км² — деокупованими"
         if deocc_pl:
-            s += f" — поблизу: {', '.join(deocc_pl[:3])}"
+            s += f" — поблизу: {join_places(deocc_pl[:3])}"
         parts.append(s)
     return f"{title}: " + "; ".join(parts) + "." if parts else None
 
@@ -913,9 +927,9 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             newly_pl = _places(rows, f"{key}_newly_places")
             deocc_pl = _places(rows, f"{key}_deoccupied_places")
             if newly_pl:
-                body += f" Окуповані — поблизу населених пунктів: {', '.join(newly_pl)}."
+                body += f" Окуповані — поблизу населених пунктів: {join_places(newly_pl)}."
             if deocc_pl:
-                body += f" Деокуповані — поблизу населених пунктів: {', '.join(deocc_pl)}."
+                body += f" Деокуповані — поблизу населених пунктів: {join_places(deocc_pl)}."
             body = body[0].upper() + body[1:]
             # Чистий баланс: стан на кінець періоду мінус стан перед його початком
             first, last_row = rows[0], rows[-1]
