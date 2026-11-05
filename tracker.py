@@ -78,7 +78,15 @@ MIN_CHANGE_KM2 = float(os.getenv("MIN_CHANGE_KM2", "0.01"))
 # Населені пункти: шукаємо в радіусі, показуємо не більше N на тип зміни
 PLACES_RADIUS_KM = 5.0
 PLACES_PER_CHANGE = 2      # найближчих на кожну окрему ділянку
-PLACES_MAX_IN_TEXT = 6     # загалом у тексті на тип зміни в області
+PLACES_MAX_IN_TEXT = 6
+# Міста Донеччини й Луганщини: якщо місто в радіусі — воно завжди серед названих
+CITIES = {
+    "Авдіївка", "Бахмут", "Білицьке", "Білозерське", "Волноваха", "Вугледар", "Гірник", "Добропілля",
+    "Докучаєвськ", "Дружківка", "Залізне", "Костянтинівка", "Краматорськ", "Красногорівка", "Курахове",
+    "Лиман", "Мар'їнка", "Миколаївка", "Мирноград", "Новогродівка", "Покровськ", "Родинське", "Святогірськ",
+    "Світлодарськ", "Селидове", "Сіверськ", "Слов'янськ", "Соледар", "Торецьк", "Українськ", "Часів Яр",
+    "Сєвєродонецьк", "Лисичанськ", "Рубіжне", "Кремінна", "Попасна", "Привілля", "Гірське", "Золоте",
+}     # загалом у тексті на тип зміни в області
 
 # Показувати порівняння з футбольними полями (105×68 м)
 SHOW_FOOTBALL_FIELDS = os.getenv("SHOW_FOOTBALL_FIELDS", "0") == "1"
@@ -474,7 +482,11 @@ def nearest_places(polys: list, places: list, oblast_name: str) -> list[str]:
                 if SHOW_DISTRICT and pl.get("district"):
                     label += f" ({pl['district']} р-н)"
                 candidates.append((d, label))
-        for d, name in sorted(candidates)[:PLACES_PER_CHANGE]:
+        ranked = sorted(candidates)
+        # місто поблизу важливіше за найближче село: читач його знає
+        city = [c for c in ranked if re.sub(r"\s*\(.*?\)", "", c[1]) in CITIES][:1]
+        picked = city + [c for c in ranked if c not in city]
+        for d, name in picked[:PLACES_PER_CHANGE]:
             found[name] = min(d, found.get(name, d))
     return [n for n, _ in sorted(found.items(), key=lambda kv: kv[1])][:PLACES_MAX_IN_TEXT]
 
