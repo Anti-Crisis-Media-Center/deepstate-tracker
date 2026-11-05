@@ -116,7 +116,9 @@ DRY_RUN = os.getenv("DRY_RUN") == "1"
 MONTHS_UA = ["січень", "лютий", "березень", "квітень", "травень", "червень",
              "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"]
 
+SOURCE_LINE = 'За даними <a href="https://deepstatemap.live">DeepStateMap.live</a>'
 EDITOR_NOTE = (
+    SOURCE_LINE + "\n\n"
     "<blockquote><i>Примітка редакції: це автоматизований аналіз змін на мапі "
     "DeepState. Він показує, як змінилися позначення на мапі порівняно з "
     "попередньою версією, але не підтверджує фактичну зміну лінії фронту в "
@@ -649,7 +651,7 @@ def build_fb_teaser(day: str, results: dict) -> str:
                           results[k]["newly_places"], results[k]["deocc_places"]) for k, cfg in OBLASTS.items()]
     found = [f for f in found if f]
     lines += found or ["На Донеччині й Луганщині змін позначень окупованих територій за добу не зафіксовано."]
-    lines += ["", FB_CTA]
+    lines += ["", FB_CTA, "", "За даними DeepStateMap.live"]
     return "\n".join(lines)
 
 
@@ -669,7 +671,7 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
         else:
             lines.append(f"{cfg['title']}: за {word} помітних змін не зафіксовано.")
     lines += ["", "Повний підсумок із населеними пунктами — у Telegram-каналі Антикризового медіа-центру. "
-              "Посилання в першому коментарі 👇"]
+              "Посилання в першому коментарі 👇", "", "За даними DeepStateMap.live"]
     return "\n".join(lines)
 
 

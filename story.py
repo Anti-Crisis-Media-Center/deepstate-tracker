@@ -126,6 +126,7 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
     d.line([(MARGIN, fy - 30), (W - MARGIN, fy - 30)], fill=(60, 74, 110), width=3)
     d.text((MARGIN, fy), footer, font=f_foot, fill=WHITE)
     d.text((MARGIN, fy + 58), handle, font=f_handle, fill=YELLOW)
+    d.text((MARGIN, fy + 140), "За даними DeepStateMap.live", font=_font("500", 30), fill=GREY)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "JPEG", quality=92)
