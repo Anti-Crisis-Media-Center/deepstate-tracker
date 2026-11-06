@@ -713,8 +713,8 @@ def post_facebook(text: str, image: Path) -> bool:
         return True
     except Exception as e:  # noqa: BLE001
         log(f"Facebook: помилка — {e}")
-        alert(f"Не вдалося опублікувати у Facebook: {e}")
-        return True  # не дублюємо в службовий чат — помилка вже там
+        alert(f"Не вдалося опублікувати у Facebook: {e}. Нижче — тизер для ручної публікації.")
+        return False  # тоді send_fb_teaser надішле готовий тизер у службовий чат
 
 
 def send_fb_teaser(text: str, image: Path) -> None:
