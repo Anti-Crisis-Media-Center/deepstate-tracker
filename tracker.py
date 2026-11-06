@@ -586,6 +586,9 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
         if len(messages) > MAX_MESSAGES_IN_POST:
             lines.append(f"…та ще {len(messages) - MAX_MESSAGES_IN_POST}.")
         lines.append("")
+    else:
+        lines.append("<b>Повідомлення на сайті DeepState:</b> нових повідомлень про Донеччину й Луганщину за добу не було.")
+        lines.append("")
     lines.append(EDITOR_NOTE)
     return "\n".join(lines)
 
