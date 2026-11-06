@@ -681,11 +681,34 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
 FB_GRAPH = "https://graph.facebook.com/" + (os.getenv("FB_GRAPH_VERSION", "v24.0").strip() or "v24.0")
 
 
+_FB_PAGE_CACHE: dict = {}
+
+
+def fb_page_credentials() -> tuple[str, str]:
+    """(page_id, page_token). Токен може бути токеном сторінки або токеном системного
+    користувача бізнес-портфоліо — тоді токен сторінки отримуємо за її ID."""
+    if "v" in _FB_PAGE_CACHE:
+        return _FB_PAGE_CACHE["v"]
+    page_id = os.getenv("FACEBOOK_PAGE_ID", "").strip()
+    token = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
+    result = (page_id, token)
+    if page_id and token and page_id != "me":
+        try:
+            js = requests.get(f"{FB_GRAPH}/{page_id}", params={"fields": "access_token,name",
+                              "access_token": token}, timeout=30).json()
+            if js.get("access_token"):
+                result = (page_id, js["access_token"])
+                log(f"Facebook: токен сторінки «{js.get('name')}» отримано.")
+        except Exception as e:  # noqa: BLE001
+            log(f"Facebook: не вдалося отримати токен сторінки: {e}")
+    _FB_PAGE_CACHE["v"] = result
+    return result
+
+
 def post_facebook(text: str, image: Path) -> bool:
     """Публікує тизер на сторінці Facebook і додає перший коментар із посиланням на Telegram.
     Повертає True, якщо Facebook налаштований і пост вийшов."""
-    page_id = os.getenv("FACEBOOK_PAGE_ID", "").strip()
-    page_token = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
+    page_id, page_token = fb_page_credentials()
     if not page_id or not page_token:
         return False
     if DRY_RUN:
@@ -799,8 +822,7 @@ def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
 
 def post_facebook_story(image_path: Path) -> None:
     """Публікує картинку як сторіз сторінки Facebook. Помилка не зупиняє бота."""
-    page_id = os.getenv("FACEBOOK_PAGE_ID", "").strip()
-    page_token = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
+    page_id, page_token = fb_page_credentials()
     if not FB_STORIES or not page_id or not page_token or DRY_RUN:
         if DRY_RUN:
             log(f"DRY_RUN — сторіз не публікується ({image_path}).")

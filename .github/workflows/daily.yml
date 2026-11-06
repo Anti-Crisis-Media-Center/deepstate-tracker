@@ -45,7 +45,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
           FB_TELEGRAM_LINK: ${{ secrets.FB_TELEGRAM_LINK }}
-          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID || 'me' }}  # «me» = сторінка, якій належить токен
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID || '111460408546782' }}  # біла сторінка «У фокусі» (токен системного користувача)
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           FORCE_RUN: ${{ inputs.force && '1' || '0' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
