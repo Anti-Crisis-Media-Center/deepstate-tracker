@@ -57,7 +57,7 @@ def stats(since: datetime, log=print) -> dict | None:
         return None
     h = {"Authorization": f"Bearer {tok}"}
     info = requests.get(f"{API}/user/info/", headers=h, timeout=30,
-                        params={"fields": "display_name,username,follower_count,likes_count,video_count"}).json()
+                        params={"fields": "display_name,follower_count,likes_count,video_count"}).json()
     u = (info.get("data") or {}).get("user") or {}
     out = {"name": u.get("username") or u.get("display_name"), "followers": u.get("follower_count"),
            "likes_total": u.get("likes_count"), "posts": []}
