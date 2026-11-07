@@ -218,7 +218,8 @@ def send(text: str) -> None:
         log(f"ANALYTICS_CHAT_ID не задано. Чати, які бачить бот: {chats}")
         return
     r = requests.post(f"https://api.telegram.org/bot{tok}/sendMessage",
-                      data={"chat_id": chat, "text": text[:4000], "parse_mode": "HTML",
+                      data={"chat_id": chat, "message_thread_id": os.getenv("THREAD_ANALYTICS", "5"),
+                            "text": text[:4000], "parse_mode": "HTML",
                             "disable_web_page_preview": "true"}, timeout=40).json()
     log("Звіт надіслано." if r.get("ok") else f"Не вдалося надіслати: {r}")
 

@@ -642,6 +642,11 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
 # ============================ TELEGRAM ============================
 
 
+# Гілки службової групи «Тестування ботів АКМЦ»
+THREAD_ERRORS = os.getenv("THREAD_ERRORS", "3")
+THREAD_TIKTOK = os.getenv("THREAD_TIKTOK", "4")
+
+
 def tg(method: str, token: str, data: dict, files: dict | None = None) -> dict:
     r = requests.post(f"https://api.telegram.org/bot{token}/{method}", data=data, files=files, timeout=60)
     js = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
@@ -804,15 +809,15 @@ def send_fb_teaser(text: str, image: Path) -> None:
         log("Тизер для Facebook (не надсилається):\n" + text)
         return
     try:
-        head = {"chat_id": chat_id, "caption": "📘 Для Facebook — обкладинка, нижче текст посту і перший коментар"}
+        head = {"chat_id": chat_id, "message_thread_id": THREAD_ERRORS, "caption": "📘 Для Facebook — обкладинка, нижче текст посту і перший коментар"}
         if image.exists():
             with image.open("rb") as fh:
                 tg("sendPhoto", token, head, {"photo": fh})
         else:
-            tg("sendMessage", token, {"chat_id": chat_id, "text": head["caption"]})
-        tg("sendMessage", token, {"chat_id": chat_id, "text": text, "disable_web_page_preview": "true"})
-        tg("sendMessage", token, {"chat_id": chat_id, "text": "💬 Перший коментар:"})
-        tg("sendMessage", token, {"chat_id": chat_id, "text": FB_COMMENT, "disable_web_page_preview": "true"})
+            tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_ERRORS, "text": head["caption"]})
+        tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_ERRORS, "text": text, "disable_web_page_preview": "true"})
+        tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_ERRORS, "text": "💬 Перший коментар:"})
+        tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_ERRORS, "text": FB_COMMENT, "disable_web_page_preview": "true"})
         log("Тизер для Facebook надіслано в службовий чат.")
     except Exception as e:  # noqa: BLE001
         log(f"Не вдалося надіслати тизер для Facebook: {e}")
@@ -1053,8 +1058,8 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
             media = json.dumps([{"type": "photo", "media": "attach://a",
                                  "caption": "🎵 Для TikTok: завантажте як фото-допис (+ → Фото), додайте музику"},
                                 {"type": "photo", "media": "attach://b"}])
-            tg("sendMediaGroup", token, {"chat_id": chat_id, "media": media}, {"a": a, "b": b})
-        tg("sendMessage", token, {"chat_id": chat_id, "text": caption})
+            tg("sendMediaGroup", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "media": media}, {"a": a, "b": b})
+        tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "text": caption})
         log("Матеріали для TikTok надіслано в службовий чат.")
     except Exception as e:  # noqa: BLE001
         log(f"TikTok-матеріали: помилка — {e}")
@@ -1079,7 +1084,7 @@ def tiktok_daily_flag(results: dict, grey: dict) -> None:
     if near:
         why.append("зміни біля міст: " + ", ".join(dict.fromkeys(near)))
     try:
-        tg("sendMessage", token, {"chat_id": chat_id, "text": "⚡ Варто опублікувати в TikTok сьогодні: "
+        tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "text": "⚡ Варто опублікувати в TikTok сьогодні: "
                                   + "; ".join(why) + ". Сторіз-картка — у Facebook/Instagram, текст — у Telegram."})
     except Exception as e:  # noqa: BLE001
         log(f"TikTok-позначка: помилка — {e}")
@@ -1092,7 +1097,8 @@ def alert(message: str) -> None:
     if not token or not chat_id:
         return
     try:
-        tg("sendMessage", token, {"chat_id": chat_id, "text": f"⚠️ DeepState-трекер: {message}"[:4000]})
+        tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_ERRORS,
+                                  "text": f"⚠️ DeepState-трекер: {message}"[:4000]})
     except Exception as e:  # noqa: BLE001
         log(f"Не вдалося надіслати сповіщення про помилку: {e}")
 
