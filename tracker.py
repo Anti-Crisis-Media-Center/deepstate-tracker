@@ -687,9 +687,9 @@ def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_p
 def build_fb_teaser(day: str, results: dict) -> str:
     lines = [f"DeepState: зміни за добу, {day}", ""]
     found = [_teaser_line(cfg["title"], results[k]["newly_km2"], results[k]["deocc_km2"],
-                          results[k]["newly_places"], results[k]["deocc_places"]) for k, cfg in OBLASTS.items()]
-    found = [f for f in found if f]
-    lines += found or ["На Донеччині й Луганщині змін позначень окупованих територій за добу не зафіксовано."]
+                          results[k]["newly_places"], results[k]["deocc_places"])
+             or f"{cfg['title']}: змін позначень окупованих територій не зафіксовано." for k, cfg in OBLASTS.items()]
+    lines += found
     lines += ["", FB_CTA, "", "За даними DeepStateMap.live"]
     return "\n".join(lines)
 
