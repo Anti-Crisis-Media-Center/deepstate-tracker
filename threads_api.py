@@ -76,8 +76,10 @@ def _publish(uid: str, data: dict) -> str:
 
 
 def adapt_text(fb_text: str) -> str:
-    """Тизер із Facebook → Threads: «перший коментар» стає «відповіддю нижче», ліміт 500 знаків."""
-    text = fb_text.replace("Посилання в першому коментарі 👇", "Посилання — у відповіді нижче 👇")
+    """Тизер із Facebook → Threads. Threads — окремий канал, а не воронка в Telegram:
+    прибираємо абзаци із закликом перейти в Telegram, лишаємо саму інформацію. Ліміт 500 знаків."""
+    paras = [p for p in fb_text.split("\n\n") if "Telegram" not in p and "коментар" not in p]
+    text = "\n\n".join(paras)
     if len(text) > MAX_LEN:
         text = text[: MAX_LEN - 1].rstrip() + "…"
     return text
@@ -90,7 +92,7 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False) -> bool:
     text = adapt_text(fb_text)
     link = (os.getenv("THREADS_TELEGRAM_LINK", "").strip()
             or os.getenv("FB_TELEGRAM_LINK", "").strip() or "https://t.me/acmc_ua")
-    reply = f"Підписуйтеся на наш Telegram, щоб щоранку бачити зміни на мапі DeepState по Донеччині й Луганщині: {link}"
+    reply = f"Ці зведення щоранку о 8:00 виходять і в нашому Telegram-каналі: {link}"
     if dry_run:
         log("DRY_RUN — у Threads не публікується. Текст:\n" + text)
         return True
