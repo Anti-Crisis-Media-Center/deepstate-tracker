@@ -914,13 +914,17 @@ TIKTOK_TAGS = "#Донеччина #DeepState #Україна #мапа"
 
 
 def _tiktok_tags(places: list[str]) -> str:
+    """TikTok дозволяє не більше 5 хештегів: 2 постійні + до 3 міст, решту добираємо загальними."""
     cities = []
     for p in places:
         name = re.sub(r"\s*\(.*?\)", "", p).strip()
         if name in CITIES and name not in cities:
             cities.append(name)
-    extra = " ".join("#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:3])
-    return (TIKTOK_TAGS + (" " + extra if extra else "")).strip()
+    tags = ["#Донеччина", "#DeepState"] + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:3]]
+    for extra in ("#Україна", "#мапа", "#новини"):
+        if len(tags) < 5:
+            tags.append(extra)
+    return " ".join(tags[:5])
 
 
 def _vertical_cover(cover: Path, out: Path) -> Path:
