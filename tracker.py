@@ -914,13 +914,13 @@ TIKTOK_TAGS = "#Донеччина #DeepState #Україна #мапа"
 
 
 def _tiktok_tags(places: list[str]) -> str:
-    """TikTok дозволяє не більше 5 хештегів: 2 постійні + до 3 міст, решту добираємо загальними."""
+    """TikTok дозволяє не більше 5 хештегів: 3 постійні (обидві області + DeepState) + до 2 міст."""
     cities = []
     for p in places:
         name = re.sub(r"\s*\(.*?\)", "", p).strip()
         if name in CITIES and name not in cities:
             cities.append(name)
-    tags = ["#Донеччина", "#DeepState"] + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:3]]
+    tags = ["#Донеччина", "#Луганщина", "#DeepState"] + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:2]]
     for extra in ("#Україна", "#мапа", "#новини"):
         if len(tags) < 5:
             tags.append(extra)
@@ -959,7 +959,7 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         title = "DeepState: підсумки тижня 🗺" if kind == "week" else f"DeepState: підсумки місяця 🗺 {date_label}"
         word = "щопонеділка" if kind == "week" else "щомісяця"
         caption = "\n".join([title, *body, "",
-                              f"Підписуйтеся, щоб {word} бачити, як змінюється мапа Донеччини.",
+                              f"Підписуйтеся, щоб {word} бачити, як змінюється мапа Донеччини й Луганщини.",
                               "За даними DeepStateMap.live", "", _tiktok_tags(places)])
         if DRY_RUN:
             log("DRY_RUN — матеріали для TikTok не надсилаються. Підпис:\n" + caption)
