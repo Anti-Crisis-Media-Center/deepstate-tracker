@@ -929,6 +929,19 @@ def _tiktok_tags(places: list[str], luhansk_changed: bool = False) -> str:
     return " ".join(tags[:5])
 
 
+def _rows_places(rows: list[dict]) -> list[str]:
+    out = []
+    for r in rows:
+        for k in OBLASTS:
+            for col in (f"{k}_newly_places", f"{k}_deoccupied_places", f"{k}_penetration_cities"):
+                out += [x.strip() for x in (r.get(col) or "").split(";") if x.strip()]
+    return out
+
+
+def _rows_luhansk_changed(rows: list[dict]) -> bool:
+    return any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows)
+
+
 def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str]:
     """Головна цифра й місце для першого кадру TikTok (по Донеччині)."""
     first, last = rows[0], rows[-1]
@@ -1263,7 +1276,8 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         fb_text = build_fb_summary_teaser(s["kind"], rows, s.get("label"))
         send_fb_teaser(fb_text, s["image"])
         threads_api.post(fb_text, s["image"], log, alert, DRY_RUN)
-        ig_api.post(FB_GRAPH, *fb_page_credentials(), fb_text, s["image"], log, alert, DRY_RUN)
+        ig_text = fb_text + "\n\n" + _tiktok_tags(_rows_places(rows), _rows_luhansk_changed(rows))
+        ig_api.post(FB_GRAPH, *fb_page_credentials(), ig_text, s["image"], log, alert, DRY_RUN)
         story_date = (s["label"][0].upper() + s["label"][1:]) if s["kind"] == "month" and s.get("label") \
             else _period_label(start, today)
         make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows))
@@ -1422,7 +1436,11 @@ def main() -> int:
     send_fb_teaser(fb_text, COVER_IMAGE)
     threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN)
     tiktok_daily_flag(results, grey)
-    ig_api.post(FB_GRAPH, *fb_page_credentials(), fb_text, COVER_IMAGE, log, alert, DRY_RUN)
+    day_places = [p for k in OBLASTS for p in results[k]["newly_places"] + results[k]["deocc_places"]]
+    day_places += [c for k in OBLASTS for c in ((grey or {}).get(k) or {}).get("cities") or []]
+    lug = bool(results["luhansk"]["newly_km2"] or results["luhansk"]["deocc_km2"])
+    ig_api.post(FB_GRAPH, *fb_page_credentials(), fb_text + "\n\n" + _tiktok_tags(day_places, lug),
+                COVER_IMAGE, log, alert, DRY_RUN)
     if today.weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
         threads_api.refresh_token(log, alert)
     make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results))
