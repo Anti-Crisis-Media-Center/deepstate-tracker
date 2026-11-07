@@ -1,0 +1,15 @@
+name: Threads — перевірка маркера
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - env:
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+        run: python threads_check.py
