@@ -90,6 +90,8 @@ CITIES = {
     "Сєвєродонецьк", "Лисичанськ", "Рубіжне", "Кремінна", "Попасна", "Привілля", "Гірське", "Золоте",
 }     # загалом у тексті на тип зміни в області
 
+CITY_GENITIVE = {'Авдіївка': 'Авдіївки', 'Бахмут': 'Бахмута', 'Білицьке': 'Білицького', 'Білозерське': 'Білозерського', 'Волноваха': 'Волновахи', 'Вугледар': 'Вугледара', 'Гірник': 'Гірника', 'Добропілля': 'Добропілля', 'Докучаєвськ': 'Докучаєвська', 'Дружківка': 'Дружківки', 'Залізне': 'Залізного', 'Костянтинівка': 'Костянтинівки', 'Краматорськ': 'Краматорська', 'Красногорівка': 'Красногорівки', 'Курахове': 'Курахового', 'Лиман': 'Лимана', "Мар'їнка": "Мар'їнки", 'Миколаївка': 'Миколаївки', 'Мирноград': 'Мирнограда', 'Новогродівка': 'Новогродівки', 'Покровськ': 'Покровська', 'Родинське': 'Родинського', 'Святогірськ': 'Святогірська', 'Світлодарськ': 'Світлодарська', 'Селидове': 'Селидового', 'Сіверськ': 'Сіверська', "Слов'янськ": "Слов'янська", 'Соледар': 'Соледара', 'Торецьк': 'Торецька', 'Українськ': 'Українська', 'Часів Яр': 'Часового Яру', 'Сєвєродонецьк': 'Сєвєродонецька', 'Лисичанськ': 'Лисичанська', 'Рубіжне': 'Рубіжного', 'Кремінна': 'Кремінної', 'Попасна': 'Попасної', 'Привілля': 'Привілля', 'Гірське': 'Гірського', 'Золоте': 'Золотого'}
+
 # Показувати порівняння з футбольними полями (105×68 м)
 SHOW_FOOTBALL_FIELDS = os.getenv("SHOW_FOOTBALL_FIELDS", "0") == "1"
 
@@ -547,6 +549,31 @@ def change_sentence(km2: float, kind: str, places: list[str]) -> str:
     return s
 
 
+def cities_near(polys: list, places: list, oblast_name: str) -> list[str]:
+    """Великі міста, біля яких (до PLACES_RADIUS_KM) з'явилися нові ділянки."""
+    found: dict[str, float] = {}
+    for poly in polys:
+        poly_utm = to_utm(poly)
+        for pl in places:
+            if pl["oblast"] != oblast_name or pl["name"] not in CITIES:
+                continue
+            d = poly_utm.distance(Point(pl["x"], pl["y"])) / 1000
+            if d <= PLACES_RADIUS_KM:
+                found[pl["name"]] = min(d, found.get(pl["name"], d))
+    return [n for n, _ in sorted(found.items(), key=lambda kv: kv[1])]
+
+
+def penetration_sentence(g: dict | None) -> str:
+    """Район проникнення згадуємо лише біля великих міст — решта перевантажує текст."""
+    cities = (g or {}).get("cities") or []
+    if not cities:
+        return ""
+    names = [CITY_GENITIVE.get(c, c) for c in cities[:3]]
+    where = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " та " + names[-1]
+    return (f"Біля {where} на мапі DeepState з'явився новий район проникнення "
+            f"(територія, що потребує уточнення).")
+
+
 def grey_sentence(g: dict | None) -> str:
     if not g:
         return ""
@@ -577,7 +604,8 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
             parts.append(change_sentence(r["newly_km2"], "окуповані", r["newly_places"]))
         if r["deocc_km2"] > 0:
             parts.append(change_sentence(r["deocc_km2"], "деокуповані", r["deocc_places"]))
-        gs = grey_sentence((grey or {}).get(key)) if SHOW_GREY_IN_TEXT else ""
+        gs = (grey_sentence((grey or {}).get(key)) if SHOW_GREY_IN_TEXT
+              else penetration_sentence((grey or {}).get(key)))
         if not parts:
             parts.append("змін позначень окупованих територій не зафіксовано.")
         if gs:
@@ -1163,6 +1191,7 @@ def main() -> int:
                 "net_km2": round(area_km2(cur_u) - area_km2(prev_u), 2),
                 "added_km2": round(sum(area_km2(p) for p in added), 2),
                 "places": nearest_places(added, places, cfg["name_ua"]),
+                "cities": cities_near(added, places, cfg["name_ua"]),
             }
             log(f"{cfg['title']}: сіра зона {grey[key]['net_km2']:+} км² (нових ділянок {grey[key]['added_km2']} км²)")
     else:
