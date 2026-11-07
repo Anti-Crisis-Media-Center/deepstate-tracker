@@ -598,7 +598,16 @@ def esc(text: str) -> str:
     return html.escape(text, quote=False)
 
 
+SHORT_NOTE = SOURCE_LINE + "\n<i>Автоматичний аналіз мапи DeepState, не офіційне джерело.</i>"
+
+
 def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None) -> str:
+    quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] for k in OBLASTS)
+             and not messages and not any(((grey or {}).get(k) or {}).get("cities") for k in OBLASTS))
+    if quiet:  # день без змін — коротка версія
+        return "\n".join(["<b>DeepState: зміни за добу</b>", "", f"Період: {period}", "",
+                          "За добу змін позначень на Донеччині й Луганщині не зафіксовано. "
+                          "Повідомлень DeepState про ці області не було.", "", SHORT_NOTE])
     lines = ["<b>DeepState: зміни за добу</b>", "", f"Період: {period}", ""]
     for key, cfg in OBLASTS.items():
         r = results[key]
@@ -626,7 +635,7 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
     else:
         lines.append("<b>Повідомлення на сайті DeepState:</b> нових повідомлень про Донеччину й Луганщину за добу не було.")
         lines.append("")
-    lines.append(EDITOR_NOTE)
+    lines.append(SHORT_NOTE)
     return "\n".join(lines)
 
 
@@ -641,20 +650,21 @@ def tg(method: str, token: str, data: dict, files: dict | None = None) -> dict:
     return js
 
 
-def publish(text: str, image: Path = COVER_IMAGE) -> None:
+def publish(text: str, image: Path = COVER_IMAGE, silent: bool = False) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     if DRY_RUN or not token or not chat_id:
         log("DRY_RUN або немає секретів Telegram — пост не надсилається. Текст:\n" + text)
         return
-    base = {"chat_id": chat_id, "parse_mode": "HTML"}
+    base = {"chat_id": chat_id, "parse_mode": "HTML", **({"disable_notification": "true"} if silent else {})}
     if image.exists() and len(text) <= 1024:  # ліміт підпису до фото в Telegram
         with image.open("rb") as fh:
             tg("sendPhoto", token, {**base, "caption": text}, {"photo": fh})
     else:
         if image.exists():
             with image.open("rb") as fh:
-                tg("sendPhoto", token, {"chat_id": chat_id}, {"photo": fh})
+                tg("sendPhoto", token, {"chat_id": chat_id, **({"disable_notification": "true"} if silent else {})},
+                   {"photo": fh})
         tg("sendMessage", token, {**base, "text": text, "disable_web_page_preview": "true"})
     log(f"Пост надіслано в Telegram ({image.name if image.exists() else 'без картинки'}).")
 
@@ -1434,7 +1444,7 @@ def main() -> int:
         "messages": " | ".join(f"{m['time']:%d.%m %H:%M} {m['text']}" for m in messages),
     })
 
-    publish(text, COVER_IMAGE)
+    publish(text, COVER_IMAGE, silent=True)  # щоденне — без звуку; підсумки — зі звуком
     fb_text = build_fb_teaser(fmt_date(today), results)
     send_fb_teaser(fb_text, COVER_IMAGE)
     threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN)
