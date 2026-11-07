@@ -16,6 +16,7 @@ from pathlib import Path
 import requests
 
 ENABLED = os.getenv("IG_ENABLED", "1") == "1"
+POSTS = os.getenv("IG_POSTS", "1") == "1"      # 0 — лише сторіз, без дописів у стрічку
 _CACHE: dict = {}
 
 
@@ -67,7 +68,7 @@ def adapt_caption(fb_text: str) -> str:
 
 def post(graph: str, page_id: str, page_token: str, fb_text: str, image: Path, log, alert,
          dry_run: bool = False) -> bool:
-    if not ENABLED or not page_id or not page_token or not image.exists():
+    if not ENABLED or not POSTS or not page_id or not page_token or not image.exists():
         return False
     try:
         ig_id = ig_user_id(graph, page_id, page_token)

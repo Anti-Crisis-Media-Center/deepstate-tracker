@@ -742,12 +742,18 @@ def fb_page_credentials() -> tuple[str, str]:
     return result
 
 
+FB_POSTS = os.getenv("FB_POSTS", "1") == "1"   # 0 — на сторінці лише сторіз, без дописів у стрічку
+
+
 def post_facebook(text: str, image: Path) -> bool:
     """Публікує тизер на сторінці Facebook і додає перший коментар із посиланням на Telegram.
     Повертає True, якщо Facebook налаштований і пост вийшов."""
     page_id, page_token = fb_page_credentials()
     if not page_id or not page_token:
         return False
+    if not FB_POSTS:
+        log("Facebook: дописи вимкнено (FB_POSTS=0), лише сторіз.")
+        return True
     if DRY_RUN:
         log("DRY_RUN — у Facebook не публікується. Текст:\n" + text)
         return True
