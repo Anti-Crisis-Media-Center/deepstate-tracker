@@ -61,8 +61,8 @@ SETTLEMENTS_URL = (
 )
 
 OBLASTS = {
-    "donetsk": {"pcode": "UA14", "name_ua": "Донецька", "title": "Донецька область"},
-    "luhansk": {"pcode": "UA44", "name_ua": "Луганська", "title": "Луганська область"},
+    "donetsk": {"pcode": "UA14", "name_ua": "Донецька", "title": "Донецька область", "short": "Донеччина"},
+    "luhansk": {"pcode": "UA44", "name_ua": "Луганська", "title": "Луганська область", "short": "Луганщина"},
 }
 
 # Які шари DeepState вважаємо окупованими
@@ -686,9 +686,9 @@ def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_p
 
 def build_fb_teaser(day: str, results: dict) -> str:
     lines = [f"DeepState: зміни за добу, {day}", ""]
-    found = [_teaser_line(cfg["title"], results[k]["newly_km2"], results[k]["deocc_km2"],
+    found = [_teaser_line(cfg["short"], results[k]["newly_km2"], results[k]["deocc_km2"],
                           results[k]["newly_places"], results[k]["deocc_places"])
-             or f"{cfg['title']}: змін позначень окупованих територій не зафіксовано." for k, cfg in OBLASTS.items()]
+             or f"{cfg['short']}: без змін." for k, cfg in OBLASTS.items()]
     lines += found
     lines += ["", FB_CTA, "", "За даними DeepStateMap.live"]
     return "\n".join(lines)
@@ -704,11 +704,11 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
                   + _f(first[f"{key}_deoccupied_km2"]))
         net = round(_f(last[f"{key}_occupied_km2"]) - before, 2)
         if net >= 0.01:
-            lines.append(f"{cfg['title']}: за {word} площа, позначена окупованою, зросла на {fmt_km2(net)} км².")
+            lines.append(f"{cfg['short']}: за {word} площа, позначена окупованою, зросла на {fmt_km2(net)} км².")
         elif net <= -0.01:
-            lines.append(f"{cfg['title']}: за {word} площа, позначена окупованою, зменшилася на {fmt_km2(-net)} км².")
+            lines.append(f"{cfg['short']}: за {word} площа, позначена окупованою, зменшилася на {fmt_km2(-net)} км².")
         else:
-            lines.append(f"{cfg['title']}: за {word} помітних змін не зафіксовано.")
+            lines.append(f"{cfg['short']}: за {word} без змін.")
     lines += ["", "Повний підсумок із населеними пунктами — у Telegram-каналі Антикризового медіа-центру. "
               "Посилання в першому коментарі 👇", "", "За даними DeepStateMap.live"]
     return "\n".join(lines)
