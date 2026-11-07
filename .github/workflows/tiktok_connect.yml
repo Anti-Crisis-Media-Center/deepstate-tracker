@@ -1,0 +1,22 @@
+name: TikTok — підключення акаунта
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "Код з адреси після «Дозволити» (параметр code=)"
+        required: true
+jobs:
+  connect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install requests pynacl
+      - env:
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          GH_ADMIN_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
+          CODE: ${{ inputs.code }}
+        run: python tiktok_api.py "$CODE"

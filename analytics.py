@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 import threads_api
+import tiktok_api
 
 G = "https://graph.facebook.com/v24.0"
 PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "111460408546782")
@@ -200,6 +201,8 @@ def build() -> str:
     lines += section("Facebook «У фокусі»", facebook(), "Охоплення сторінки")
     lines += section("Instagram acmc.ua", instagram(), "Охоплення")
     lines += section("Threads acmc.ua", threads(), "Перегляди")
+    if os.getenv("TIKTOK_REFRESH_TOKEN", "").strip():
+        lines += section("TikTok @acmc.ua", tiktok_api.stats(SINCE, log), "Перегляди нових відео")
     lines.append("<i>Охоплення — за останні 7 днів, у дужках — зміна до попереднього тижня.</i>")
     return "\n".join(lines)
 
