@@ -942,7 +942,7 @@ def _rows_luhansk_changed(rows: list[dict]) -> bool:
     return any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows)
 
 
-def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str]:
+def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     """Головна цифра й місце для першого кадру TikTok (по Донеччині)."""
     first, last = rows[0], rows[-1]
     before = (_f(first["donetsk_occupied_km2"]) - _f(first["donetsk_newly_occupied_km2"])
@@ -955,12 +955,13 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str]:
             if name:
                 places[name] = places.get(name, 0) + (3 if name in CITIES else 1)
     if abs(net) < 0.01:
-        return "Без змін", "на Донеччині за " + ("тиждень" if kind == "week" else "місяць")
-    big = f"{'+' if net > 0 else '−'}{fmt_km2(abs(net))} км²"
+        return "Без змін", "позначень на мапі", "на Донеччині за " + ("тиждень" if kind == "week" else "місяць")
+    big = f"{fmt_km2(abs(net))} км²"
+    what = "позначено окупованими" if net > 0 else "позначено деокупованими"
     if not places:
-        return big, "на Донеччині"
+        return big, what, "на Донеччині"
     top = max(places, key=places.get)
-    return big, (f"біля {CITY_GENITIVE.get(top, top)}" if top in CITIES else f"поблизу: {top}")
+    return big, what, (f"біля {CITY_GENITIVE.get(top, top)}" if top in CITIES else f"поблизу: {top}")
 
 
 def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path) -> Path:
@@ -975,7 +976,7 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(3))).enhance(0.4)
     d = ImageDraw.Draw(canvas)
     yel, white = (247, 197, 49), (250, 250, 250)
-    big, where = _tiktok_headline(kind, rows)
+    big, what, where = _tiktok_headline(kind, rows)
     title = "DeepState: підсумки тижня" if kind == "week" else "DeepState: підсумки місяця"
 
     def centered(text, font, y, fill):
@@ -991,7 +992,9 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     wsize = 84
     while d.textlength(where, font=f800(wsize)) > 980:
         wsize -= 4
-    centered(where, f800(wsize), 760 + size + 40, white)
+    centered(what, f500(60), 760 + size + 30, white)
+    centered(where, f800(wsize), 760 + size + 120, white)
+    centered("Деталі — гортайте »", f500(42), 1440, yel)
     centered("Донеччина · Луганщина", f500(44), 1560, white)
     centered("За даними DeepStateMap.live", f500(34), 1640, (200, 200, 200))
     canvas.save(out, "JPEG", quality=90)
