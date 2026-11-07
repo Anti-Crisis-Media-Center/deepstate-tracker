@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+import ig_api
 import threads_api
 from pyproj import Geod, Transformer
 import numpy as np
@@ -894,6 +895,7 @@ def make_and_post_story(cover: Path, date_label: str, blocks: list[dict]) -> Non
         from story import render_story
         out = render_story(cover, date_label, blocks, DATA / "story.jpg")
         post_facebook_story(out)
+        ig_api.post_story(FB_GRAPH, *fb_page_credentials(), out, log, alert, DRY_RUN)
     except Exception as e:  # noqa: BLE001
         log(f"Не вдалося зробити сторіз: {e}")
 
@@ -936,7 +938,7 @@ HISTORY_FIELDS = [
     "donetsk_newly_places", "donetsk_deoccupied_places",
     "luhansk_newly_places", "luhansk_deoccupied_places",
     "donetsk_penetration_cities", "luhansk_penetration_cities",
-    "threads_followers",
+    "threads_followers", "instagram_followers",
 ]
 
 
@@ -1102,6 +1104,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         fb_text = build_fb_summary_teaser(s["kind"], rows, s.get("label"))
         send_fb_teaser(fb_text, s["image"])
         threads_api.post(fb_text, s["image"], log, alert, DRY_RUN)
+        ig_api.post(FB_GRAPH, *fb_page_credentials(), fb_text, s["image"], log, alert, DRY_RUN)
         story_date = (s["label"][0].upper() + s["label"][1:]) if s["kind"] == "month" and s.get("label") \
             else _period_label(start, today)
         make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows))
@@ -1249,6 +1252,7 @@ def main() -> int:
         **{f"{k}_unknown_net_km2": (grey.get(k) or {}).get("net_km2", "") for k in OBLASTS},
         **{f"{k}_penetration_cities": "; ".join((grey.get(k) or {}).get("cities") or []) for k in OBLASTS},
         "threads_followers": threads_api.followers(log) or "",
+        "instagram_followers": ig_api.followers(FB_GRAPH, *fb_page_credentials(), log) or "",
         "messages_count": len(messages),
         "messages": " | ".join(f"{m['time']:%d.%m %H:%M} {m['text']}" for m in messages),
     })
@@ -1257,6 +1261,7 @@ def main() -> int:
     fb_text = build_fb_teaser(fmt_date(today), results)
     send_fb_teaser(fb_text, COVER_IMAGE)
     threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN)
+    ig_api.post(FB_GRAPH, *fb_page_credentials(), fb_text, COVER_IMAGE, log, alert, DRY_RUN)
     if today.weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
         threads_api.refresh_token(log, alert)
     make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results))
