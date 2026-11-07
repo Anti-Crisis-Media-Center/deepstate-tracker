@@ -1,0 +1,29 @@
+name: Аналітика соцмереж — щотижневий звіт
+on:
+  schedule:
+    - cron: "0 8 * * 1"   # понеділок 10:00 за Києвом (зимовий час)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Лише показати звіт у журналі, не надсилати"
+        type: boolean
+        default: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - env:
+          FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          ANALYTICS_BOT_TOKEN: ${{ secrets.ANALYTICS_BOT_TOKEN }}
+          ANALYTICS_CHAT_ID: ${{ secrets.ANALYTICS_CHAT_ID }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: python analytics.py
