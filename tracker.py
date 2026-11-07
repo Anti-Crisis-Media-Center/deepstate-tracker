@@ -913,14 +913,16 @@ TIKTOK_BIG_KM2 = float(os.getenv("TIKTOK_BIG_KM2", "10"))
 TIKTOK_TAGS = "#Донеччина #DeepState #Україна #мапа"
 
 
-def _tiktok_tags(places: list[str]) -> str:
-    """TikTok дозволяє не більше 5 хештегів: 3 постійні (обидві області + DeepState) + до 2 міст."""
+def _tiktok_tags(places: list[str], luhansk_changed: bool = False) -> str:
+    """TikTok дозволяє не більше 5 хештегів. #Луганщина — лише коли там справді були зміни,
+    щоб не обманювати очікування глядачів, які шукають новини Луганщини."""
     cities = []
     for p in places:
         name = re.sub(r"\s*\(.*?\)", "", p).strip()
         if name in CITIES and name not in cities:
             cities.append(name)
-    tags = ["#Донеччина", "#Луганщина", "#DeepState"] + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:2]]
+    base = ["#Донеччина"] + (["#Луганщина"] if luhansk_changed else []) + ["#DeepState"]
+    tags = base + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:5 - len(base)]]
     for extra in ("#Україна", "#мапа", "#новини"):
         if len(tags) < 5:
             tags.append(extra)
@@ -959,8 +961,9 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         title = "DeepState: підсумки тижня 🗺" if kind == "week" else f"DeepState: підсумки місяця 🗺 {date_label}"
         word = "щопонеділка" if kind == "week" else "щомісяця"
         caption = "\n".join([title, *body, "",
-                              f"Підписуйтеся, щоб {word} бачити, як змінюється мапа Донеччини й Луганщини.",
-                              "За даними DeepStateMap.live", "", _tiktok_tags(places)])
+                              f"Підписуйтеся, щоб {word} бачити, як змінюється мапа Донеччини.",
+                              "За даними DeepStateMap.live", "",
+                              _tiktok_tags(places, any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows))])
         if DRY_RUN:
             log("DRY_RUN — матеріали для TikTok не надсилаються. Підпис:\n" + caption)
             return
