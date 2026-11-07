@@ -906,6 +906,96 @@ def make_and_post_story(cover: Path, date_label: str, blocks: list[dict]) -> Non
         log(f"Не вдалося зробити сторіз: {e}")
 
 
+# ============================ TIKTOK (ручна публікація) ============================
+# Раз на тиждень і раз на місяць бот надсилає в службовий чат вертикальні картки й готовий підпис.
+# Щодня — лише позначка «⚡ варто опублікувати», якщо зміни великі або біля міста.
+TIKTOK_BIG_KM2 = float(os.getenv("TIKTOK_BIG_KM2", "10"))
+TIKTOK_TAGS = "#Донеччина #DeepState #Україна #мапа"
+
+
+def _tiktok_tags(places: list[str]) -> str:
+    cities = []
+    for p in places:
+        name = re.sub(r"\s*\(.*?\)", "", p).strip()
+        if name in CITIES and name not in cities:
+            cities.append(name)
+    extra = " ".join("#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:3])
+    return (TIKTOK_TAGS + (" " + extra if extra else "")).strip()
+
+
+def _vertical_cover(cover: Path, out: Path) -> Path:
+    from PIL import Image
+    im = Image.open(cover).convert("RGB")
+    canvas = Image.new("RGB", (1080, 1920), (10, 14, 26))
+    bg = im.resize((1920, 1920)).crop((420, 0, 1500, 1920))
+    from PIL import ImageFilter, ImageEnhance
+    canvas.paste(ImageEnhance.Brightness(bg.filter(ImageFilter.GaussianBlur(30))).enhance(0.45), (0, 0))
+    canvas.paste(im.resize((1080, 1080)), (0, 420))
+    canvas.save(out, "JPEG", quality=90)
+    return out
+
+
+def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, start: str) -> None:
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        return
+    try:
+        from story import render_story
+        card = render_story(cover, date_label, story_blocks_summary(kind, rows), DATA / "tiktok_card.jpg",
+                            footer="Підписуйтеся на підсумки щопонеділка", handle="TikTok: @acmc.ua")
+        first = _vertical_cover(cover, DATA / "tiktok_cover.jpg")
+        teaser = build_fb_summary_teaser(kind, rows, None if kind == "week" else date_label)
+        body = [l for l in teaser.split("\n\n")[1].split("\n")] if "\n\n" in teaser else []
+        places = []
+        for r in rows:
+            for k in OBLASTS:
+                places += [x.strip() for x in (r.get(f"{k}_newly_places") or "").split(";") if x.strip()]
+                places += [x.strip() for x in (r.get(f"{k}_penetration_cities") or "").split(";") if x.strip()]
+        title = "DeepState: підсумки тижня 🗺" if kind == "week" else f"DeepState: підсумки місяця 🗺 {date_label}"
+        word = "щопонеділка" if kind == "week" else "щомісяця"
+        caption = "\n".join([title, *body, "",
+                              f"Підписуйтеся, щоб {word} бачити, як змінюється мапа Донеччини.",
+                              "За даними DeepStateMap.live", "", _tiktok_tags(places)])
+        if DRY_RUN:
+            log("DRY_RUN — матеріали для TikTok не надсилаються. Підпис:\n" + caption)
+            return
+        with first.open("rb") as a, card.open("rb") as b:
+            media = json.dumps([{"type": "photo", "media": "attach://a",
+                                 "caption": "🎵 Для TikTok: завантажте як фото-допис (+ → Фото), додайте музику"},
+                                {"type": "photo", "media": "attach://b"}])
+            tg("sendMediaGroup", token, {"chat_id": chat_id, "media": media}, {"a": a, "b": b})
+        tg("sendMessage", token, {"chat_id": chat_id, "text": caption})
+        log("Матеріали для TikTok надіслано в службовий чат.")
+    except Exception as e:  # noqa: BLE001
+        log(f"TikTok-матеріали: помилка — {e}")
+
+
+def tiktok_daily_flag(results: dict, grey: dict) -> None:
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
+    big = [cfg["short"] for k, cfg in OBLASTS.items() if results[k]["newly_km2"] >= TIKTOK_BIG_KM2]
+    near = []
+    for k in OBLASTS:
+        for p in results[k]["newly_places"]:
+            name = re.sub(r"\s*\(.*?\)", "", p).strip()
+            if name in CITIES:
+                near.append(name)
+        near += (grey.get(k) or {}).get("cities") or []
+    if not (big or near) or DRY_RUN or not token or not chat_id:
+        return
+    why = []
+    if big:
+        why.append(f"великі зміни ({', '.join(big)}: понад {fmt_km2(TIKTOK_BIG_KM2)} км²)")
+    if near:
+        why.append("зміни біля міст: " + ", ".join(dict.fromkeys(near)))
+    try:
+        tg("sendMessage", token, {"chat_id": chat_id, "text": "⚡ Варто опублікувати в TikTok сьогодні: "
+                                  + "; ".join(why) + ". Сторіз-картка — у Facebook/Instagram, текст — у Telegram."})
+    except Exception as e:  # noqa: BLE001
+        log(f"TikTok-позначка: помилка — {e}")
+
+
 def alert(message: str) -> None:
     """Повідомлення про помилку в окремий (службовий) чат, якщо він налаштований."""
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -1114,6 +1204,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         story_date = (s["label"][0].upper() + s["label"][1:]) if s["kind"] == "month" and s.get("label") \
             else _period_label(start, today)
         make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows))
+        send_tiktok_pack(s["kind"], rows, s["image"], story_date, start)
         done[s["kind"]] = today
         if save:
             save()
@@ -1267,6 +1358,7 @@ def main() -> int:
     fb_text = build_fb_teaser(fmt_date(today), results)
     send_fb_teaser(fb_text, COVER_IMAGE)
     threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN)
+    tiktok_daily_flag(results, grey)
     ig_api.post(FB_GRAPH, *fb_page_credentials(), fb_text, COVER_IMAGE, log, alert, DRY_RUN)
     if today.weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
         threads_api.refresh_token(log, alert)
