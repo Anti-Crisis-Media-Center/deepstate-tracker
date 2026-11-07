@@ -933,6 +933,7 @@ HISTORY_FIELDS = [
     "messages_count", "messages",
     "donetsk_newly_places", "donetsk_deoccupied_places",
     "luhansk_newly_places", "luhansk_deoccupied_places",
+    "donetsk_penetration_cities", "luhansk_penetration_cities",
 ]
 
 
@@ -1017,6 +1018,17 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             else:
                 body += f" У підсумку площа, позначена окупованою, за {period_word} майже не змінилася."
         grey_net = round(sum(_f(r.get(f"{key}_unknown_net_km2")) for r in rows), 2)
+        pen = []
+        for r in rows:
+            for c in (r.get(f"{key}_penetration_cities") or "").split(";"):
+                c = c.strip()
+                if c and c not in pen:
+                    pen.append(c)
+        if pen and not SHOW_GREY_IN_TEXT:
+            names = [CITY_GENITIVE.get(c, c) for c in pen[:4]]
+            where = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " та " + names[-1]
+            body += (f" За {'тиждень' if kind == 'week' else 'місяць'} нові райони проникнення "
+                     f"(території, що потребують уточнення) з'являлися біля {where}.")
         if SHOW_GREY_IN_TEXT and abs(grey_net) >= 0.01:
             body += (f" Сіра зона {'збільшилася' if grey_net > 0 else 'зменшилася'} на {fmt_km2(abs(grey_net))} км².")
         last = rows[-1]
@@ -1230,6 +1242,7 @@ def main() -> int:
         **{f"{k}_deoccupied_places": "; ".join(results[k]["deocc_places"]) for k in OBLASTS},
         **{f"{k}_unknown_km2": new_state["unknown_km2"][k] for k in OBLASTS},
         **{f"{k}_unknown_net_km2": (grey.get(k) or {}).get("net_km2", "") for k in OBLASTS},
+        **{f"{k}_penetration_cities": "; ".join((grey.get(k) or {}).get("cities") or []) for k in OBLASTS},
         "messages_count": len(messages),
         "messages": " | ".join(f"{m['time']:%d.%m %H:%M} {m['text']}" for m in messages),
     })
