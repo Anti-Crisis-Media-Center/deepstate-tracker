@@ -571,7 +571,7 @@ def penetration_sentence(g: dict | None) -> str:
     names = [CITY_GENITIVE.get(c, c) for c in cities[:3]]
     where = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " та " + names[-1]
     return (f"Біля {where} на мапі DeepState з'явився новий район проникнення "
-            f"(територія, що потребує уточнення).")
+            f"(територія, що потребує уточнення; окупованою її ще не позначено).")
 
 
 def grey_sentence(g: dict | None) -> str:
