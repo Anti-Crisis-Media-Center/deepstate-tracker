@@ -8,6 +8,9 @@ on:
         description: "Лише показати звіт у журналі, не надсилати"
         type: boolean
         default: false
+      script:
+        description: "Скрипт"
+        default: "analytics.py"
 jobs:
   report:
     runs-on: ubuntu-latest
@@ -26,4 +29,4 @@ jobs:
           ANALYTICS_BOT_TOKEN: ${{ secrets.ANALYTICS_BOT_TOKEN }}
           ANALYTICS_CHAT_ID: ${{ secrets.ANALYTICS_CHAT_ID }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
-        run: python analytics.py
+        run: python ${{ inputs.script || 'analytics.py' }}
