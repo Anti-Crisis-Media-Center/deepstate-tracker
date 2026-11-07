@@ -923,10 +923,66 @@ def _tiktok_tags(places: list[str], luhansk_changed: bool = False) -> str:
             cities.append(name)
     base = ["#Донеччина"] + (["#Луганщина"] if luhansk_changed else []) + ["#DeepState"]
     tags = base + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:5 - len(base)]]
-    for extra in ("#Україна", "#мапа", "#новини"):
-        if len(tags) < 5:
-            tags.append(extra)
+    for extra in ("#Краматорськ", "#Слов'янськ", "#Костянтинівка", "#Дружківка"):
+        if len(tags) < 5 and extra.replace("'", "") not in [t.replace("'", "") for t in tags]:
+            tags.append(extra.replace("'", ""))
     return " ".join(tags[:5])
+
+
+def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str]:
+    """Головна цифра й місце для першого кадру TikTok (по Донеччині)."""
+    first, last = rows[0], rows[-1]
+    before = (_f(first["donetsk_occupied_km2"]) - _f(first["donetsk_newly_occupied_km2"])
+              + _f(first["donetsk_deoccupied_km2"]))
+    net = round(_f(last["donetsk_occupied_km2"]) - before, 2)
+    places: dict[str, int] = {}
+    for r in rows:
+        for p in (r.get("donetsk_newly_places") or "").split(";"):
+            name = re.sub(r"\s*\(.*?\)", "", p).strip()
+            if name:
+                places[name] = places.get(name, 0) + (3 if name in CITIES else 1)
+    if abs(net) < 0.01:
+        return "Без змін", "на Донеччині за " + ("тиждень" if kind == "week" else "місяць")
+    big = f"{'+' if net > 0 else '−'}{fmt_km2(abs(net))} км²"
+    if not places:
+        return big, "на Донеччині"
+    top = max(places, key=places.get)
+    return big, (f"біля {CITY_GENITIVE.get(top, top)}" if top in CITIES else f"поблизу: {top}")
+
+
+def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path) -> Path:
+    from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+    fonts = ROOT / "assets" / "fonts"
+    f800 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), n)  # noqa: E731
+    f500 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-500.ttf"), n)  # noqa: E731
+    im = Image.open(cover).convert("RGB")
+    w, h = im.size  # фон — лише мапа з обкладинки, без тексту
+    mp = im.crop((int(w * .28), int(h * .28), int(w * .98), int(h * .64)))
+    mp = mp.resize((int(1920 * mp.width / mp.height), 1920)).crop((0, 0, 1080, 1920))
+    canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(3))).enhance(0.4)
+    d = ImageDraw.Draw(canvas)
+    yel, white = (247, 197, 49), (250, 250, 250)
+    big, where = _tiktok_headline(kind, rows)
+    title = "DeepState: підсумки тижня" if kind == "week" else "DeepState: підсумки місяця"
+
+    def centered(text, font, y, fill):
+        w = d.textlength(text, font=font)
+        d.text(((1080 - w) / 2, y), text, font=font, fill=fill)
+
+    size = 210
+    while d.textlength(big, font=f800(size)) > 980:
+        size -= 10
+    centered(title, f800(64), 420, yel)
+    centered(date_label, f500(48), 510, white)
+    centered(big, f800(size), 760, yel)
+    wsize = 84
+    while d.textlength(where, font=f800(wsize)) > 980:
+        wsize -= 4
+    centered(where, f800(wsize), 760 + size + 40, white)
+    centered("Донеччина · Луганщина", f500(44), 1560, white)
+    centered("За даними DeepStateMap.live", f500(34), 1640, (200, 200, 200))
+    canvas.save(out, "JPEG", quality=90)
+    return out
 
 
 def _vertical_cover(cover: Path, out: Path) -> Path:
@@ -950,7 +1006,7 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         from story import render_story
         card = render_story(cover, date_label, story_blocks_summary(kind, rows), DATA / "tiktok_card.jpg",
                             footer="Підписуйтеся на підсумки щопонеділка", handle="TikTok: @acmc.ua")
-        first = _vertical_cover(cover, DATA / "tiktok_cover.jpg")
+        first = _tiktok_first_frame(kind, rows, cover, date_label, DATA / "tiktok_cover.jpg")
         teaser = build_fb_summary_teaser(kind, rows, None if kind == "week" else date_label)
         body = [l for l in teaser.split("\n\n")[1].split("\n")] if "\n\n" in teaser else []
         places = []
