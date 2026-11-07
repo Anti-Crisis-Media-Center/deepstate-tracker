@@ -69,6 +69,8 @@ OCCUPIED_MARKERS = ("geoJSON.status.occupied", "geoJSON.territories.ordlo")
 UNKNOWN_MARKERS = ("geoJSON.status.unknown",)
 
 # Текстові повідомлення DeepState («Оновлення мапи»)
+# Сіра зона в тексті зведень вимкнена: читачам незрозуміла, перевантажує. Дані далі пишуться в history.csv.
+SHOW_GREY_IN_TEXT = os.getenv("SHOW_GREY_IN_TEXT", "0") == "1"
 DEEPSTATE_HISTORY_URL = "https://deepstatemap.live/api/history/public"
 MAX_MESSAGES_IN_POST = 12
 
@@ -455,7 +457,11 @@ def get_messages(since_id: int | None, until_id: int | None, oblasts: dict, plac
             mid = int(it.get("id"))
         except (TypeError, ValueError):
             continue
-        if not (since_id < mid <= until_id) or it.get("status") is False:
+        if not (since_id < mid <= until_id):
+            continue
+        if it.get("status") is False:
+            log(f"Повідомлення {datetime.fromtimestamp(mid, KYIV):%d.%m %H:%M} приховане (status=false): "
+                f"{clean_description(it.get('description') or '')[:120]}")
             continue
         raw = it.get("description") or ""
         text = clean_description(raw)
@@ -571,7 +577,7 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
             parts.append(change_sentence(r["newly_km2"], "окуповані", r["newly_places"]))
         if r["deocc_km2"] > 0:
             parts.append(change_sentence(r["deocc_km2"], "деокуповані", r["deocc_places"]))
-        gs = grey_sentence((grey or {}).get(key))
+        gs = grey_sentence((grey or {}).get(key)) if SHOW_GREY_IN_TEXT else ""
         if not parts:
             parts.append("змін позначень окупованих територій не зафіксовано.")
         if gs:
@@ -983,7 +989,7 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             else:
                 body += f" У підсумку площа, позначена окупованою, за {period_word} майже не змінилася."
         grey_net = round(sum(_f(r.get(f"{key}_unknown_net_km2")) for r in rows), 2)
-        if abs(grey_net) >= 0.01:
+        if SHOW_GREY_IN_TEXT and abs(grey_net) >= 0.01:
             body += (f" Сіра зона {'збільшилася' if grey_net > 0 else 'зменшилася'} на {fmt_km2(abs(grey_net))} км².")
         last = rows[-1]
         pct = _f(last.get(f"{key}_occupied_percent"))
