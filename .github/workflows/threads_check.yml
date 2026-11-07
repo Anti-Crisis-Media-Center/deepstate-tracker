@@ -12,4 +12,5 @@ jobs:
       - run: pip install requests
       - env:
           THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          GH_ADMIN_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
         run: python threads_check.py
