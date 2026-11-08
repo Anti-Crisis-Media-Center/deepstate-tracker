@@ -1029,7 +1029,8 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     return big, what, (f"біля {CITY_GENITIVE.get(top, top)}" if top in city_names else f"поблизу: {top}")
 
 
-def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path) -> Path:
+def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path,
+                        bg: Path | None = None) -> Path:
     from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
     fonts = ROOT / "assets" / "fonts"
     f800 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), n)  # noqa: E731
@@ -1038,7 +1039,20 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     w, h = im.size  # фон — лише мапа з обкладинки, без тексту
     mp = im.crop((int(w * .28), int(h * .28), int(w * .98), int(h * .64)))
     mp = mp.resize((int(1920 * mp.width / mp.height), 1920)).crop((0, 0, 1080, 1920))
-    canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(3))).enhance(0.4)
+    if bg and bg.exists():   # фон — та сама вертикальна мапа, що йде далі у відео
+        mp = Image.open(bg).convert("RGB").resize((1080, 1920))
+        import change_map
+        ImageDraw.Draw(mp).rectangle([0, 0, 1080, 390], fill=change_map.BG)       # без заголовка мапи
+        ImageDraw.Draw(mp).rectangle([0, 1450, 1080, 1920], fill=change_map.BG)   # без легенди
+        canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(8))).enhance(0.75)
+    else:
+        canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(3))).enhance(0.65)
+    # м'яке затемнення під текстом: мапу видно, а написи лишаються контрастними
+    shade = Image.new("L", (1080, 1920), 0)
+    sd = ImageDraw.Draw(shade)
+    sd.rectangle([0, 360, 1080, 1480], fill=150)
+    shade = shade.filter(ImageFilter.GaussianBlur(120))
+    canvas.paste(Image.new("RGB", canvas.size, (8, 12, 26)), (0, 0), shade)
     d = ImageDraw.Draw(canvas)
     yel, white = (247, 197, 49), (250, 250, 250)
     big, what, where = _tiktok_headline(kind, rows)
@@ -1143,7 +1157,8 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         card = render_story(cover, date_label, story_blocks_summary(kind, rows), DATA / "tiktok_card.jpg",
                             footer="Підписуйтеся, щоб не пропустити",
                             handle="Підсумки щопонеділка" if kind == "week" else "Підсумки щомісяця")
-        first = _tiktok_first_frame(kind, rows, cover, date_label, DATA / "tiktok_cover.jpg")
+        vbg = change_map_img.with_name(change_map_img.stem + "_base_v.jpg") if change_map_img else None
+        first = _tiktok_first_frame(kind, rows, cover, date_label, DATA / "tiktok_cover.jpg", vbg)
         end_card = _tiktok_end_card(kind, rows, cover, date_label, DATA / "tiktok_end.jpg")
         teaser = build_fb_summary_teaser(kind, rows, None if kind == "week" else date_label)
         body = [l for l in teaser.split("\n\n")[1].split("\n")] if "\n\n" in teaser else []
