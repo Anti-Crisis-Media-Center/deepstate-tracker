@@ -1075,7 +1075,8 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
     w, h = im.size
     mp = im.crop((int(w * .28), int(h * .28), int(w * .98), int(h * .64)))
     mp = mp.resize((int(1920 * mp.width / mp.height), 1920)).crop((0, 0, 1080, 1920))
-    canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(6))).enhance(0.3)
+    import change_map
+    canvas = Image.new("RGB", (1080, 1920), change_map.BG)   # той самий темно-синій, що й фон мапи
     d = ImageDraw.Draw(canvas)
     yel, white, grey = (247, 197, 49), (250, 250, 250), (200, 200, 200)
 
