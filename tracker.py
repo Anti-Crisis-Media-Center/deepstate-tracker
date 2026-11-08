@@ -1058,6 +1058,22 @@ def _vertical_cover(cover: Path, out: Path) -> Path:
     return out
 
 
+def youtube_text(kind: str, body: list[str], date_label: str, places: list[str], rows: list[dict]) -> str:
+    """Назва й опис для YouTube Shorts (основний канал АКМЦ, плейлист DeepState)."""
+    period = "тиждень" if kind == "week" else f"місяць ({date_label})"
+    first = (body[0] if body else "").strip().rstrip(".")
+    title = f"{first} · DeepState" if first else f"Мапа Донеччини: підсумки за {period} · DeepState"
+    if len(title) > 95:
+        title = title[:94].rstrip() + "…"
+    desc = [*[b for b in body if b.strip()], "",
+            f"Підсумки змін на мапі DeepState для Донеччини й Луганщини за {period}. "
+            + ("Нові підсумки щопонеділка." if kind == "week" else "Нові підсумки щомісяця."),
+            "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
+            "#Донеччина #DeepState #Shorts"]
+    return "\n".join(["▶️ YouTube Shorts", "", "Назва:", title, "", "Опис:", *desc, "",
+                      "Плейлист: DeepState · Не для дітей · Категорія: Новини та політика"])
+
+
 def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, start: str,
                      change_map_img: Path | None = None) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -1112,6 +1128,8 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
                 for fh in files.values():
                     fh.close()
         tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "text": caption})
+        tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK,
+                                  "text": youtube_text(kind, body, date_label, places, rows)})
         log("Матеріали для TikTok надіслано в службовий чат.")
     except Exception as e:  # noqa: BLE001
         log(f"TikTok-матеріали: помилка — {e}")
