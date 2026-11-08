@@ -1068,7 +1068,8 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
     try:
         from story import render_story
         card = render_story(cover, date_label, story_blocks_summary(kind, rows), DATA / "tiktok_card.jpg",
-                            footer="Підписуйтеся, щоб не пропустити", handle="Підсумки щопонеділка")
+                            footer="Підписуйтеся, щоб не пропустити",
+                            handle="Підсумки щопонеділка" if kind == "week" else "Підсумки щомісяця")
         first = _tiktok_first_frame(kind, rows, cover, date_label, DATA / "tiktok_cover.jpg")
         teaser = build_fb_summary_teaser(kind, rows, None if kind == "week" else date_label)
         body = [l for l in teaser.split("\n\n")[1].split("\n")] if "\n\n" in teaser else []
