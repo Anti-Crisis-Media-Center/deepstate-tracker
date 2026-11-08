@@ -1451,20 +1451,31 @@ def main() -> int:
     })
 
     publish(text, COVER_IMAGE, silent=True)  # щоденне — без звуку; підсумки — зі звуком
+    # Позначаємо «опубліковано» одразу після Telegram: якщо далі щось впаде,
+    # запасний запуск не повторить пост ще раз.
+    new_state["published"] = True
+    save_json(current_path, new_state)
+
+    def step(name, fn):
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001 — одна платформа не має зупиняти інші
+            log(f"{name}: помилка — {e}")
+            alert(f"{name}: {e}")
+
     fb_text = build_fb_teaser(fmt_date(today), results)
-    send_fb_teaser(fb_text, COVER_IMAGE)
-    threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN)
-    tiktok_daily_flag(results, grey)
     day_places = [p for k in OBLASTS for p in results[k]["newly_places"] + results[k]["deocc_places"]]
     day_places += [c for k in OBLASTS for c in ((grey or {}).get(k) or {}).get("cities") or []]
     lug = bool(results["luhansk"]["newly_km2"] or results["luhansk"]["deocc_km2"])
-    ig_api.post(FB_GRAPH, *fb_page_credentials(), fb_text + "\n\n" + _tiktok_tags(day_places, lug),
-                COVER_IMAGE, log, alert, DRY_RUN)
-    if today.weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
-        threads_api.refresh_token(log, alert)
-    make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results))
-    new_state["published"] = True
-    save_json(current_path, new_state)
+    step("Facebook", lambda: send_fb_teaser(fb_text, COVER_IMAGE))
+    step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN))
+    step("TikTok-позначка", lambda: tiktok_daily_flag(results, grey))
+    step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(),
+                                          fb_text + "\n\n" + _tiktok_tags(day_places, lug),
+                                          COVER_IMAGE, log, alert, DRY_RUN))
+    step("Сторіз", lambda: make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results)))
+    if now.date().weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
+        step("Маркер Threads", lambda: threads_api.refresh_token(log, alert))
 
     run_summaries(now, new_state, lambda: save_json(current_path, new_state))
     save_json(current_path, new_state)
