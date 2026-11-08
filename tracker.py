@@ -1040,7 +1040,6 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
         wsize -= 4
     centered(what, f500(60), 760 + size + 30, white)
     centered(where, f800(wsize), 760 + size + 120, white)
-    centered("Деталі — гортайте »", f500(42), 1440, yel)
     centered("Донеччина · Луганщина", f500(44), 1560, white)
     centered("За даними DeepStateMap.live", f500(34), 1640, (200, 200, 200))
     canvas.save(out, "JPEG", quality=90)
