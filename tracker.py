@@ -674,7 +674,7 @@ def tg(method: str, token: str, data: dict, files: dict | None = None) -> dict:
     return js
 
 
-def publish(text: str, image: Path = COVER_IMAGE, silent: bool = False) -> None:
+def publish(text: str, image: Path = COVER_IMAGE, silent: bool = True) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     if DRY_RUN or not token or not chat_id:
@@ -1591,7 +1591,7 @@ def main() -> int:
 
     day_map = make_change_map("day", [today], {k: results[k]["newly_km2"] - results[k]["deocc_km2"] for k in OBLASTS},
                               {k: results[k]["newly_places"] + results[k]["deocc_places"] for k in OBLASTS}, "map_day.jpg")
-    publish(text, day_map or COVER_IMAGE, silent=True)  # щоденне — без звуку; підсумки — зі звуком
+    publish(text, day_map or COVER_IMAGE, silent=True)  # усі пости в Telegram — без звуку
     # Позначаємо «опубліковано» одразу після Telegram: якщо далі щось впаде,
     # запасний запуск не повторить пост ще раз.
     new_state["published"] = True
