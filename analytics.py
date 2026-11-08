@@ -1,6 +1,6 @@
 """Щотижнева аналітика соцмереж АКМЦ у Telegram-чат редакції.
 
-Платформи: біла сторінка Facebook, Instagram acmc.ua, Threads acmc.ua, Telegram-канал.
+Платформи: біла сторінка Facebook, Instagram acmc.ua, Threads acmc.ua, Telegram-канал, TikTok, YouTube (АКМЦ і «Перевірено на Сході»).
 Рахує всі дописи (не лише DeepState), топ-3 по кожній платформі, окремо — середнє по DeepState.
 
 Секрети: FACEBOOK_PAGE_TOKEN, THREADS_TOKEN, TELEGRAM_BOT_TOKEN (для підписників каналу),
@@ -16,6 +16,7 @@ import requests
 
 import threads_api
 import tiktok_api
+import youtube_api
 
 G = "https://graph.facebook.com/v24.0"
 PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "111460408546782")
@@ -203,6 +204,7 @@ def build() -> str:
     lines += section("Threads acmc.ua", threads(), "Перегляди")
     if os.getenv("TIKTOK_REFRESH_TOKEN", "").strip():
         lines += section("TikTok @acmc.ua", tiktok_api.stats(SINCE, log), "Перегляди нових відео")
+    lines += youtube_api.sections(SINCE, log)
     lines.append("<i>Охоплення — за останні 7 днів, у дужках — зміна до попереднього тижня.</i>")
     return "\n".join(lines)
 
