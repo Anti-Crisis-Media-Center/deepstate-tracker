@@ -18,6 +18,7 @@ import csv
 import html
 import re
 import json
+import math
 import os
 import sys
 import time
@@ -523,7 +524,9 @@ def nearest_places(polys: list, places: list, oblast_name: str) -> list[str]:
     return [n for n, _ in sorted(found.items(), key=lambda kv: kv[1])][:PLACES_MAX_IN_TEXT]
 
 
-def compare(current, previous, places, oblast_name):
+def compare(current, previous, places, oblast_name, unknown=None):
+    """unknown — сіра зона зараз: якщо з ділянки зняли червону позначку, а вона стала сірою,
+    це не деокупація, а «перейшли в сіру зону» — рахуємо окремо."""
     def diff(a, b):
         if a is None:
             return []
@@ -532,18 +535,50 @@ def compare(current, previous, places, oblast_name):
         return drop_slivers(clean_polygonal(a.difference(b)))
 
     newly = diff(current, previous)
-    deocc = diff(previous, current)
+    removed = diff(previous, current)
+    to_grey: list = []
+    deocc = removed
+    if removed and unknown is not None and not unknown.is_empty:
+        rem = unary_union(removed)
+        to_grey = drop_slivers(clean_polygonal(rem.intersection(unknown)))
+        deocc = drop_slivers(clean_polygonal(rem.difference(unknown)))
     return {
         "newly_km2": round(sum(area_km2(p) for p in newly), 2),
         "deocc_km2": round(sum(area_km2(p) for p in deocc), 2),
+        "grey_km2": round(sum(area_km2(p) for p in to_grey), 2),
         "newly_polys": newly,
         "deocc_polys": deocc,
+        "grey_polys": to_grey,
         "newly_places": nearest_places(newly, places, oblast_name),
         "deocc_places": nearest_places(deocc, places, oblast_name),
+        "grey_places": nearest_places(to_grey, places, oblast_name),
     }
 
 
 # ============================ TEXT ============================
+
+
+def _short_date(d: str) -> str:
+    dt = datetime.strptime(d, "%Y-%m-%d")
+    return f"{dt.day} {MONTHS_GEN[dt.month - 1]}"
+
+
+def _short_range(d1: str, d2: str) -> str:
+    a, b = datetime.strptime(d1, "%Y-%m-%d"), datetime.strptime(d2, "%Y-%m-%d")
+    if a == b:
+        return _short_date(d1)
+    if a.month == b.month:
+        return f"{a.day}–{b.day} {MONTHS_GEN[b.month - 1]}"
+    return f"{_short_date(d1)} – {_short_date(d2)}"
+
+
+def _net_period(rows: list[dict], k: str) -> float:
+    """Чиста зміна позначених окупованими за період (км²). Ділянки, що з червоних стали сірими,
+    у неї не входять — це не деокупація."""
+    first, last = rows[0], rows[-1]
+    before = (_f(first[f"{k}_occupied_km2"]) - _f(first[f"{k}_newly_occupied_km2"])
+              + _f(first[f"{k}_deoccupied_km2"]) + _f(first.get(f"{k}_to_grey_km2")))
+    return round(_f(last[f"{k}_occupied_km2"]) - before + sum(_f(r.get(f"{k}_to_grey_km2")) for r in rows), 2)
 
 
 def join_places(places: list) -> str:
@@ -621,7 +656,8 @@ SHORT_NOTE = SOURCE_LINE + "\n<i>Автоматичний аналіз мапи 
 
 
 def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None) -> str:
-    quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] for k in OBLASTS)
+    quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] and not results[k]["grey_km2"]
+                 for k in OBLASTS)
              and not messages and not any(((grey or {}).get(k) or {}).get("cities") for k in OBLASTS))
     if quiet:  # день без змін — коротка версія
         return "\n".join(["<b>DeepState: зміни за добу</b>", "", f"Період: {period}", "",
@@ -635,6 +671,12 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
             parts.append(change_sentence(r["newly_km2"], "окуповані", r["newly_places"]))
         if r["deocc_km2"] > 0:
             parts.append(change_sentence(r["deocc_km2"], "деокуповані", r["deocc_places"]))
+        if r.get("grey_km2", 0) > 0:   # червоне стало сірим — не деокупація
+            g = (f"ще {fmt_km2(r['grey_km2'])} км², раніше позначених окупованими, тепер позначено як район "
+                 f"проникнення (сіра зона) — це не деокупація.")
+            if r["grey_places"]:
+                g += f" Поблизу: {join_places(r['grey_places'])}."
+            parts.append(g)
         gs = (grey_sentence((grey or {}).get(key)) if SHOW_GREY_IN_TEXT
               else penetration_sentence((grey or {}).get(key)))
         if not parts:
@@ -704,7 +746,8 @@ FB_CTA = ("Повідомлення DeepState, щодобові, щотижне�
 FB_COMMENT = f"Підписуйтеся на наш Telegram, щоб щоранку бачити зміни на мапі DeepState по Донеччині й Луганщині: {FB_TELEGRAM_LINK}"
 
 
-def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_pl: list) -> str | None:
+def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_pl: list,
+                 grey: float = 0.0) -> str | None:
     parts = []
     if newly > 0:
         s = f"{fmt_km2(newly)} км² позначено окупованими"
@@ -716,13 +759,15 @@ def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_p
         if deocc_pl:
             s += f" — поблизу: {join_places(deocc_pl[:3])}"
         parts.append(s)
+    if grey > 0:
+        parts.append(f"{fmt_km2(grey)} км² — з окупованих на сіру зону")
     return f"{title}: " + "; ".join(parts) + "." if parts else None
 
 
 def build_fb_teaser(day: str, results: dict) -> str:
     lines = [f"DeepState: зміни за добу, {day}", ""]
     found = [_teaser_line(cfg["short"], results[k]["newly_km2"], results[k]["deocc_km2"],
-                          results[k]["newly_places"], results[k]["deocc_places"])
+                          results[k]["newly_places"], results[k]["deocc_places"], results[k].get("grey_km2", 0))
              or f"{cfg['short']}: без змін." for k, cfg in OBLASTS.items()]
     lines += found
     lines += ["", FB_CTA, "", "За даними DeepStateMap.live"]
@@ -734,10 +779,7 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
     word = "тиждень" if kind == "week" else "місяць"
     lines = [title, ""]
     for key, cfg in OBLASTS.items():
-        first, last = rows[0], rows[-1]
-        before = (_f(first[f"{key}_occupied_km2"]) - _f(first[f"{key}_newly_occupied_km2"])
-                  + _f(first[f"{key}_deoccupied_km2"]))
-        net = round(_f(last[f"{key}_occupied_km2"]) - before, 2)
+        net = _net_period(rows, key)
         if net >= 0.01:
             lines.append(f"{cfg['short']}: за {word} {fmt_km2(net)} км² позначено окупованими.")
         elif net <= -0.01:
@@ -871,12 +913,16 @@ def story_blocks_daily(results: dict) -> list[dict]:
             blocks.append({"label": "" if r["newly_km2"] > 0 else STORY_LABELS[k],
                            "big": f"−{fmt_km2(r['deocc_km2'])} км²", "text": "позначено деокупованими",
                            "note": f"поблизу: {_short_places(r['deocc_places'])}" if r["deocc_places"] else ""})
+        if r.get("grey_km2", 0) > 0:
+            blocks.append({"label": "" if (r["newly_km2"] > 0 or r["deocc_km2"] > 0) else STORY_LABELS[k],
+                           "big": f"{fmt_km2(r['grey_km2'])} км²", "text": "з окупованих — на сіру зону",
+                           "note": f"поблизу: {_short_places(r['grey_places'])}" if r["grey_places"] else ""})
     if not blocks:
         blocks.append({"big": "", "text": "На Донеччині й Луганщині змін позначень окупованих територій "
                                           "за добу не зафіксовано."})
     else:
         for k in OBLASTS:
-            if results[k]["newly_km2"] <= 0 and results[k]["deocc_km2"] <= 0:
+            if results[k]["newly_km2"] <= 0 and results[k]["deocc_km2"] <= 0 and not results[k].get("grey_km2"):
                 blocks.append({"label": STORY_LABELS[k], "big": "", "text": "змін не зафіксовано"})
     return blocks
 
@@ -885,10 +931,7 @@ def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
     word = "тиждень" if kind == "week" else "місяць"
     blocks = []
     for k in OBLASTS:
-        first, last = rows[0], rows[-1]
-        before = (_f(first[f"{k}_occupied_km2"]) - _f(first[f"{k}_newly_occupied_km2"])
-                  + _f(first[f"{k}_deoccupied_km2"]))
-        net = round(_f(last[f"{k}_occupied_km2"]) - before, 2)
+        net = _net_period(rows, k)
         if abs(net) >= 0.01:
             blocks.append({"label": STORY_LABELS[k], "big": f"{fmt_km2(abs(net))} км²",
                            "text": (f"позначено окупованими за {word}" if net > 0
@@ -1004,12 +1047,85 @@ def _rows_luhansk_changed(rows: list[dict]) -> bool:
     return any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows)
 
 
+def _change_areas(rows: list[dict], key: str = "donetsk") -> list[str]:
+    """Окремі ділянки змін за період (кожна доба — своя ділянка), від більшої до меншої.
+    Для кожної — головний населений пункт: місто, якщо є, інакше перший у списку."""
+    areas: dict[str, float] = {}
+    for r in rows:
+        km = _f(r.get(f"{key}_newly_occupied_km2")) + _f(r.get(f"{key}_deoccupied_km2"))
+        ps = [p.strip() for p in ((r.get(f"{key}_newly_places") or "") + ";" + (r.get(f"{key}_deoccupied_places") or "")).split(";")
+              if p.strip()]
+        if km <= 0 or not ps:
+            continue
+        cities = [p for p in ps if is_city(p)]
+        lead = _nearest_city(r.get("date", ""), key) or re.sub(r"\s*\(.*?\)", "", (cities or ps)[0]).strip()
+        areas[lead] = areas.get(lead, 0) + km
+    return sorted(areas, key=areas.get, reverse=True)
+
+
+_CITY_POINTS: list | None = None
+
+
+def _nearest_city(day: str, key: str = "donetsk", max_km: float = 20.0) -> str | None:
+    """Найближче місто до ділянки змін цього дня (якщо ближче за max_km) — читачам воно знайоміше за село."""
+    global _CITY_POINTS
+    try:
+        from shapely.geometry import shape
+        from shapely.ops import nearest_points, unary_union
+        f = CHANGES_DIR / f"{day}.geojson"
+        if not f.exists():
+            return None
+        geoms = [shape(x["geometry"]) for x in json.loads(f.read_text())["features"]
+                 if x["properties"].get("oblast") == key]
+        if not geoms:
+            return None
+        g = unary_union(geoms)
+        if _CITY_POINTS is None:
+            feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
+            _CITY_POINTS = [(x["properties"]["ADM4_UA"], shape(x["geometry"]).centroid) for x in feats
+                            if is_city(x["properties"]["ADM4_UA"], x["properties"].get("ADM2_UA"))]
+        k = math.cos(math.radians(g.centroid.y))
+        best = None
+        for name, pt in _CITY_POINTS:
+            a, b = nearest_points(g, pt)
+            dkm = math.hypot((a.x - b.x) * k, a.y - b.y) * 111
+            if dkm <= max_km and (best is None or dkm < best[0]):
+                best = (dkm, name)
+        return best[1] if best else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _period_breakdown(rows: list[dict], key: str = "donetsk") -> dict | None:
+    """Підсумок періоду за геометрією змін: окуповано / деокуповано / «позначили й зняли» (км²).
+    Ділянку, яку за період і позначили, і зняли, не рахуємо ні туди, ні туди."""
+    try:
+        import change_map
+        files = [CHANGES_DIR / f"{r.get('date', '')}.geojson" for r in rows]
+        if not any(f.exists() for f in files):
+            return None
+        return change_map.breakdown(files, key)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _period_totals(rows: list[dict], key: str = "donetsk") -> tuple[float, float]:
+    """Окуповане і деокуповане за період окремо (а не лише різниця), без «позначили й зняли»."""
+    b = _period_breakdown(rows, key)
+    if b:
+        return round(b["occupied"], 2), round(b["deoccupied"], 2)
+    return (round(sum(_f(r.get(f"{key}_newly_occupied_km2")) for r in rows), 2),
+            round(sum(_f(r.get(f"{key}_deoccupied_km2")) for r in rows), 2))
+
+
+def _period_flip(rows: list[dict], key: str = "donetsk") -> float:
+    b = _period_breakdown(rows, key)
+    return round(b["flip"], 2) if b else 0.0
+
+
 def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     """Головна цифра й місце для першого кадру TikTok (по Донеччині)."""
-    first, last = rows[0], rows[-1]
-    before = (_f(first["donetsk_occupied_km2"]) - _f(first["donetsk_newly_occupied_km2"])
-              + _f(first["donetsk_deoccupied_km2"]))
-    net = round(_f(last["donetsk_occupied_km2"]) - before, 2)
+    net = _net_period(rows, "donetsk")
     places: dict[str, int] = {}
     city_names: set[str] = set()
     for r in rows:
@@ -1025,6 +1141,9 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     what = "позначено окупованими" if net > 0 else "позначено деокупованими"
     if not places:
         return big, what, "на Донеччині"
+    areas = _change_areas(rows)
+    if len(areas) > 1:   # кілька окремих ділянок — називаємо всі (до трьох), а не одну
+        return big, what, "поблизу: " + " · ".join(areas[:3])
     top = max(places, key=places.get)
     return big, what, (f"біля {CITY_GENITIVE.get(top, top)}" if top in city_names else f"поблизу: {top}")
 
@@ -1062,21 +1181,50 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
         w = d.textlength(text, font=font)
         d.text(((1080 - w) / 2, y), text, font=font, fill=fill)
 
-    size = 210
-    while d.textlength(big, font=f800(size)) > 980:
-        size -= 10
+    # головне — де саме; цифра помітна, але не «табло»
     centered(title, f800(64), 420, yel)
     centered(date_label, f500(48), 510, white)
-    centered(big, f800(size), 760, yel)
-    wsize = 84
-    while d.textlength(where, font=f800(wsize)) > 980:
+    place = (where[:1].upper() + where[1:]) if where else ""
+    y = 680
+    lines = [place] if place else []
+    if place.startswith("Поблизу: "):          # кілька ділянок: «Поблизу:» окремим рядком, назви — крупно
+        names = place[len("Поблизу: "):].split(" · ")
+        centered("Поблизу:", f500(52), y, white)
+        y += 80
+        lines = [" · ".join(names[:2])] + ([" · ".join(names[2:])] if len(names) > 2 else [])
+    wsize = 104   # один розмір для всіх рядків з назвами
+    while lines and max(d.textlength(ln, font=f800(wsize)) for ln in lines) > 980:
         wsize -= 4
-    centered(what, f500(60), 760 + size + 30, white)
-    centered(where, f800(wsize), 760 + size + 120, white)
-    centered("Донеччина · Луганщина", f500(44), 1330, white)
-    centered("За даними DeepStateMap.live", f500(34), 1400, (200, 200, 200))
+    for ln in lines:
+        centered(ln, f800(wsize), y, white)
+        y += wsize + 20
+    y += 30
+    size = 140
+    while d.textlength(big, font=f800(size)) > 980:
+        size -= 10
+    period = "за тиждень" if kind == "week" else "за місяць"
+    occ, free = _period_totals(rows)
+    fy = 1330
+    if occ >= 0.01 and free >= 0.01:   # і окупація, і деокупація — дві цифри різними кольорами
+        blue = (88, 196, 255)
+        n1, n2 = f"{fmt_km2(occ)} км²", f"{fmt_km2(free)} км²"
+        centered(n1, f800(96), y, (255, 90, 90))   # окупація — червоним, як на мапі; жовтий лише для акцентів
+        centered("позначено окупованими", f500(44), y + 110, white)
+        centered(n2, f800(96), y + 175, blue)
+        centered(f"позначено деокупованими {period}", f500(44), y + 285, white)
+        fy = max(fy, y + 285 + 90)
+    else:
+        centered(big, f800(size), y, yel)
+        if where.endswith(("тиждень", "місяць")):   # «без змін» — період уже в рядку з місцем
+            period = ""
+        centered(f"{what} {period}".strip(), f500(54), y + size + 30, white)
+    centered("Донеччина · Луганщина", f500(44), fy, white)
+    centered("За даними DeepStateMap.live", f500(34), fy + 70, (200, 200, 200))
     canvas.save(out, "JPEG", quality=90)
     return out
+
+
+END_STYLE = "full"   # останній кадр: "full" — «позначено окупованими: N км²»; "header" — «позначено як:» + коротко
 
 
 def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path) -> Path:
@@ -1097,23 +1245,32 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
     def centered(text, font, y, fill):
         d.text(((1080 - d.textlength(text, font=font)) / 2, y), text, font=font, fill=fill)
 
-    centered("DeepState: підсумки тижня" if kind == "week" else "DeepState: підсумки місяця", f800(56), 330, white)
-    centered(date_label, f500(44), 410, grey)
-    y = 560
-    blocks = [b for b in story_blocks_summary(kind, rows) if b["big"]]
-    if not blocks:
-        centered("Змін на мапі не зафіксовано", f800(60), y, white)
-        y += 110
-    for b in blocks:
-        name = b["label"][:1] + b["label"][1:].lower()
-        centered(f"{name}: {b['big']}", f800(68), y, white)
-        centered(b["text"], f500(40), y + 85, grey)
-        y += 170
-    y = max(y + 60, 1000)
-    centered("Підписуйтеся,", f800(92), y, yel)
-    centered("щоб не пропустити", f800(80), y + 105, yel)
-    centered("Підсумки щопонеділка" if kind == "week" else "Підсумки щомісяця", f500(48), y + 225, white)
-    centered("За даними DeepStateMap.live", f500(32), y + 300, grey)
+    red, blue = (255, 90, 90), (88, 196, 255)
+    # мінімум тексту: область, дві цифри з одним словом, заклик. «Позначено» — у рядку джерела внизу.
+    period = re.sub(r"\s*20\d\d", "", date_label)
+    y = 380
+    shown = False
+    for k in OBLASTS:
+        occ, free = _period_totals(rows, k)
+        if occ < 0.01 and free < 0.01:
+            continue
+        shown = True
+        centered(f"{STORY_LABELS[k][:1]}{STORY_LABELS[k][1:].lower()} · {period}", f500(46), y, white)
+        y += 90
+        for val, word, col in ((occ, "окуповані", red), (free, "деокуповані", blue)):
+            if val >= 0.01:
+                centered(f"{fmt_km2(val)} км²", f800(104), y, col)
+                centered(word, f500(46), y + 120, white)
+                y += 210
+        y += 30
+    if not shown:
+        centered(f"Донеччина · {period}", f500(46), y, white)
+        centered("без змін", f800(80), y + 90, white)
+        y += 220
+    y = max(y + 40, 1000)
+    centered("Підписуйтеся,", f800(74), y, yel)
+    centered("щоб не пропустити", f800(64), y + 88, yel)
+    centered("За позначеннями DeepStateMap.live", f500(32), y + 200, grey)
     canvas.save(out, "JPEG", quality=90)
     return out
 
@@ -1140,6 +1297,7 @@ def youtube_text(kind: str, body: list[str], date_label: str, places: list[str],
     desc = [*[b for b in body if b.strip()], "",
             f"Підсумки змін на мапі DeepState для Донеччини та Луганщини за {period}. "
             + ("Нові підсумки щопонеділка." if kind == "week" else "Нові підсумки щомісяця."),
+            "Зміни за кожну добу — щоранку о 8:00 у нашому Telegram: https://t.me/acmc_ua", "",
             "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
             "#Донеччина #DeepState #Shorts"]
     return "\n".join(["▶️ YouTube Shorts", "", "Назва:", title, "", "Опис:", *desc, "",
@@ -1182,8 +1340,12 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
             vfull = change_map_img.with_name(change_map_img.stem + "_v.jpg") if change_map_img else None
             vbase = change_map_img.with_name(change_map_img.stem + "_base_v.jpg") if change_map_img else None
             ok = vfull is not None and vfull.exists() and vbase.exists()
+            sj = change_map_img.with_name(change_map_img.stem + "_steps.json") if change_map_img else None
+            steps = ([(change_map_img.with_name(n), sec, change_map_img.with_name(off))
+                      for n, sec, off in json.loads(sj.read_text())] if ok and sj and sj.exists() else [])
+            steps = [st for st in steps if st[0].exists() and st[2].exists()]
             video = make_video(first, vbase if ok else None, vfull if ok else change_map_img, end_card,
-                               DATA / "tiktok_video.mp4")
+                               DATA / "tiktok_video.mp4", steps=steps or None)
         except Exception as e:  # noqa: BLE001
             log(f"Відео для TikTok/Shorts: не вдалося — {e}")
         if video:
@@ -1292,6 +1454,7 @@ HISTORY_FIELDS = [
     "messages_count", "messages",
     "donetsk_newly_places", "donetsk_deoccupied_places",
     "luhansk_newly_places", "luhansk_deoccupied_places",
+    "donetsk_to_grey_km2", "luhansk_to_grey_km2", "donetsk_to_grey_places", "luhansk_to_grey_places",
     "donetsk_penetration_cities", "luhansk_penetration_cities",
     "threads_followers", "instagram_followers",
 ]
@@ -1348,7 +1511,7 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
         newly = round(sum(_f(r[f"{key}_newly_occupied_km2"]) for r in rows), 2)
         deocc = round(sum(_f(r[f"{key}_deoccupied_km2"]) for r in rows), 2)
         days = sum(1 for r in rows if _f(r[f"{key}_newly_occupied_km2"]) > 0 or _f(r[f"{key}_deoccupied_km2"]) > 0)
-        if newly == 0 and deocc == 0:
+        if newly == 0 and deocc == 0 and not sum(_f(r.get(f"{key}_to_grey_km2")) for r in rows):
             body = "Змін позначень окупованих територій не зафіксовано."
         else:
             parts = []
@@ -1356,6 +1519,9 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
                 parts.append(f"{fmt_km2(newly)} км² територій змінили позначення на окуповані")
             if deocc > 0:
                 parts.append(f"{fmt_km2(deocc)} км² — на деокуповані")
+            grey_p = round(sum(_f(r.get(f"{key}_to_grey_km2")) for r in rows), 2)
+            if grey_p > 0:
+                parts.append(f"{fmt_km2(grey_p)} км² — з окупованих на сіру зону")
             body = f"{word.lower()} на мапі DeepState " + ", ".join(parts) + "."
             body += f" Зміни фіксувалися в {days} із {len(rows)} днів."
             newly_pl = _places(rows, f"{key}_newly_places")
@@ -1458,10 +1624,9 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         rows_places = {k: [x for r in rows for x in (r.get(f"{k}_newly_places") or "").split("; ") if x] for k in OBLASTS}
         nets = {}
         for k in OBLASTS:
-            first, last = rows[0], rows[-1]
-            nets[k] = round(_f(last[f"{k}_occupied_km2"]) - (_f(first[f"{k}_occupied_km2"])
-                            - _f(first[f"{k}_newly_occupied_km2"]) + _f(first[f"{k}_deoccupied_km2"])), 2)
-        mp = make_change_map(s["kind"], [r["date"] for r in rows], nets, rows_places, f"map_{s['kind']}.jpg")
+            nets[k] = _net_period(rows, k)
+        mp = make_change_map(s["kind"], [r["date"] for r in rows], nets, rows_places, f"map_{s['kind']}.jpg",
+                             _change_areas(rows, max(OBLASTS, key=lambda k: abs(nets.get(k) or 0))))
         publish(text, mp or s["image"])
         done[s["kind"]] = today          # підсумок у Telegram вийшов — повтору не буде
         if save:
@@ -1493,7 +1658,8 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
 # ============================ МІНІ-МАПА ЗМІН ============================
 
 
-def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places: dict, out_name: str) -> Path | None:
+def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places: dict, out_name: str,
+                    areas: list[str] | None = None) -> Path | None:
     """Мапа нових ділянок за добу/період. oblast_km2: {key: км² (додатне — окупованими)}."""
     try:
         import change_map
@@ -1504,7 +1670,9 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         pl = oblast_places.get(key) or []
         cities = [re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl if is_city(p)]
         names = list(dict.fromkeys(re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl))
-        if cities:
+        if areas and len(areas) > 1:
+            title = "Поблизу: " + " · ".join(areas[:3])
+        elif cities:
             title = "Біля " + CITY_GENITIVE.get(cities[0], cities[0])
         elif names:
             title = "Поблизу: " + ", ".join(names[:2])
@@ -1513,11 +1681,33 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         word = {"day": "за добу", "week": "за тиждень", "month": "за місяць"}[kind]
         sub = f"{fmt_km2(abs(km))} км² позначено {'окупованими' if km > 0 else 'деокупованими'} {word}"
         files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
+        bd = change_map.breakdown(files, key)
+        if bd["occupied"] >= 0.01 and bd["deoccupied"] >= 0.01:   # обидва напрямки — дві цифри
+            sub = (f"позначено окупованими {fmt_km2(bd['occupied'])} км², "
+                   f"деокупованими — {fmt_km2(bd['deoccupied'])} км² {word}")
         if kind != "day":   # вертикальні кадри для відео TikTok/Shorts: без нових ділянок і з ними
-            for suffix, show in (("_base_v.jpg", False), ("_v.jpg", True)):
+            frames = [("_base_v.jpg", {"show_new": False}), ("_v.jpg", {})]
+            # 1–2. ділянки «позначили й зняли» блимають по черзі: червоним, потім блакитним (або навпаки)
+            for f in [*DATA.glob(out_name.replace(".jpg", "_step*_v.jpg")), DATA / out_name.replace(".jpg", "_steps.json")]:
+                f.unlink(missing_ok=True)
+            ends = change_map.step_groups(files, key)   # окупація й деокупація — по черзі, як відбувалися
+            info = change_map.step_info(files, key)
+            for i, end in enumerate(ends):   # без підписів з датами — це зведення за період
+                kw = {"upto": end, "since": ends[i - 1] if i else 0}
+                frames.append((f"_step{i + 1}_v.jpg", kw))
+                frames.append((f"_step{i + 1}_off_v.jpg", {**kw, "hide_step": True}))   # для блимання
+            # скільки секунд показувати кожен етап — пропорційно до днів (від нього до наступного), мінімум 2,5 с
+            starts = [info[(ends[i - 1] if i else 0)][0] for i in range(len(ends))]
+            bounds = [dates.index(d) if d in dates else 0 for d in starts] + [len(dates)]
+            total = 9.0 if kind == "week" else 12.0
+            secs = [max(2.5, total * (bounds[i + 1] - bounds[i]) / max(1, len(dates))) for i in range(len(ends))]
+            (DATA / out_name.replace(".jpg", "_steps.json")).write_text(json.dumps(
+                [[out_name.replace(".jpg", f"_step{i + 1}_v.jpg"), sec, out_name.replace(".jpg", f"_step{i + 1}_off_v.jpg")]
+                 for i, sec in enumerate(secs)]))
+            for suffix, kw in frames:
                 try:
                     change_map.render(files, DATA / out_name.replace(".jpg", suffix), title, sub, oblast_key=key,
-                                      show_new=show, height=1920)
+                                      height=1920, **kw)
                 except Exception as e:  # noqa: BLE001
                     log(f"Вертикальна мапа для відео: {e}")
         return change_map.render(files, DATA / out_name, title, sub, oblast_key=key)
@@ -1627,7 +1817,7 @@ def main() -> int:
     results = {}
     for key, cfg in OBLASTS.items():
         prev = geom_from_json(base_state["occupied"].get(key))
-        results[key] = compare(occupied[key], prev, places, cfg["name_ua"])
+        results[key] = compare(occupied[key], prev, places, cfg["name_ua"], unknown.get(key))
         log(f"{cfg['title']}: +{results[key]['newly_km2']} / −{results[key]['deocc_km2']} км²")
 
     period = f"{fmt_date(base_state['date'])}–{fmt_date(today)}"
@@ -1662,10 +1852,11 @@ def main() -> int:
     # Геометрія змін — для майбутніх карт
     feats = []
     for key, r in results.items():
-        for kind in ("newly", "deocc"):
+        for kind in ("newly", "deocc", "grey"):
             for p in r[f"{kind}_polys"]:
                 feats.append({"type": "Feature", "geometry": mapping(p),
-                              "properties": {"oblast": key, "change": "occupied" if kind == "newly" else "deoccupied",
+                              "properties": {"oblast": key, "change": {"newly": "occupied", "deocc": "deoccupied",
+                                                                       "grey": "to_grey"}[kind],
                                              "km2": round(area_km2(p), 3)}})
     if feats:
         save_json(CHANGES_DIR / f"{today}.geojson", {"type": "FeatureCollection", "features": feats})
@@ -1678,6 +1869,8 @@ def main() -> int:
         **{f"{k}_occupied_percent": new_state["occupied_percent"][k] for k in OBLASTS},
         **{f"{k}_newly_occupied_km2": results[k]["newly_km2"] for k in OBLASTS},
         **{f"{k}_deoccupied_km2": results[k]["deocc_km2"] for k in OBLASTS},
+        **{f"{k}_to_grey_km2": results[k]["grey_km2"] for k in OBLASTS},
+        **{f"{k}_to_grey_places": "; ".join(results[k]["grey_places"]) for k in OBLASTS},
         **{f"{k}_newly_places": "; ".join(results[k]["newly_places"]) for k in OBLASTS},
         **{f"{k}_deoccupied_places": "; ".join(results[k]["deocc_places"]) for k in OBLASTS},
         **{f"{k}_unknown_km2": new_state["unknown_km2"][k] for k in OBLASTS},
@@ -1708,7 +1901,8 @@ def main() -> int:
     day_places = [p for k in OBLASTS for p in results[k]["newly_places"] + results[k]["deocc_places"]]
     day_places += [c for k in OBLASTS for c in ((grey or {}).get(k) or {}).get("cities") or []]
     lug = bool(results["luhansk"]["newly_km2"] or results["luhansk"]["deocc_km2"])
-    quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] for k in OBLASTS)
+    quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] and not results[k]["grey_km2"]
+                 for k in OBLASTS)
              and not messages and not any((grey.get(k) or {}).get("cities") for k in OBLASTS))
     if quiet:  # день без змін: у стрічки соцмереж не публікуємо, лише сторіз
         log("Змін немає — дописи у Facebook, Instagram і Threads пропускаємо, лише сторіз.")

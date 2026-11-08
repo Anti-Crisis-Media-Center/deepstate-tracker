@@ -21,7 +21,10 @@ def _vert(img: Image.Image) -> Image.Image:
     return c
 
 
-def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: Path, out: Path) -> Path | None:
+def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: Path, out: Path,
+               steps: list[tuple[Path, float, Path]] | None = None) -> Path | None:
+    """steps — проміжні кадри мапи по черзі (окупація червоним, деокупація блакитним…) з тривалістю в секундах,
+    пропорційною тому, скільки днів тривав цей етап; кожен блимає, далі — кінцевий стан map_full."""
     if not shutil.which("ffmpeg"):
         return None
     a, c = _vert(Image.open(first)), _vert(Image.open(card))
@@ -39,12 +42,30 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         mb, mf = _vert(Image.open(map_base)), _vert(Image.open(map_full))
         fade(a, mb, 0.5)
         hold(mb, 0.7)
-        for _ in range(2):                    # нові ділянки «наливаються» й пульсують
+        if steps:                             # хронологія: кожен крок блимає, потім кінцевий стан
+            hold(mb, 0.8)
+            prev = mb
+            for p, sec, off in steps:
+                # блимає лише те, що змінилося на цьому кроці: «до» (без кольору) ↔ «після» (червоне чи блакитне)
+                st, of = _vert(Image.open(p)), _vert(Image.open(off))
+                fade(prev, of, 0.8)                       # плавно: напр. червоне, що стало сірою зоною, сіріє
+                blinks = max(2, int(sec / 1.0) - 1)       # одне блимання ≈ 1 с
+                for _ in range(blinks):
+                    fade(of, st, 0.4)
+                    hold(st, 0.3)
+                    fade(st, of, 0.3)
+                fade(of, st, 0.4)
+                hold(st, max(0.8, sec - blinks * 1.0 - 1.2))
+                prev = st
+            fade(prev, mf, 0.6)
+            hold(mf, 4)
+        else:
+            for _ in range(2):                # нові ділянки «наливаються» й пульсують
+                fade(mb, mf, 0.8)
+                hold(mf, 0.4)
+                fade(mf, mb, 0.4)
             fade(mb, mf, 0.8)
-            hold(mf, 0.4)
-            fade(mf, mb, 0.4)
-        fade(mb, mf, 0.8)
-        hold(mf, 4)
+            hold(mf, 4)
         fade(mf, c, 0.5)
     elif map_full:                            # без кадру «до змін» — просто мапа
         mf = _vert(Image.open(map_full))
