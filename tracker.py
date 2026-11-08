@@ -1157,8 +1157,7 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         card = render_story(cover, date_label, story_blocks_summary(kind, rows), DATA / "tiktok_card.jpg",
                             footer="Підписуйтеся, щоб не пропустити",
                             handle="Підсумки щопонеділка" if kind == "week" else "Підсумки щомісяця")
-        vbg = change_map_img.with_name(change_map_img.stem + "_base_v.jpg") if change_map_img else None
-        first = _tiktok_first_frame(kind, rows, cover, date_label, DATA / "tiktok_cover.jpg", vbg)
+        first = _tiktok_first_frame(kind, rows, cover, date_label, DATA / "tiktok_cover.jpg")  # «оксамитовий» фон обкладинки
         end_card = _tiktok_end_card(kind, rows, cover, date_label, DATA / "tiktok_end.jpg")
         teaser = build_fb_summary_teaser(kind, rows, None if kind == "week" else date_label)
         body = [l for l in teaser.split("\n\n")[1].split("\n")] if "\n\n" in teaser else []
