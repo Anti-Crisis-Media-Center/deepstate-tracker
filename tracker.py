@@ -720,7 +720,7 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
                   + _f(first[f"{key}_deoccupied_km2"]))
         net = round(_f(last[f"{key}_occupied_km2"]) - before, 2)
         if net >= 0.01:
-            lines.append(f"{cfg['short']}: за {word} ще {fmt_km2(net)} км² позначено окупованими.")
+            lines.append(f"{cfg['short']}: за {word} {fmt_km2(net)} км² позначено окупованими.")
         elif net <= -0.01:
             lines.append(f"{cfg['short']}: за {word} {fmt_km2(-net)} км² позначено деокупованими.")
         else:
