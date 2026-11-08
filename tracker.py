@@ -1062,11 +1062,11 @@ def youtube_text(kind: str, body: list[str], date_label: str, places: list[str],
     """Назва й опис для YouTube Shorts (основний канал АКМЦ, плейлист DeepState)."""
     period = "тиждень" if kind == "week" else f"місяць ({date_label})"
     first = (body[0] if body else "").strip().rstrip(".")
-    title = f"{first} · DeepState" if first else f"Мапа Донеччини: підсумки за {period} · DeepState"
+    title = f"{first} · DeepState" if first else f"Мапа Донеччини та Луганщини: підсумки за {period} · DeepState"
     if len(title) > 95:
         title = title[:94].rstrip() + "…"
     desc = [*[b for b in body if b.strip()], "",
-            f"Підсумки змін на мапі DeepState для Донеччини й Луганщини за {period}. "
+            f"Підсумки змін на мапі DeepState для Донеччини та Луганщини за {period}. "
             + ("Нові підсумки щопонеділка." if kind == "week" else "Нові підсумки щомісяця."),
             "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
             "#Донеччина #DeepState #Shorts"]
