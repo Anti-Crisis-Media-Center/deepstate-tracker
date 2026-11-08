@@ -43,7 +43,11 @@ def _geoms(gj):
 
 
 def render(change_files: list[Path], out: Path, title: str, subtitle: str, size: int = 1080,
-           oblast_key: str = "donetsk", show_new: bool = True) -> Path | None:
+           oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None) -> Path | None:
+    """height=None — квадрат для дописів; height=1920 — вертикальна мапа для відео (TikTok/Shorts),
+    з полями під інтерфейс платформ зверху і знизу."""
+    H = height or size
+    vertical = H != size
     changes = []
     for p in change_files:
         if p.exists():
@@ -64,16 +68,23 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     kx = math.cos(math.radians(cy))
     minx, miny, maxx, maxy = new.bounds
     half = max((maxx - minx) * kx, maxy - miny) / 2 + 0.16  # у «градусах широти»
-    view = box(cx - half / kx, cy - half, cx + half / kx, cy + half)
-    top, bottom = 230, 170                                   # місце під заголовок і підпис
-    mh = size - top - bottom
-    ox = (size - mh) // 2
+    if vertical:
+        top, bottom = 400, 480                               # TikTok/Shorts: інтерфейс зверху й знизу
+        mw = size - 80
+        mh = H - top - bottom
+    else:
+        top, bottom = 230, 170                               # місце під заголовок і підпис
+        mh = mw = size - top - bottom
+    ox = (size - mw) // 2
+    sc = mw / (2 * half)                                     # пікселів на градус широти
+    hx, hy = half, mh / (2 * sc)
+    view = box(cx - hx / kx, cy - hy, cx + hx / kx, cy + hy)
 
     def px(x, y):
-        return (ox + (x - (cx - half / kx)) / (2 * half / kx) * mh, top + (cy + half - y) / (2 * half) * mh)
+        return (ox + (x - (cx - hx / kx)) * kx * sc, top + (cy + hy - y) * sc)
 
     S = 2  # малюємо вдвічі більшим для згладжування
-    big = Image.new("RGB", (size * S, size * S), BG)
+    big = Image.new("RGB", (size * S, H * S), BG)
     d = ImageDraw.Draw(big)
 
     def poly(g, fill=None, outline=None, width=1):
@@ -105,10 +116,10 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         big.paste(Image.new("RGB", big.size, NEW), (0, 0), glow.point(lambda v: int(v * 0.45)))
         d = ImageDraw.Draw(big)
         poly(new, fill=NEW, outline=(255, 235, 150), width=1)
-    img = big.resize((size, size), Image.LANCZOS)
+    img = big.resize((size, H), Image.LANCZOS)
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, size, top - 10], fill=BG)
-    d.rectangle([0, size - bottom + 10, size, size], fill=BG)
+    d.rectangle([0, top + mh + 10, size, H], fill=BG)
 
     # населені пункти в кадрі: міста + найближчі села до змін
     st_feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
@@ -129,11 +140,11 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         if shown >= 7:
             continue
         x, y = px(g.x, g.y)
-        if not (ox + 20 < x < ox + mh - 20 and top + 20 < y < top + mh - 20):
+        if not (ox + 20 < x < ox + mw - 20 and top + 20 < y < top + mh - 20):
             continue
         f = _font("800" if is_city else "500", 34 if is_city else 28)
         w = d.textlength(nm, font=f)
-        tx, ty = (x + 12, y - 18) if x + 12 + w < ox + mh else (x - 12 - w, y - 18)
+        tx, ty = (x + 12, y - 18) if x + 12 + w < ox + mw else (x - 12 - w, y - 18)
         bb = (tx - 4, ty - 2, tx + w + 4, ty + 40)
         if any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes):
             continue
@@ -145,11 +156,12 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         d.text((tx, ty), nm, font=f, fill=WHITE)
         shown += 1
 
-    km_px = mh / (2 * half * 111.0)
+    km_px = sc / 111.0
 
-    d.text((60, 60), title, font=_font("800", 58), fill=NEW)
-    d.text((60, 140), subtitle, font=_font("500", 40), fill=WHITE)
-    lx, ly = 60, size - bottom + 40
+    ty0 = top - 200 if vertical else 60
+    d.text((60, ty0), title, font=_font("800", 66 if vertical else 58), fill=NEW)
+    d.text((60, ty0 + 85), subtitle, font=_font("500", 40), fill=WHITE)
+    lx, ly = 60, top + mh + 40
     lf = _font("500", 26)
     for col, label in ((NEW, "зміни"), (OCC, "окуповано"), (GREY, "район проникнення")):
         d.rectangle([lx, ly + 4, lx + 26, ly + 30], fill=col)
@@ -164,14 +176,14 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     w2 = d.textlength(t2, font=lf)
     total = w1 + 14 + bar + 14 + w2
     sx = size - 60 - total
-    sy2 = size - 60
+    sy2 = ly + 70
     d.text((sx, sy2), t1, font=lf, fill=MUTED)
     bx0, bx1, by = sx + w1 + 14, sx + w1 + 14 + bar, sy2 + 17
     d.line([bx0, by, bx1, by], fill=MUTED, width=4)
     d.line([bx0, by - 9, bx0, by + 9], fill=MUTED, width=3)
     d.line([bx1, by - 9, bx1, by + 9], fill=MUTED, width=3)
     d.text((bx1 + 14, sy2), t2, font=lf, fill=MUTED)
-    d.text((60, size - 60), "За даними DeepStateMap.live · АКМЦ", font=_font("500", 26), fill=MUTED)
+    d.text((60, sy2), "За даними DeepStateMap.live · АКМЦ", font=_font("500", 26), fill=MUTED)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "JPEG", quality=92)
     return out

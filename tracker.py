@@ -1059,8 +1059,46 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
         wsize -= 4
     centered(what, f500(60), 760 + size + 30, white)
     centered(where, f800(wsize), 760 + size + 120, white)
-    centered("Донеччина · Луганщина", f500(44), 1560, white)
-    centered("За даними DeepStateMap.live", f500(34), 1640, (200, 200, 200))
+    centered("Донеччина · Луганщина", f500(44), 1330, white)
+    centered("За даними DeepStateMap.live", f500(34), 1400, (200, 200, 200))
+    canvas.save(out, "JPEG", quality=90)
+    return out
+
+
+def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path) -> Path:
+    """Фінальний кадр відео: коротко цифри + великий заклик. Усе вище нижньої зони інтерфейсу TikTok."""
+    from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+    fonts = ROOT / "assets" / "fonts"
+    f800 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), n)  # noqa: E731
+    f500 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-500.ttf"), n)  # noqa: E731
+    im = Image.open(cover).convert("RGB")
+    w, h = im.size
+    mp = im.crop((int(w * .28), int(h * .28), int(w * .98), int(h * .64)))
+    mp = mp.resize((int(1920 * mp.width / mp.height), 1920)).crop((0, 0, 1080, 1920))
+    canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(6))).enhance(0.3)
+    d = ImageDraw.Draw(canvas)
+    yel, white, grey = (247, 197, 49), (250, 250, 250), (200, 200, 200)
+
+    def centered(text, font, y, fill):
+        d.text(((1080 - d.textlength(text, font=font)) / 2, y), text, font=font, fill=fill)
+
+    centered("DeepState: підсумки тижня" if kind == "week" else "DeepState: підсумки місяця", f800(56), 330, white)
+    centered(date_label, f500(44), 410, grey)
+    y = 560
+    blocks = [b for b in story_blocks_summary(kind, rows) if b["big"]]
+    if not blocks:
+        centered("Змін на мапі не зафіксовано", f800(60), y, white)
+        y += 110
+    for b in blocks:
+        name = b["label"][:1] + b["label"][1:].lower()
+        centered(f"{name}: {b['big']}", f800(68), y, white)
+        centered(b["text"], f500(40), y + 85, grey)
+        y += 170
+    y = max(y + 60, 1000)
+    centered("Підписуйтеся,", f800(92), y, yel)
+    centered("щоб не пропустити", f800(80), y + 105, yel)
+    centered("Підсумки щопонеділка" if kind == "week" else "Підсумки щомісяця", f500(48), y + 225, white)
+    centered("За даними DeepStateMap.live", f500(32), y + 300, grey)
     canvas.save(out, "JPEG", quality=90)
     return out
 
@@ -1105,6 +1143,7 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
                             footer="Підписуйтеся, щоб не пропустити",
                             handle="Підсумки щопонеділка" if kind == "week" else "Підсумки щомісяця")
         first = _tiktok_first_frame(kind, rows, cover, date_label, DATA / "tiktok_cover.jpg")
+        end_card = _tiktok_end_card(kind, rows, cover, date_label, DATA / "tiktok_end.jpg")
         teaser = build_fb_summary_teaser(kind, rows, None if kind == "week" else date_label)
         body = [l for l in teaser.split("\n\n")[1].split("\n")] if "\n\n" in teaser else []
         places = []
@@ -1125,8 +1164,10 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         video = None
         try:
             from video import make_video
-            base = change_map_img.with_name(change_map_img.stem + "_base.jpg") if change_map_img else None
-            video = make_video(first, base if base and base.exists() else None, change_map_img, card,
+            vfull = change_map_img.with_name(change_map_img.stem + "_v.jpg") if change_map_img else None
+            vbase = change_map_img.with_name(change_map_img.stem + "_base_v.jpg") if change_map_img else None
+            ok = vfull is not None and vfull.exists() and vbase.exists()
+            video = make_video(first, vbase if ok else None, vfull if ok else change_map_img, end_card,
                                DATA / "tiktok_video.mp4")
         except Exception as e:  # noqa: BLE001
             log(f"Відео для TikTok/Shorts: не вдалося — {e}")
@@ -1136,7 +1177,7 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
                                         "caption": "🎬 Для TikTok і YouTube Shorts: завантажте відео, додайте музику. Підпис — нижче."},
                    {"video": fh})
         else:  # запасний варіант — карусель картинок
-            frames = [first] + ([_vertical(change_map_img, DATA / "tiktok_map.jpg")] if change_map_img else []) + [card]
+            frames = [first] + ([_vertical(change_map_img, DATA / "tiktok_map.jpg")] if change_map_img else []) + [end_card]
             files = {f"f{i}": p.open("rb") for i, p in enumerate(frames)}
             try:
                 media = json.dumps([{"type": "photo", "media": f"attach://f{i}",
@@ -1438,8 +1479,13 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         word = {"day": "за добу", "week": "за тиждень", "month": "за місяць"}[kind]
         sub = f"{fmt_km2(abs(km))} км² позначено {'окупованими' if km > 0 else 'деокупованими'} {word}"
         files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
-        change_map.render(files, DATA / out_name.replace(".jpg", "_base.jpg"), title, sub, oblast_key=key,
-                          show_new=False)   # кадр без нових ділянок — для відео
+        if kind != "day":   # вертикальні кадри для відео TikTok/Shorts: без нових ділянок і з ними
+            for suffix, show in (("_base_v.jpg", False), ("_v.jpg", True)):
+                try:
+                    change_map.render(files, DATA / out_name.replace(".jpg", suffix), title, sub, oblast_key=key,
+                                      show_new=show, height=1920)
+                except Exception as e:  # noqa: BLE001
+                    log(f"Вертикальна мапа для відео: {e}")
         return change_map.render(files, DATA / out_name, title, sub, oblast_key=key)
     except Exception as e:  # noqa: BLE001
         log(f"Мапа змін: не вдалося — {e}")

@@ -46,9 +46,14 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         fade(mb, mf, 0.8)
         hold(mf, 4)
         fade(mf, c, 0.5)
+    elif map_full:                            # без кадру «до змін» — просто мапа
+        mf = _vert(Image.open(map_full))
+        fade(a, mf, 0.5)
+        hold(mf, 5)
+        fade(mf, c, 0.5)
     else:
         fade(a, c, 0.5)
-    hold(c, 7)
+    hold(c, 5)
     with tempfile.TemporaryDirectory() as td:
         for i, im in enumerate(seq):
             im.save(f"{td}/f{i:04d}.jpg", quality=90)
