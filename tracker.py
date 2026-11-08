@@ -909,12 +909,20 @@ def _period_label(start: str, end: str) -> str:
     return f"{a.day} {MONTHS_GEN[a.month - 1]} – {b.day} {MONTHS_GEN[b.month - 1]} {b.year}"
 
 
-def make_and_post_story(cover: Path, date_label: str, blocks: list[dict]) -> None:
+STORY_FOOTERS = {  # підвал сторіз: заклик повертатися (посилання в сторіз не клікабельні)
+    "day": ("Нові зміни на мапі DeepState", "щоранку о 8:00"),
+    "week": ("Підсумки тижня", "щопонеділка о 8:10"),
+    "month": ("Підсумки місяця", "1-го числа о 8:20"),
+}
+
+
+def make_and_post_story(cover: Path, date_label: str, blocks: list[dict], kind: str = "day") -> None:
     if not FB_STORIES or not os.getenv("FACEBOOK_PAGE_TOKEN", "").strip():
         return
     try:
         from story import render_story
-        out = render_story(cover, date_label, blocks, DATA / "story.jpg")
+        foot, handle = STORY_FOOTERS.get(kind, STORY_FOOTERS["day"])
+        out = render_story(cover, date_label, blocks, DATA / "story.jpg", footer=foot, handle=handle)
         post_facebook_story(out)
         ig_api.post_story(FB_GRAPH, *fb_page_credentials(), out, log, alert, DRY_RUN)
     except Exception as e:  # noqa: BLE001
@@ -1299,7 +1307,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         ig_api.post(FB_GRAPH, *fb_page_credentials(), ig_text, s["image"], log, alert, DRY_RUN)
         story_date = (s["label"][0].upper() + s["label"][1:]) if s["kind"] == "month" and s.get("label") \
             else _period_label(start, today)
-        make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows))
+        make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows), s["kind"])
         send_tiktok_pack(s["kind"], rows, s["image"], story_date, start)
         done[s["kind"]] = today
         if save:
