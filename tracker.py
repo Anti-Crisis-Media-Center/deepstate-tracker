@@ -936,13 +936,32 @@ STORY_FOOTERS = {  # підвал сторіз: заклик повертати�
 }
 
 
+def send_tg_story_image(img: Path) -> None:
+    """Сторіз у Telegram-каналі бот сам опублікувати не може — надсилає картинку в гілку «TikTok»."""
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
+    if not token or not chat_id or DRY_RUN:
+        return
+    try:
+        with img.open("rb") as fh:
+            tg("sendPhoto", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK,
+                                    "caption": "📱 Для сторіз у Telegram-каналі @acmc_ua (вручну)"}, {"photo": fh})
+    except Exception as e:  # noqa: BLE001
+        log(f"Картинка для сторіз Telegram: {e}")
+
+
 def make_and_post_story(cover: Path, date_label: str, blocks: list[dict], kind: str = "day") -> None:
-    if not FB_STORIES or not os.getenv("FACEBOOK_PAGE_TOKEN", "").strip():
+    fb_ok = FB_STORIES and os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
+    if not fb_ok and kind == "day":
         return
     try:
         from story import render_story
         foot, handle = STORY_FOOTERS.get(kind, STORY_FOOTERS["day"])
         out = render_story(cover, date_label, blocks, DATA / "story.jpg", footer=foot, handle=handle)
+        if kind in ("week", "month"):
+            send_tg_story_image(out)
+        if not fb_ok:
+            return
         post_facebook_story(out)
         ig_api.post_story(FB_GRAPH, *fb_page_credentials(), out, log, alert, DRY_RUN)
     except Exception as e:  # noqa: BLE001
