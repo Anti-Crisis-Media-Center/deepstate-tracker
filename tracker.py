@@ -1084,19 +1084,33 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
                               "Збережіть, щоб не загубити.",
                               "За даними DeepStateMap.live", "",
                               _tiktok_tags(places, any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows))])
-        if DRY_RUN:
+        if DRY_RUN and not os.getenv("TIKTOK_PREVIEW"):
             log("DRY_RUN — матеріали для TikTok не надсилаються. Підпис:\n" + caption)
             return
-        frames = [first] + ([_vertical(change_map_img, DATA / "tiktok_map.jpg")] if change_map_img else []) + [card]
-        files = {f"f{i}": p.open("rb") for i, p in enumerate(frames)}
+        video = None
         try:
-            media = json.dumps([{"type": "photo", "media": f"attach://f{i}",
-                                 **({"caption": "🎵 Для TikTok: завантажте як фото-допис (+ → Фото) у цьому порядку, додайте музику"} if i == 0 else {})}
-                                for i in range(len(frames))])
-            tg("sendMediaGroup", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "media": media}, files)
-        finally:
-            for fh in files.values():
-                fh.close()
+            from video import make_video
+            base = change_map_img.with_name(change_map_img.stem + "_base.jpg") if change_map_img else None
+            video = make_video(first, base if base and base.exists() else None, change_map_img, card,
+                               DATA / "tiktok_video.mp4")
+        except Exception as e:  # noqa: BLE001
+            log(f"Відео для TikTok/Shorts: не вдалося — {e}")
+        if video:
+            with video.open("rb") as fh:
+                tg("sendVideo", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "supports_streaming": "true",
+                                        "caption": "🎬 Для TikTok і YouTube Shorts: завантажте відео, додайте музику. Підпис — нижче."},
+                   {"video": fh})
+        else:  # запасний варіант — карусель картинок
+            frames = [first] + ([_vertical(change_map_img, DATA / "tiktok_map.jpg")] if change_map_img else []) + [card]
+            files = {f"f{i}": p.open("rb") for i, p in enumerate(frames)}
+            try:
+                media = json.dumps([{"type": "photo", "media": f"attach://f{i}",
+                                     **({"caption": "🎵 Для TikTok: фото-допис у цьому порядку, додайте музику"} if i == 0 else {})}
+                                    for i in range(len(frames))])
+                tg("sendMediaGroup", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "media": media}, files)
+            finally:
+                for fh in files.values():
+                    fh.close()
         tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "text": caption})
         log("Матеріали для TikTok надіслано в службовий чат.")
     except Exception as e:  # noqa: BLE001
@@ -1387,6 +1401,8 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         word = {"day": "за добу", "week": "за тиждень", "month": "за місяць"}[kind]
         sub = f"{fmt_km2(abs(km))} км² позначено {'окупованими' if km > 0 else 'деокупованими'} {word}"
         files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
+        change_map.render(files, DATA / out_name.replace(".jpg", "_base.jpg"), title, sub, oblast_key=key,
+                          show_new=False)   # кадр без нових ділянок — для відео
         return change_map.render(files, DATA / out_name, title, sub, oblast_key=key)
     except Exception as e:  # noqa: BLE001
         log(f"Мапа змін: не вдалося — {e}")

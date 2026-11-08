@@ -43,7 +43,7 @@ def _geoms(gj):
 
 
 def render(change_files: list[Path], out: Path, title: str, subtitle: str, size: int = 1080,
-           oblast_key: str = "donetsk") -> Path | None:
+           oblast_key: str = "donetsk", show_new: bool = True) -> Path | None:
     changes = []
     for p in change_files:
         if p.exists():
@@ -90,6 +90,10 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     poly(occ, fill=OCC)
     if unk is not None and not unk.is_empty:
         poly(unk, fill=GREY)
+    if not show_new:
+        new_draw = False
+    else:
+        new_draw = True
     # світіння навколо нових ділянок
     glow = Image.new("L", big.size, 0)
     gd = ImageDraw.Draw(glow)
@@ -97,9 +101,10 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         pts = [(a * S, b * S) for a, b in (px(x, y) for x, y in p.exterior.coords)]
         gd.polygon(pts, fill=255)
     glow = glow.filter(ImageFilter.MaxFilter(31)).filter(ImageFilter.GaussianBlur(14))
-    big.paste(Image.new("RGB", big.size, NEW), (0, 0), glow.point(lambda v: int(v * 0.45)))
-    d = ImageDraw.Draw(big)
-    poly(new, fill=NEW, outline=(255, 235, 150), width=1)
+    if new_draw:
+        big.paste(Image.new("RGB", big.size, NEW), (0, 0), glow.point(lambda v: int(v * 0.45)))
+        d = ImageDraw.Draw(big)
+        poly(new, fill=NEW, outline=(255, 235, 150), width=1)
     img = big.resize((size, size), Image.LANCZOS)
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, size, top - 10], fill=BG)
