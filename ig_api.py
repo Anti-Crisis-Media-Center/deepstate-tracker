@@ -60,6 +60,19 @@ def _publish(graph: str, ig_id: str, token: str, data: dict) -> str:
                                 data={"creation_id": cid, "access_token": token}, timeout=60).json())["id"]
 
 
+def ig_feed_image(image: Path) -> Path:
+    """Квадратну обкладинку кладемо на полотно 4:5 (1080×1350) з полями: сітка профілю Instagram
+    показує прев'ю 3:4 і обрізає краї, тож увесь текст і логотип мають бути ближче до центру."""
+    from PIL import Image
+    W, H, inner = 1080, 1350, 900
+    src = Image.open(image).convert("RGB")
+    bg = Image.new("RGB", (W, H), (12, 18, 38))  # темно-синій, як краї обкладинки
+    bg.paste(src.resize((inner, inner), Image.LANCZOS), ((W - inner) // 2, (H - inner) // 2))
+    out = image.parent / "data" / f"ig_{image.stem}.jpg" if (image.parent / "data").exists() else image.with_name(f"ig_{image.stem}.jpg")
+    bg.save(out, "JPEG", quality=92)
+    return out
+
+
 def adapt_caption(fb_text: str) -> str:
     """Посилання в Instagram не клікабельні — ведемо в шапку профілю."""
     text = fb_text.replace("Посилання в першому коментарі 👇", "Посилання на Telegram — у шапці профілю.")
@@ -78,7 +91,7 @@ def post(graph: str, page_id: str, page_token: str, fb_text: str, image: Path, l
         if dry_run:
             log("DRY_RUN — в Instagram не публікується. Підпис:\n" + adapt_caption(fb_text))
             return True
-        url = _public_url(graph, page_id, page_token, image)
+        url = _public_url(graph, page_id, page_token, ig_feed_image(image))
         media_id = _publish(graph, ig_id, page_token, {"image_url": url, "caption": adapt_caption(fb_text)})
         log(f"Допис в Instagram опубліковано: {media_id}")
         return True
