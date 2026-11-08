@@ -34,7 +34,7 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         n = int(sec * FPS)
         seq.extend(Image.blend(x, y, i / n) for i in range(1, n + 1))
 
-    hold(a, 2.5)
+    hold(a, 3.5)
     if map_base and map_full:
         mb, mf = _vert(Image.open(map_base)), _vert(Image.open(map_full))
         fade(a, mb, 0.5)
@@ -44,11 +44,11 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
             hold(mf, 0.4)
             fade(mf, mb, 0.4)
         fade(mb, mf, 0.8)
-        hold(mf, 2.5)
+        hold(mf, 4)
         fade(mf, c, 0.5)
     else:
         fade(a, c, 0.5)
-    hold(c, 4)
+    hold(c, 7)
     with tempfile.TemporaryDirectory() as td:
         for i, im in enumerate(seq):
             im.save(f"{td}/f{i:04d}.jpg", quality=90)
