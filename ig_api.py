@@ -68,7 +68,7 @@ def ig_feed_image(image: Path) -> Path:
     src = Image.open(image).convert("RGB")
     bg = Image.new("RGB", (W, H), (12, 18, 38))  # темно-синій, як краї обкладинки
     bg.paste(src.resize((inner, inner), Image.LANCZOS), ((W - inner) // 2, (H - inner) // 2))
-    out = image.parent / "data" / f"ig_{image.stem}.jpg" if (image.parent / "data").exists() else image.with_name(f"ig_{image.stem}.jpg")
+    out = Path(__file__).resolve().parent / "data" / f"ig_{image.stem}.jpg"
     bg.save(out, "JPEG", quality=92)
     return out
 
@@ -80,9 +80,11 @@ def adapt_caption(fb_text: str) -> str:
 
 
 def post(graph: str, page_id: str, page_token: str, fb_text: str, image: Path, log, alert,
-         dry_run: bool = False) -> bool:
+         dry_run: bool = False, extra_images: list | None = None) -> bool:
+    """Одна картинка або карусель (image + extra_images), усе у форматі 4:5."""
     if not ENABLED or not POSTS or not page_id or not page_token or not image.exists():
         return False
+    extra = [p for p in (extra_images or []) if p and Path(p).exists()]
     try:
         ig_id = ig_user_id(graph, page_id, page_token)
         if not ig_id:
@@ -91,8 +93,18 @@ def post(graph: str, page_id: str, page_token: str, fb_text: str, image: Path, l
         if dry_run:
             log("DRY_RUN — в Instagram не публікується. Підпис:\n" + adapt_caption(fb_text))
             return True
-        url = _public_url(graph, page_id, page_token, ig_feed_image(image))
-        media_id = _publish(graph, ig_id, page_token, {"image_url": url, "caption": adapt_caption(fb_text)})
+        if not extra:
+            url = _public_url(graph, page_id, page_token, ig_feed_image(image))
+            media_id = _publish(graph, ig_id, page_token, {"image_url": url, "caption": adapt_caption(fb_text)})
+        else:
+            children = []
+            for img in [image] + extra:
+                url = _public_url(graph, page_id, page_token, ig_feed_image(Path(img)))
+                cid = _check(requests.post(f"{graph}/{ig_id}/media", data={
+                    "image_url": url, "is_carousel_item": "true", "access_token": page_token}, timeout=60).json())["id"]
+                children.append(cid)
+            media_id = _publish(graph, ig_id, page_token, {"media_type": "CAROUSEL", "children": ",".join(children),
+                                                           "caption": adapt_caption(fb_text)})
         log(f"Допис в Instagram опубліковано: {media_id}")
         return True
     except Exception as e:  # noqa: BLE001

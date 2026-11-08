@@ -112,7 +112,8 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         g = shape(f["geometry"]).centroid
         if view.contains(g):
             nm = f["properties"]["ADM4_UA"]
-            pts.append((nm in CITIES, -g.distance(new), nm, g))
+            from tracker import is_city
+            pts.append((is_city(nm, f["properties"].get("ADM2_UA")), -g.distance(new), nm, g))
     near = sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]   # 2 найближчі села
     cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
     pts = near + cities

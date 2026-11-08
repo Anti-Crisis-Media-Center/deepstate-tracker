@@ -92,6 +92,25 @@ CITIES = {
     "Світлодарськ", "Селидове", "Сіверськ", "Слов'янськ", "Соледар", "Торецьк", "Українськ", "Часів Яр",
     "Сєвєродонецьк", "Лисичанськ", "Рубіжне", "Кремінна", "Попасна", "Привілля", "Гірське", "Золоте",
 }     # загалом у тексті на тип зміни в області
+# Назви, які мають і міста, і села: містом вважаємо лише в цьому районі
+CITY_DISTRICT = {"Лиман": "Краматорський", "Миколаївка": "Краматорський", "Залізне": "Бахмутський",
+                 "Гірник": "Покровський", "Українськ": "Покровський", "Білицьке": "Покровський",
+                 "Родинське": "Покровський", "Білозерське": "Краматорський", "Золоте": "Сєвєродонецький",
+                 "Гірське": "Сєвєродонецький", "Привілля": "Сєвєродонецький", "Світлодарськ": "Бахмутський",
+                 "Рубіжне": "Сєвєродонецький", "Кремінна": "Сєвєродонецький", "Попасна": "Сєвєродонецький",
+                 "Сєвєродонецьк": "Сєвєродонецький", "Лисичанськ": "Сєвєродонецький", "Добропілля": "Покровський",
+                 "Костянтинівка": "Краматорський", "Дружківка": "Краматорський"}
+
+
+def is_city(name: str, district: str | None = None) -> bool:
+    """name може бути «Лиман (Краматорський р-н)» — тоді район беремо з дужок."""
+    m = re.match(r"\s*(.*?)\s*\((.*?) р-н\)", name)
+    if m:
+        name, district = m.group(1), m.group(2)
+    if name not in CITIES:
+        return False
+    need = CITY_DISTRICT.get(name)
+    return not need or not district or district == need
 
 CITY_GENITIVE = {'Авдіївка': 'Авдіївки', 'Бахмут': 'Бахмута', 'Білицьке': 'Білицького', 'Білозерське': 'Білозерського', 'Волноваха': 'Волновахи', 'Вугледар': 'Вугледара', 'Гірник': 'Гірника', 'Добропілля': 'Добропілля', 'Докучаєвськ': 'Докучаєвська', 'Дружківка': 'Дружківки', 'Залізне': 'Залізного', 'Костянтинівка': 'Костянтинівки', 'Краматорськ': 'Краматорська', 'Красногорівка': 'Красногорівки', 'Курахове': 'Курахового', 'Лиман': 'Лимана', "Мар'їнка": "Мар'їнки", 'Миколаївка': 'Миколаївки', 'Мирноград': 'Мирнограда', 'Новогродівка': 'Новогродівки', 'Покровськ': 'Покровська', 'Родинське': 'Родинського', 'Святогірськ': 'Святогірська', 'Світлодарськ': 'Світлодарська', 'Селидове': 'Селидового', 'Сіверськ': 'Сіверська', "Слов'янськ": "Слов'янська", 'Соледар': 'Соледара', 'Торецьк': 'Торецька', 'Українськ': 'Українська', 'Часів Яр': 'Часового Яру', 'Сєвєродонецьк': 'Сєвєродонецька', 'Лисичанськ': 'Лисичанська', 'Рубіжне': 'Рубіжного', 'Кремінна': 'Кремінної', 'Попасна': 'Попасної', 'Привілля': 'Привілля', 'Гірське': 'Гірського', 'Золоте': 'Золотого'}
 
@@ -497,7 +516,7 @@ def nearest_places(polys: list, places: list, oblast_name: str) -> list[str]:
                 candidates.append((d, label))
         ranked = sorted(candidates)
         # місто поблизу важливіше за найближче село: читач його знає
-        city = [c for c in ranked if re.sub(r"\s*\(.*?\)", "", c[1]) in CITIES][:1]
+        city = [c for c in ranked if is_city(c[1])][:1]
         picked = city + [c for c in ranked if c not in city]
         for d, name in picked[:PLACES_PER_CHANGE]:
             found[name] = min(d, found.get(name, d))
@@ -558,7 +577,7 @@ def cities_near(polys: list, places: list, oblast_name: str) -> list[str]:
     for poly in polys:
         poly_utm = to_utm(poly)
         for pl in places:
-            if pl["oblast"] != oblast_name or pl["name"] not in CITIES:
+            if pl["oblast"] != oblast_name or not is_city(pl["name"], pl.get("district")):
                 continue
             d = poly_utm.distance(Point(pl["x"], pl["y"])) / 1000
             if d <= PLACES_RADIUS_KM:
@@ -725,7 +744,8 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
             lines.append(f"{cfg['short']}: за {word} {fmt_km2(-net)} км² позначено деокупованими.")
         else:
             lines.append(f"{cfg['short']}: за {word} без змін.")
-    lines += ["", "Повний підсумок із населеними пунктами — у Telegram-каналі Антикризового медіа-центру. "
+    lines += ["", "Збережіть, щоб стежити за змінами, або поділіться з тими, хто слідкує за Донеччиною.",
+              "", "Повний підсумок із населеними пунктами — у Telegram-каналі Антикризового медіа-центру. "
               "Посилання в першому коментарі 👇", "", "За даними DeepStateMap.live"]
     return "\n".join(lines)
 
@@ -942,7 +962,7 @@ def _tiktok_tags(places: list[str], luhansk_changed: bool = False) -> str:
     cities = []
     for p in places:
         name = re.sub(r"\s*\(.*?\)", "", p).strip()
-        if name in CITIES and name not in cities:
+        if is_city(p) and name not in cities:
             cities.append(name)
     base = ["#Донеччина"] + (["#Луганщина"] if luhansk_changed else []) + ["#DeepState"]
     tags = base + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:5 - len(base)]]
@@ -972,11 +992,14 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
               + _f(first["donetsk_deoccupied_km2"]))
     net = round(_f(last["donetsk_occupied_km2"]) - before, 2)
     places: dict[str, int] = {}
+    city_names: set[str] = set()
     for r in rows:
         for p in (r.get("donetsk_newly_places") or "").split(";"):
             name = re.sub(r"\s*\(.*?\)", "", p).strip()
             if name:
-                places[name] = places.get(name, 0) + (3 if name in CITIES else 1)
+                places[name] = places.get(name, 0) + (3 if is_city(p) else 1)
+                if is_city(p):
+                    city_names.add(name)
     if abs(net) < 0.01:
         return "Без змін", "позначень на мапі", "на Донеччині за " + ("тиждень" if kind == "week" else "місяць")
     big = f"{fmt_km2(abs(net))} км²"
@@ -984,7 +1007,7 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     if not places:
         return big, what, "на Донеччині"
     top = max(places, key=places.get)
-    return big, what, (f"біля {CITY_GENITIVE.get(top, top)}" if top in CITIES else f"поблизу: {top}")
+    return big, what, (f"біля {CITY_GENITIVE.get(top, top)}" if top in city_names else f"поблизу: {top}")
 
 
 def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path) -> Path:
@@ -1036,7 +1059,8 @@ def _vertical_cover(cover: Path, out: Path) -> Path:
     return out
 
 
-def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, start: str) -> None:
+def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, start: str,
+                     change_map_img: Path | None = None) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
     if not token or not chat_id:
@@ -1057,16 +1081,22 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         word = "щопонеділка" if kind == "week" else "щомісяця"
         caption = "\n".join([title, *body, "",
                               f"Підписуйтеся, щоб {word} бачити, як змінюється мапа Донеччини.",
+                              "Збережіть, щоб не загубити.",
                               "За даними DeepStateMap.live", "",
                               _tiktok_tags(places, any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows))])
         if DRY_RUN:
             log("DRY_RUN — матеріали для TikTok не надсилаються. Підпис:\n" + caption)
             return
-        with first.open("rb") as a, card.open("rb") as b:
-            media = json.dumps([{"type": "photo", "media": "attach://a",
-                                 "caption": "🎵 Для TikTok: завантажте як фото-допис (+ → Фото), додайте музику"},
-                                {"type": "photo", "media": "attach://b"}])
-            tg("sendMediaGroup", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "media": media}, {"a": a, "b": b})
+        frames = [first] + ([_vertical(change_map_img, DATA / "tiktok_map.jpg")] if change_map_img else []) + [card]
+        files = {f"f{i}": p.open("rb") for i, p in enumerate(frames)}
+        try:
+            media = json.dumps([{"type": "photo", "media": f"attach://f{i}",
+                                 **({"caption": "🎵 Для TikTok: завантажте як фото-допис (+ → Фото) у цьому порядку, додайте музику"} if i == 0 else {})}
+                                for i in range(len(frames))])
+            tg("sendMediaGroup", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "media": media}, files)
+        finally:
+            for fh in files.values():
+                fh.close()
         tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_TIKTOK, "text": caption})
         log("Матеріали для TikTok надіслано в службовий чат.")
     except Exception as e:  # noqa: BLE001
@@ -1081,7 +1111,7 @@ def tiktok_daily_flag(results: dict, grey: dict) -> None:
     for k in OBLASTS:
         for p in results[k]["newly_places"]:
             name = re.sub(r"\s*\(.*?\)", "", p).strip()
-            if name in CITIES:
+            if is_city(p):
                 near.append(name)
         near += (grey.get(k) or {}).get("cities") or []
     if not (big or near) or DRY_RUN or not token or not chat_id:
@@ -1299,19 +1329,86 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         text = build_summary(s["kind"], rows, start, today, s.get("label"))
         publish_at = now.replace(hour=PUBLISH_HOUR, minute=0, second=0, microsecond=0)
         wait_until(publish_at + timedelta(minutes=SUMMARY_DELAY_MINUTES.get(s["kind"], 0)))
-        publish(text, s["image"])
+        rows_places = {k: [x for r in rows for x in (r.get(f"{k}_newly_places") or "").split("; ") if x] for k in OBLASTS}
+        nets = {}
+        for k in OBLASTS:
+            first, last = rows[0], rows[-1]
+            nets[k] = round(_f(last[f"{k}_occupied_km2"]) - (_f(first[f"{k}_occupied_km2"])
+                            - _f(first[f"{k}_newly_occupied_km2"]) + _f(first[f"{k}_deoccupied_km2"])), 2)
+        mp = make_change_map(s["kind"], [r["date"] for r in rows], nets, rows_places, f"map_{s['kind']}.jpg")
+        publish(text, mp or s["image"])
+        done[s["kind"]] = today          # підсумок у Telegram вийшов — повтору не буде
+        if save:
+            save()
+
+        def step(name, fn):
+            try:
+                fn()
+            except Exception as e:  # noqa: BLE001
+                log(f"{name}: помилка — {e}")
+                alert(f"{name} (підсумок): {e}")
+
         fb_text = build_fb_summary_teaser(s["kind"], rows, s.get("label"))
-        send_fb_teaser(fb_text, s["image"])
-        threads_api.post(fb_text, s["image"], log, alert, DRY_RUN)
+        step("Facebook", lambda: send_fb_teaser(fb_text, mp or s["image"]))
+        step("Threads", lambda: threads_api.post(fb_text, s["image"], log, alert, DRY_RUN,
+                                                 image_url=threads_url_for(mp) if mp else None))
         ig_text = fb_text + "\n\n" + _tiktok_tags(_rows_places(rows), _rows_luhansk_changed(rows))
-        ig_api.post(FB_GRAPH, *fb_page_credentials(), ig_text, s["image"], log, alert, DRY_RUN)
+        step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(), ig_text, s["image"], log, alert,
+                                              DRY_RUN, extra_images=[mp] if mp else None))
         story_date = (s["label"][0].upper() + s["label"][1:]) if s["kind"] == "month" and s.get("label") \
             else _period_label(start, today)
-        make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows), s["kind"])
-        send_tiktok_pack(s["kind"], rows, s["image"], story_date, start)
+        step("Сторіз", lambda: make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows), s["kind"]))
+        step("TikTok", lambda: send_tiktok_pack(s["kind"], rows, s["image"], story_date, start, mp))
         done[s["kind"]] = today
         if save:
             save()
+
+
+# ============================ МІНІ-МАПА ЗМІН ============================
+
+
+def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places: dict, out_name: str) -> Path | None:
+    """Мапа нових ділянок за добу/період. oblast_km2: {key: км² (додатне — окупованими)}."""
+    try:
+        import change_map
+        key = max(OBLASTS, key=lambda k: abs(oblast_km2.get(k) or 0))
+        km = oblast_km2.get(key) or 0
+        if abs(km) < 0.01:
+            return None
+        pl = oblast_places.get(key) or []
+        cities = [re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl if is_city(p)]
+        names = list(dict.fromkeys(re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl))
+        if cities:
+            title = "Біля " + CITY_GENITIVE.get(cities[0], cities[0])
+        elif names:
+            title = "Поблизу: " + ", ".join(names[:2])
+        else:
+            title = OBLASTS[key]["short"]
+        word = {"day": "за добу", "week": "за тиждень", "month": "за місяць"}[kind]
+        sub = f"{fmt_km2(abs(km))} км² позначено {'окупованими' if km > 0 else 'деокупованими'} {word}"
+        files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
+        return change_map.render(files, DATA / out_name, title, sub, oblast_key=key)
+    except Exception as e:  # noqa: BLE001
+        log(f"Мапа змін: не вдалося — {e}")
+        return None
+
+
+def threads_url_for(img: Path) -> str | None:
+    """Threads бере картинку за публічною адресою: згенеровану мапу спершу завантажуємо у Facebook."""
+    try:
+        pid, ptok = fb_page_credentials()
+        return ig_api._public_url(FB_GRAPH, pid, ptok, img) if pid and ptok else None
+    except Exception as e:  # noqa: BLE001
+        log(f"Threads: не вдалося підготувати мапу — {e}")
+        return None
+
+
+def _vertical(img: Path, out: Path) -> Path:
+    from PIL import Image
+    canvas = Image.new("RGB", (1080, 1920), (13, 20, 40))
+    canvas.paste(Image.open(img).convert("RGB").resize((1080, 1080)), (0, 420))
+    canvas.save(out, "JPEG", quality=90)
+    return out
 
 
 # ============================ MAIN ============================
@@ -1458,7 +1555,9 @@ def main() -> int:
         "messages": " | ".join(f"{m['time']:%d.%m %H:%M} {m['text']}" for m in messages),
     })
 
-    publish(text, COVER_IMAGE, silent=True)  # щоденне — без звуку; підсумки — зі звуком
+    day_map = make_change_map("day", [today], {k: results[k]["newly_km2"] - results[k]["deocc_km2"] for k in OBLASTS},
+                              {k: results[k]["newly_places"] + results[k]["deocc_places"] for k in OBLASTS}, "map_day.jpg")
+    publish(text, day_map or COVER_IMAGE, silent=True)  # щоденне — без звуку; підсумки — зі звуком
     # Позначаємо «опубліковано» одразу після Telegram: якщо далі щось впаде,
     # запасний запуск не повторить пост ще раз.
     new_state["published"] = True
@@ -1480,13 +1579,15 @@ def main() -> int:
     if quiet:  # день без змін: у стрічки соцмереж не публікуємо, лише сторіз
         log("Змін немає — дописи у Facebook, Instagram і Threads пропускаємо, лише сторіз.")
     else:
-        step("Facebook", lambda: send_fb_teaser(fb_text, COVER_IMAGE))
-        step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN))
+        step("Facebook", lambda: send_fb_teaser(fb_text, day_map or COVER_IMAGE))
+        step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN,
+                                                 image_url=threads_url_for(day_map) if day_map else None))
     step("TikTok-позначка", lambda: tiktok_daily_flag(results, grey))
     if not quiet:
         step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(),
                                               fb_text + "\n\n" + _tiktok_tags(day_places, lug),
-                                              COVER_IMAGE, log, alert, DRY_RUN))
+                                              COVER_IMAGE, log, alert, DRY_RUN,
+                                              extra_images=[day_map] if day_map else None))
     step("Сторіз", lambda: make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results)))
     if now.date().weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
         step("Маркер Threads", lambda: threads_api.refresh_token(log, alert))

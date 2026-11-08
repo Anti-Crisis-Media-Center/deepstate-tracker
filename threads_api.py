@@ -85,7 +85,7 @@ def adapt_text(fb_text: str) -> str:
     return text
 
 
-def post(fb_text: str, image: Path, log, alert, dry_run: bool = False) -> bool:
+def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url: str | None = None) -> bool:
     """Допис із картинкою + відповідь із посиланням на Telegram. Помилка не зупиняє бота."""
     if not enabled():
         return False
@@ -98,7 +98,7 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False) -> bool:
         return True
     try:
         uid = _user_id()
-        url = image_url(image) if image.exists() else None
+        url = image_url or (globals()["image_url"](image) if image.exists() else None)
         data = {"media_type": "IMAGE", "image_url": url, "text": text} if url else {"media_type": "TEXT", "text": text}
         post_id = _publish(uid, data)
         log(f"Допис у Threads опубліковано: {post_id}")
