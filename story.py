@@ -19,6 +19,9 @@ YELLOW = (255, 204, 51)     # фірмовий жовтий АКМЦ #FFCC33
 WHITE = (255, 255, 255)
 GREY = (190, 198, 216)
 MARGIN = 80
+# Безпечні зони: зверху Instagram/Facebook показують ім'я профілю, знизу — поле відповіді
+SAFE_TOP = 190
+SAFE_BOTTOM = 170
 
 
 def _font(weight: str, size: int) -> ImageFont.FreeTypeFont:
@@ -64,11 +67,13 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
         fade = 220
         for i in range(fade):
             md.line([(0, W - fade + i), (W, W - fade + i)], fill=int(255 * (1 - i / fade)))
-        img.paste(cv, (0, 0), mask)
+        for i in range(90):  # м'який перехід і зверху
+            md.line([(0, i), (W, i)], fill=int(255 * i / 90))
+        img.paste(cv, (0, SAFE_TOP), mask)
 
     d = ImageDraw.Draw(img)
     max_w = W - 2 * MARGIN
-    footer_top = H - 200 - 60          # нижня межа для змісту (над лінією підвалу)
+    footer_top = H - 200 - SAFE_BOTTOM - 60          # нижня межа для змісту (над лінією підвалу)
 
     def layout(k: float, draw: bool, y0: int, notes: bool = True) -> int:
         """Малює (або лише міряє) зміст із масштабом шрифтів k; повертає кінцеву y."""
@@ -101,7 +106,7 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
 
     # якщо змісту багато: зменшуємо шрифт (до 80%), прибираємо «поблизу», піднімаємо зміст на низ обкладинки
     choice = None
-    for y0_try, notes_try in ((W - 40, True), (W - 40, False), (W - 230, True), (W - 230, False)):
+    for y0_try, notes_try in ((W - 40 + SAFE_TOP, True), (W - 40 + SAFE_TOP, False), (W - 230 + SAFE_TOP, True), (W - 230 + SAFE_TOP, False), (W - 380 + SAFE_TOP, True), (W - 380 + SAFE_TOP, False)):
         k_try = 1.0
         while k_try > 0.8 and layout(k_try, False, y0_try, notes_try) > footer_top:
             k_try -= 0.05
@@ -110,19 +115,19 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
             break
     if choice is None:
         k_try = 0.8
-        while k_try > 0.5 and layout(k_try, False, W - 230, False) > footer_top:
+        while k_try > 0.5 and layout(k_try, False, W - 380 + SAFE_TOP, False) > footer_top:
             k_try -= 0.05
-        choice = (W - 230, False, k_try)
+        choice = (W - 380 + SAFE_TOP, False, k_try)
     y0, notes, k = choice
-    if y0 < W - 40:
-        img.paste(bg.crop((0, y0 - 40, W, W)), (0, y0 - 40))
+    if y0 < W - 40 + SAFE_TOP:
+        img.paste(bg.crop((0, y0 - 40, W, W + SAFE_TOP)), (0, y0 - 40))
         d = ImageDraw.Draw(img)
     layout(k, True, y0, notes)
 
     # підвал: заклик
     f_foot = _font("500", 40)
     f_handle = _font("800", 56)
-    fy = H - 200
+    fy = H - 200 - SAFE_BOTTOM
     d.line([(MARGIN, fy - 30), (W - MARGIN, fy - 30)], fill=(60, 74, 110), width=3)
     d.text((MARGIN, fy), footer, font=f_foot, fill=WHITE)
     d.text((MARGIN, fy + 58), handle, font=f_handle, fill=YELLOW)
