@@ -720,9 +720,9 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
                   + _f(first[f"{key}_deoccupied_km2"]))
         net = round(_f(last[f"{key}_occupied_km2"]) - before, 2)
         if net >= 0.01:
-            lines.append(f"{cfg['short']}: за {word} площа, позначена окупованою, зросла на {fmt_km2(net)} км².")
+            lines.append(f"{cfg['short']}: за {word} ще {fmt_km2(net)} км² позначено окупованими.")
         elif net <= -0.01:
-            lines.append(f"{cfg['short']}: за {word} площа, позначена окупованою, зменшилася на {fmt_km2(-net)} км².")
+            lines.append(f"{cfg['short']}: за {word} {fmt_km2(-net)} км² позначено деокупованими.")
         else:
             lines.append(f"{cfg['short']}: за {word} без змін.")
     lines += ["", "Повний підсумок із населеними пунктами — у Telegram-каналі Антикризового медіа-центру. "
@@ -870,11 +870,11 @@ def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
                   + _f(first[f"{k}_deoccupied_km2"]))
         net = round(_f(last[f"{k}_occupied_km2"]) - before, 2)
         if abs(net) >= 0.01:
-            blocks.append({"label": STORY_LABELS[k], "big": f"{'+' if net > 0 else '−'}{fmt_km2(abs(net))} км²",
-                           "text": f"за {word} площа, позначена окупованою, "
-                                   f"{'зросла' if net > 0 else 'зменшилася'}"})
+            blocks.append({"label": STORY_LABELS[k], "big": f"{fmt_km2(abs(net))} км²",
+                           "text": (f"позначено окупованими за {word}" if net > 0
+                                    else f"позначено деокупованими за {word}")})
         else:
-            blocks.append({"label": STORY_LABELS[k], "big": "", "text": f"за {word} помітних змін не зафіксовано"})
+            blocks.append({"label": STORY_LABELS[k], "big": "", "text": f"за {word} змін не зафіксовано"})
     return blocks
 
 
