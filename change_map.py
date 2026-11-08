@@ -145,11 +145,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         d.text((tx, ty), nm, font=f, fill=WHITE)
         shown += 1
 
-    # масштаб 5 км
     km_px = mh / (2 * half * 111.0)
-    sx, sy = ox + 30, top + mh - 40
-    d.line([sx, sy, sx + 5 * km_px, sy], fill=WHITE, width=4)
-    d.text((sx, sy - 40), "5 км", font=_font("500", 28), fill=WHITE)
 
     d.text((60, 60), title, font=_font("800", 58), fill=NEW)
     d.text((60, 140), subtitle, font=_font("500", 40), fill=WHITE)
@@ -159,6 +155,22 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         d.rectangle([lx, ly + 4, lx + 26, ly + 30], fill=col)
         d.text((lx + 36, ly), label, font=lf, fill=MUTED)
         lx += 36 + d.textlength(label, font=lf) + 36
+    # масштаб — у рядку легенди, довжина відрізка підбирається, щоб його було видно
+    km = next((k for k in (5, 10, 20, 50, 100) if k * km_px >= 70), 100)
+    bar = k_px = km * km_px
+    t1 = "масштаб"
+    w1 = d.textlength(t1, font=lf)
+    t2 = f"{km} км"
+    w2 = d.textlength(t2, font=lf)
+    total = w1 + 14 + bar + 14 + w2
+    sx = size - 60 - total
+    sy2 = size - 60
+    d.text((sx, sy2), t1, font=lf, fill=MUTED)
+    bx0, bx1, by = sx + w1 + 14, sx + w1 + 14 + bar, sy2 + 17
+    d.line([bx0, by, bx1, by], fill=MUTED, width=4)
+    d.line([bx0, by - 9, bx0, by + 9], fill=MUTED, width=3)
+    d.line([bx1, by - 9, bx1, by + 9], fill=MUTED, width=3)
+    d.text((bx1 + 14, sy2), t2, font=lf, fill=MUTED)
     d.text((60, size - 60), "За даними DeepStateMap.live · АКМЦ", font=_font("500", 26), fill=MUTED)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "JPEG", quality=92)
