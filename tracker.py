@@ -911,8 +911,8 @@ def _period_label(start: str, end: str) -> str:
 
 STORY_FOOTERS = {  # підвал сторіз: заклик повертатися (посилання в сторіз не клікабельні)
     "day": ("Нові зміни на мапі DeepState", "щоранку о 8:00"),
-    "week": ("Підсумки тижня", "щопонеділка о 8:10"),
-    "month": ("Підсумки місяця", "1-го числа о 8:20"),
+    "week": ("Підсумки тижня", "щопонеділка"),
+    "month": ("Підсумки місяця", "на початку кожного місяця"),
 }
 
 
@@ -1475,12 +1475,18 @@ def main() -> int:
     day_places = [p for k in OBLASTS for p in results[k]["newly_places"] + results[k]["deocc_places"]]
     day_places += [c for k in OBLASTS for c in ((grey or {}).get(k) or {}).get("cities") or []]
     lug = bool(results["luhansk"]["newly_km2"] or results["luhansk"]["deocc_km2"])
-    step("Facebook", lambda: send_fb_teaser(fb_text, COVER_IMAGE))
-    step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN))
+    quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] for k in OBLASTS)
+             and not messages and not any((grey.get(k) or {}).get("cities") for k in OBLASTS))
+    if quiet:  # день без змін: у стрічки соцмереж не публікуємо, лише сторіз
+        log("Змін немає — дописи у Facebook, Instagram і Threads пропускаємо, лише сторіз.")
+    else:
+        step("Facebook", lambda: send_fb_teaser(fb_text, COVER_IMAGE))
+        step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN))
     step("TikTok-позначка", lambda: tiktok_daily_flag(results, grey))
-    step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(),
-                                          fb_text + "\n\n" + _tiktok_tags(day_places, lug),
-                                          COVER_IMAGE, log, alert, DRY_RUN))
+    if not quiet:
+        step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(),
+                                              fb_text + "\n\n" + _tiktok_tags(day_places, lug),
+                                              COVER_IMAGE, log, alert, DRY_RUN))
     step("Сторіз", lambda: make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results)))
     if now.date().weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
         step("Маркер Threads", lambda: threads_api.refresh_token(log, alert))

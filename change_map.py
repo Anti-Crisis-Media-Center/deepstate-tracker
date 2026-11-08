@@ -1,0 +1,166 @@
+"""Міні-мапа змін за добу/тиждень: де саме змінилися позначення на мапі DeepState.
+
+Малюємо з того, що бот уже зберігає: межі області, окупована територія (state/current.json),
+нові ділянки (changes/<дата>.geojson), населені пункти (reference/settlements.geojson).
+Без підкладки-карти зі сторонніх сервісів — лише наші дані, тож ліцензійних питань немає.
+"""
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from shapely.geometry import box, shape
+from shapely.ops import unary_union
+
+ROOT = Path(__file__).resolve().parent
+DATA = ROOT / "data"
+FONTS = ROOT / "assets" / "fonts"
+
+BG = (13, 20, 40)
+LAND = (34, 46, 78)
+OCC = (120, 52, 60)          # окуповано (приглушений червоний)
+GREY = (92, 92, 104)         # район проникнення
+NEW = (255, 204, 51)         # нові ділянки — фірмовий жовтий
+BORDER = (150, 165, 200)
+WHITE, MUTED = (250, 250, 250), (175, 185, 205)
+
+CITIES = {"Краматорськ", "Слов'янськ", "Дружківка", "Костянтинівка", "Покровськ", "Мирноград", "Добропілля",
+          "Білозерське", "Родинське", "Білицьке", "Лиман", "Сіверськ", "Часів Яр", "Торецьк", "Бахмут",
+          "Курахове", "Селидове", "Новогродівка", "Українськ", "Гірник", "Святогірськ", "Миколаївка",
+          "Авдіївка", "Мар'їнка", "Вугледар", "Залізне", "Соледар", "Світлодарськ", "Красногорівка"}
+
+
+def _font(w: str, n: int):
+    return ImageFont.truetype(str(FONTS / f"Montserrat-{w}.ttf"), n)
+
+
+def _geoms(gj):
+    if gj.get("type") == "FeatureCollection":
+        return [shape(f["geometry"]) for f in gj["features"]]
+    return [shape(gj)]
+
+
+def render(change_files: list[Path], out: Path, title: str, subtitle: str, size: int = 1080,
+           oblast_key: str = "donetsk") -> Path | None:
+    changes = []
+    for p in change_files:
+        if p.exists():
+            gj = json.loads(p.read_text())
+            changes += [shape(f["geometry"]) for f in gj["features"]
+                        if f["properties"].get("oblast") == oblast_key]
+    if not changes:
+        return None
+    new = unary_union(changes)
+    st = json.loads((DATA / "state" / "current.json").read_text())
+    occ = unary_union(_geoms(st["occupied"][oblast_key]))
+    unk = unary_union(_geoms(st["unknown"][oblast_key])) if st.get("unknown", {}).get(oblast_key) else None
+    obl = json.loads((DATA / "reference" / "oblasts.geojson").read_text())
+    region = unary_union([shape(f["geometry"]) for f in obl["features"]])  # обидві області
+
+    # кадр: нова ділянка + ~18 км навколо, квадрат з урахуванням широти
+    cx, cy = new.centroid.x, new.centroid.y
+    kx = math.cos(math.radians(cy))
+    minx, miny, maxx, maxy = new.bounds
+    half = max((maxx - minx) * kx, maxy - miny) / 2 + 0.16  # у «градусах широти»
+    view = box(cx - half / kx, cy - half, cx + half / kx, cy + half)
+    top, bottom = 230, 170                                   # місце під заголовок і підпис
+    mh = size - top - bottom
+    ox = (size - mh) // 2
+
+    def px(x, y):
+        return (ox + (x - (cx - half / kx)) / (2 * half / kx) * mh, top + (cy + half - y) / (2 * half) * mh)
+
+    S = 2  # малюємо вдвічі більшим для згладжування
+    big = Image.new("RGB", (size * S, size * S), BG)
+    d = ImageDraw.Draw(big)
+
+    def poly(g, fill=None, outline=None, width=1):
+        g = g.intersection(view)
+        for p in getattr(g, "geoms", [g]):
+            if p.is_empty or p.geom_type != "Polygon":
+                continue
+            pts = [(a * S, b * S) for a, b in (px(x, y) for x, y in p.exterior.coords)]
+            d.polygon(pts, fill=fill, outline=outline, width=width * S)
+            for hole in p.interiors:
+                d.polygon([(a * S, b * S) for a, b in (px(x, y) for x, y in hole.coords)], fill=LAND)
+
+    poly(region, fill=LAND)
+    poly(occ, fill=OCC)
+    if unk is not None and not unk.is_empty:
+        poly(unk, fill=GREY)
+    # світіння навколо нових ділянок
+    glow = Image.new("L", big.size, 0)
+    gd = ImageDraw.Draw(glow)
+    for p in getattr(new, "geoms", [new]):
+        pts = [(a * S, b * S) for a, b in (px(x, y) for x, y in p.exterior.coords)]
+        gd.polygon(pts, fill=255)
+    glow = glow.filter(ImageFilter.MaxFilter(31)).filter(ImageFilter.GaussianBlur(14))
+    big.paste(Image.new("RGB", big.size, NEW), (0, 0), glow.point(lambda v: int(v * 0.45)))
+    d = ImageDraw.Draw(big)
+    poly(new, fill=NEW, outline=(255, 235, 150), width=1)
+    img = big.resize((size, size), Image.LANCZOS)
+    d = ImageDraw.Draw(img)
+    d.rectangle([0, 0, size, top - 10], fill=BG)
+    d.rectangle([0, size - bottom + 10, size, size], fill=BG)
+
+    # населені пункти в кадрі: міста + найближчі села до змін
+    st_feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
+    pts = []
+    for f in st_feats:
+        g = shape(f["geometry"]).centroid
+        if view.contains(g):
+            nm = f["properties"]["ADM4_UA"]
+            pts.append((nm in CITIES, -g.distance(new), nm, g))
+    near = sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]   # 2 найближчі села
+    cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
+    pts = near + cities
+    shown, boxes, used = 0, [], set()
+    for is_city, _, nm, g in pts:
+        if nm in used:
+            continue
+        if shown >= 7:
+            continue
+        x, y = px(g.x, g.y)
+        if not (ox + 20 < x < ox + mh - 20 and top + 20 < y < top + mh - 20):
+            continue
+        f = _font("800" if is_city else "500", 34 if is_city else 28)
+        w = d.textlength(nm, font=f)
+        tx, ty = (x + 12, y - 18) if x + 12 + w < ox + mh else (x - 12 - w, y - 18)
+        bb = (tx - 4, ty - 2, tx + w + 4, ty + 40)
+        if any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes):
+            continue
+        boxes.append(bb)
+        used.add(nm)
+        r = 7 if is_city else 5
+        d.ellipse([x - r, y - r, x + r, y + r], fill=WHITE)
+        d.text((tx + 2, ty + 2), nm, font=f, fill=(0, 0, 0))
+        d.text((tx, ty), nm, font=f, fill=WHITE)
+        shown += 1
+
+    # масштаб 5 км
+    km_px = mh / (2 * half * 111.0)
+    sx, sy = ox + 30, top + mh - 40
+    d.line([sx, sy, sx + 5 * km_px, sy], fill=WHITE, width=4)
+    d.text((sx, sy - 40), "5 км", font=_font("500", 28), fill=WHITE)
+
+    d.text((60, 60), title, font=_font("800", 58), fill=NEW)
+    d.text((60, 140), subtitle, font=_font("500", 40), fill=WHITE)
+    lx, ly = 60, size - bottom + 40
+    lf = _font("500", 26)
+    for col, label in ((NEW, "зміни"), (OCC, "окуповано"), (GREY, "район проникнення")):
+        d.rectangle([lx, ly + 4, lx + 26, ly + 30], fill=col)
+        d.text((lx + 36, ly), label, font=lf, fill=MUTED)
+        lx += 36 + d.textlength(label, font=lf) + 36
+    d.text((60, size - 60), "За даними DeepStateMap.live · АКМЦ", font=_font("500", 26), fill=MUTED)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out, "JPEG", quality=92)
+    return out
+
+
+if __name__ == "__main__":
+    import sys
+    p = render([DATA / "changes" / f"{sys.argv[1]}.geojson"], Path(sys.argv[2]),
+               "Біля Василівки та Світлого", "+4,24 км² позначено окупованими за добу")
+    print(p)
