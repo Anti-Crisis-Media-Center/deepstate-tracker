@@ -1258,6 +1258,25 @@ def geom_to_json(g):
     return mapping(g) if g is not None else None
 
 
+GREY_DIR = DATA / "grey"
+
+
+def save_grey_snapshot(day: str, unknown: dict) -> None:
+    """Щоденний знімок сірої зони (район проникнення) по двох областях, ~25 КБ на день.
+    Окуповане на будь-яку дату ми й так точно відновлюємо зі змін, а сіру зону — ні, тому зберігаємо її.
+    Потрібно для тижневих/місячних мап: якою була сіра зона на початок періоду і як вона змінилася."""
+    try:
+        from shapely import set_precision
+        GREY_DIR.mkdir(parents=True, exist_ok=True)
+        save_json(GREY_DIR / f"{day}.json", {
+            "date": day,
+            "unknown": {k: (mapping(set_precision(v, 0.0001)) if v is not None and not v.is_empty else None)
+                        for k, v in unknown.items()},
+        })
+    except Exception as e:  # noqa: BLE001
+        log(f"Знімок сірої зони не збережено: {e}")
+
+
 def geom_from_json(j):
     return normalize(shape(j)) if j else None
 
@@ -1638,6 +1657,7 @@ def main() -> int:
     if current_state and current_state["date"] < today:
         save_json(base_path, current_state)
     save_json(current_path, new_state)
+    save_grey_snapshot(today, unknown)
 
     # Геометрія змін — для майбутніх карт
     feats = []
