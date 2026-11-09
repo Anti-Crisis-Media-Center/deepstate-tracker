@@ -100,7 +100,9 @@ def facebook():
             if reach is not None:
                 break
         out["posts"].append({"text": p.get("message", ""), "url": p.get("permalink_url"),
-                             "reach": reach, "eng": eng})
+                             "reach": reach, "eng": eng,
+                             "react": (p.get("reactions") or {}).get("summary", {}).get("total_count", 0),
+                             "comm": (p.get("comments") or {}).get("summary", {}).get("total_count", 0)})
     return out
 
 
@@ -130,7 +132,8 @@ def instagram():
             continue
         reach = _metric(get(f"{G}/{m['id']}/insights", metric="reach", access_token=ptok))
         out["posts"].append({"text": m.get("caption", ""), "url": m.get("permalink"), "reach": reach,
-                             "eng": (m.get("like_count") or 0) + (m.get("comments_count") or 0)})
+                             "eng": (m.get("like_count") or 0) + (m.get("comments_count") or 0),
+                             "react": m.get("like_count") or 0, "comm": m.get("comments_count") or 0})
     return out
 
 
@@ -153,7 +156,8 @@ def threads():
         ins = get(f"{threads_api.GRAPH}/{p['id']}/insights", metric="views,likes,replies,reposts", access_token=tok)
         vals = {m["name"]: (m.get("values") or [{}])[0].get("value", 0) for m in ins.get("data", [])}
         out["posts"].append({"text": p.get("text", ""), "url": p.get("permalink"), "reach": vals.get("views"),
-                             "eng": vals.get("likes", 0) + vals.get("replies", 0) + vals.get("reposts", 0)})
+                             "eng": vals.get("likes", 0) + vals.get("replies", 0) + vals.get("reposts", 0),
+                             "react": vals.get("likes", 0), "comm": vals.get("replies", 0)})
     return out
 
 
@@ -177,10 +181,15 @@ def section(title: str, d: dict | None, reach_word: str) -> list[str]:
     lines.append(f"Підписники: {fmt(d.get('followers'))}")
     posts = d["posts"]
     lines.append(f"Дописів за тиждень: {len(posts)}")
+    if any("comm" in p for p in posts):   # реакції й коментарі — щоб бачити, де реагують і що модерувати
+        lines.append(f"Реакції: {fmt(sum(p.get('react', 0) for p in posts))} · "
+                     f"коментарі: {fmt(sum(p.get('comm', 0) for p in posts))}")
     key = (lambda p: p["reach"] or 0) if any(p["reach"] for p in posts) else (lambda p: p["eng"])
     top = sorted(posts, key=key, reverse=True)[:3]
     for i, p in enumerate(top, 1):
         val = f"{fmt(p['reach'])} охопл." if p["reach"] is not None else f"{fmt(p['eng'])} взаємодій"
+        if p.get("comm"):
+            val += f", {fmt(p['comm'])} коментарів"
         name = short(p["text"])
         lines.append(f"{i}. <a href=\"{p['url']}\">{name}</a> — {val}" if p.get("url") else f"{i}. {name} — {val}")
     ds = [p for p in posts if is_deepstate(p["text"])]
@@ -189,7 +198,8 @@ def section(title: str, d: dict | None, reach_word: str) -> list[str]:
         others = [p for p in posts if not is_deepstate(p["text"])]
         avg_o = sum((p["reach"] or 0) for p in others) / len(others) if others else 0
         lines.append(f"🗺 DeepState: {len(ds)} доп., середнє охоплення {fmt(avg)}"
-                     + (f" (інші дописи — {fmt(avg_o)})" if others else ""))
+                     + (f" (інші дописи — {fmt(avg_o)})" if others else "")
+                     + (f", коментарів: {fmt(sum(p.get('comm', 0) for p in ds))}" if any("comm" in p for p in ds) else ""))
     return lines + [""]
 
 
