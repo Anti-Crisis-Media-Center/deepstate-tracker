@@ -1,0 +1,52 @@
+name: Тінь v9 — нова версія в гілку «Тести»
+
+# Тимчасово (9–15.11.2026): нова версія (гілка v9-video) щодня робить те саме, що й робочий бот,
+# але надсилає все лише в гілку «Тести» службової групи. Нічого не публікує і не зберігає.
+# Після переходу на нову версію (16.11) цей файл видалити.
+on:
+  schedule:
+    - cron: "40 6 * * *"   # щодня 8:40 за Києвом (зима) — сторіз-картка за добу + мапа
+    - cron: "0 18 * * 0"   # неділя 20:00 за Києвом — тижневий Reels + перевірка автопублікації
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "day — доба, week — тиждень (Reels)"
+        type: choice
+        options: [day, week]
+        default: day
+
+permissions:
+  contents: write   # щоб класти тестове відео в GitHub Releases
+
+concurrency:
+  group: deepstate-shadow
+  cancel-in-progress: false
+
+jobs:
+  shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: v9-video
+          fetch-depth: 0
+      - name: Свіжі дані з робочої гілки
+        run: |
+          git fetch origin main
+          git checkout origin/main -- data
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Тіньовий запуск
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID || '111460408546782' }}
+          FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          SHADOW_KIND: ${{ inputs.kind || (github.event.schedule == '0 18 * * 0' && 'week' || 'day') }}
+          DRY_RUN: "1"
+        run: python shadow.py
