@@ -987,9 +987,7 @@ def _tiktok_tags(places: list[str], luhansk_changed: bool = False) -> str:
             cities.append(name)
     base = ["#Донеччина"] + (["#Луганщина"] if luhansk_changed else []) + ["#DeepState"]
     tags = base + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:5 - len(base)]]
-    for extra in ("#Краматорськ", "#Слов'янськ", "#Костянтинівка", "#Дружківка"):
-        if len(tags) < 5 and extra.replace("'", "") not in [t.replace("'", "") for t in tags]:
-            tags.append(extra.replace("'", ""))
+    # лише справжні місця біля змін — без «доповнення» іншими містами (рішення 9.11.2026)
     return " ".join(tags[:5])
 
 
