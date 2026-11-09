@@ -133,6 +133,8 @@ def run_week(hist: list[dict]) -> None:
     card = render_story(T.COVER_WEEK, label, T.story_blocks_summary("week", rows), OUT / "story_week.jpg",
                         footer=foot, handle=handle)
     photo(card, f"🧪 Тінь v9 · сторіз тижня ({label})")
+    if not v:
+        send("sendMessage", {"text": "🧪 Тінь v9: відео не зібралося (немає ffmpeg або помилка) — Reels не перевірено"})
     if v:
         with v.open("rb") as fh:
             send("sendVideo", {"caption": f"🧪 Тінь v9 · Reels тижня ({label})", "supports_streaming": "true"},
