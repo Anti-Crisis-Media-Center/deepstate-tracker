@@ -1969,8 +1969,9 @@ def main() -> int:
     quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] and not results[k]["grey_km2"]
                  for k in OBLASTS)
              and not messages and not any((grey.get(k) or {}).get("cities") for k in OBLASTS))
-    if quiet:  # день без змін: у стрічки соцмереж не публікуємо, лише сторіз
-        log("Змін немає — дописи у Facebook, Instagram і Threads пропускаємо, лише сторіз.")
+    if quiet:  # день без змін: Facebook і Instagram пропускаємо; Threads — щодня (рішення Юлі 9.11)
+        log("Змін немає — дописи у Facebook і Instagram пропускаємо; у Threads — обкладинка.")
+        step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN))
     else:
         step("Facebook", lambda: send_fb_teaser(fb_text, day_map or COVER_IMAGE))
         step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN,
