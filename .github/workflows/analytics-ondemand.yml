@@ -1,0 +1,51 @@
+name: Аналітика на вимогу (кнопки в боті)
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # кожні 10 хвилин перевіряє, чи натискали кнопки
+  workflow_dispatch:
+    inputs:
+      setup:
+        description: "Опублікувати й закріпити кнопки в гілці «Аналітика»"
+        type: boolean
+        default: false
+concurrency:
+  group: analytics-ondemand
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests
+      - id: req
+        env:
+          ANALYTICS_BOT_TOKEN: ${{ secrets.ANALYTICS_BOT_TOKEN }}
+          ANALYTICS_CHAT_ID: ${{ secrets.ANALYTICS_CHAT_ID }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          SETUP: ${{ inputs.setup && '1' || '0' }}
+        run: python ondemand.py
+      - if: steps.req.outputs.days != ''
+        run: pip install -q -r requirements.txt
+      - if: steps.req.outputs.days != ''
+        env:
+          FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          GH_ADMIN_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
+          ANALYTICS_BOT_TOKEN: ${{ secrets.ANALYTICS_BOT_TOKEN }}
+          ANALYTICS_CHAT_ID: ${{ secrets.ANALYTICS_CHAT_ID }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_CHANNELS: ${{ vars.YOUTUBE_CHANNELS }}
+        run: |
+          for d in ${{ steps.req.outputs.days }}; do
+            ANALYTICS_DAYS=$d python analytics.py || echo "Звіт за $d дн. не вдався"
+          done

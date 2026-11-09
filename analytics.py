@@ -215,7 +215,9 @@ def build() -> str:
     if os.getenv("TIKTOK_REFRESH_TOKEN", "").strip():
         lines += section("TikTok @acmc.ua", tiktok_api.stats(SINCE, log), "Перегляди нових відео")
     lines += youtube_api.sections(SINCE, log)
-    lines.append("<i>Охоплення — за останні 7 днів, у дужках — зміна до попереднього тижня.</i>")
+    per = "добу" if DAYS == 1 else f"{DAYS} дн."
+    prev = "попередньої доби" if DAYS == 1 else ("попереднього тижня" if DAYS == 7 else f"попередніх {DAYS} дн.")
+    lines.append(f"<i>Охоплення — за останні {per}, у дужках — зміна до {prev}.</i>")
     return "\n".join(lines)
 
 
