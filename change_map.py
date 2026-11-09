@@ -352,9 +352,20 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
 
     ty0 = top - 200 if vertical else 60
     tsz = 66 if vertical else 58
-    while tsz > 34 and d.textlength(title, font=_font("800", tsz)) > size - 120:
+    lines = [title]
+    if vertical and d.textlength(title, font=_font("800", 60)) > size - 120 and " · " in title:
+        # довгий список назв — на два рядки, а не дрібним шрифтом
+        head, rest = title.split(": ", 1) if ": " in title else ("", title)
+        parts = rest.split(" · ")
+        lines = [(head + ": " if head else "") + " · ".join(parts[:-1]), parts[-1]] if len(parts) == 2 else \
+                [(head + ": " if head else "") + " · ".join(parts[:2]), " · ".join(parts[2:])]
+        tsz = 60
+    while tsz > 34 and max(d.textlength(ln, font=_font("800", tsz)) for ln in lines) > size - 120:
         tsz -= 2
-    d.text((60, ty0 + (66 if vertical else 58) - tsz), title, font=_font("800", tsz), fill=NEW)
+    for li, ln in enumerate(lines):
+        d.text((60, ty0 + (66 if vertical else 58) - tsz + li * (tsz + 10)), ln, font=_font("800", tsz), fill=NEW)
+    if len(lines) > 1:
+        ty0 += 62   # підзаголовок — нижче, над мапою
     ssz = 40
     while ssz > 26 and d.textlength(subtitle, font=_font("500", ssz)) > size - 120:
         ssz -= 2

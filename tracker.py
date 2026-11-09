@@ -1240,7 +1240,7 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     sq = Image.open(cover).convert("RGB").resize((MH, MH), Image.LANCZOS)
     img.paste(sq.crop(((MH - MW) // 2, 0, (MH - MW) // 2 + MW, MH)), (OX, TOP))
     sh = Image.new("L", img.size, 0)
-    ImageDraw.Draw(sh).rectangle([OX, TOP + 330, OX + MW, TOP + 760], fill=75)   # легке затемнення під текстом
+    ImageDraw.Draw(sh).rectangle([OX, TOP + 290, OX + MW, TOP + 730], fill=75)   # легке затемнення під текстом
     box = Image.new("L", img.size, 0)
     ImageDraw.Draw(box).rectangle([OX, TOP, OX + MW, TOP + MH], fill=255)
     img.paste(Image.new("RGB", img.size, (8, 10, 18)), (0, 0), ImageChops.multiply(sh.filter(ImageFilter.GaussianBlur(70)), box))
@@ -1254,23 +1254,28 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     dates = [r["date"] for r in rows]
     names = place_names(dates)
     occ, free = _period_totals(rows, "donetsk")
-    y = TOP + 325
+    y = TOP + 290                     # текст — між заголовком обкладинки і смугою «Донеччина · Луганщина»
+    word = "за тиждень" if kind == "week" else "за місяць"
     if names:
         single_city = len(names) == 1 and names[0] in CITY_GENITIVE
-        centered("Біля" if single_city else "Поблизу:", f500(46), y, white)
+        centered("Біля" if single_city else "Поблизу:", f500(40), y, white)
         line = CITY_GENITIVE[names[0]] if single_city else " · ".join(names)
-        fs = 80
-        while d.textlength(line, font=f800(fs)) > 920 and fs > 52:
+        rows_ = [line]
+        if d.textlength(line, font=f800(72)) > 920 and len(names) > 2:   # три назви — на два рядки
+            rows_ = [" · ".join(names[:2]), names[2]]
+        fs = 68 if len(rows_) > 1 else 76
+        while max(d.textlength(r_, font=f800(fs)) for r_ in rows_) > 920 and fs > 48:
             fs -= 4
-        centered(line, f800(fs), y + 60, white)
-        y += 60 + fs + 15
-    word = "за тиждень" if kind == "week" else "за місяць"
+        for ri, r_ in enumerate(rows_):
+            centered(r_, f800(fs), y + 52 + ri * (fs + 8), white)
+        y += 52 + len(rows_) * (fs + 8) + 6
+    big = 104 if names and len(names) > 2 else 118
     if occ >= 0.01 and free >= 0.01:
-        centered(f"{fmt_km2(occ)} км² · {fmt_km2(free)} км²", f800(84), y, yel)
-        centered(f"позначено окупованими · деокупованими {word}", f500(36), y + 100, white)
+        centered(f"{fmt_km2(occ)} км² · {fmt_km2(free)} км²", f800(80), y, yel)
+        centered(f"позначено окупованими · деокупованими {word}", f500(34), y + 92, white)
     elif occ >= 0.01 or free >= 0.01:
-        centered(f"{fmt_km2(max(occ, free))} км²", f800(124), y, yel)
-        centered(f"позначено {'окупованими' if occ >= 0.01 else 'деокупованими'} {word}", f500(42), y + 142, white)
+        centered(f"{fmt_km2(max(occ, free))} км²", f800(big), y, yel)
+        centered(f"позначено {'окупованими' if occ >= 0.01 else 'деокупованими'} {word}", f500(38), y + big + 12, white)
     else:
         centered("без змін", f800(100), y, yel)
     img.save(out, "JPEG", quality=92)
