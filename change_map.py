@@ -146,10 +146,29 @@ def breakdown(change_files: list[Path], oblast_key: str = "donetsk") -> dict:
     return {"occupied": _km2(red), "deoccupied": _km2(free), "to_grey": _km2(grey), "flip": _km2(back)}
 
 
+def velvet(cover: Path, w: int, h: int):
+    """Підкладка «як обкладинка»: та сама оксамитова текстура без тексту й мапи.
+    Беремо колір країв обкладинки, додаємо м'які плями, дрібне зерно й темніші краї."""
+    import numpy as np
+    from PIL import ImageFilter
+    cv = np.asarray(Image.open(cover).convert("RGB").resize((200, 200)), dtype=np.float32)
+    base = np.median(cv[60:150, 130:190].reshape(-1, 3), axis=0) * 1.1   # колір текстури праворуч від мапи (як на обкладинці)
+    rng = np.random.default_rng(7)
+    big = Image.fromarray((rng.random((h // 40 + 2, w // 40 + 2)) * 255).astype("uint8")).resize(
+        (w, h), Image.BICUBIC).filter(ImageFilter.GaussianBlur(60))
+    lum = 0.75 + 0.5 * (np.asarray(big, dtype=np.float32) / 255.0)
+    grain = 1 + (rng.random((h, w)) - 0.5) * 0.16
+    yy, xx = np.mgrid[0:h, 0:w]
+    vig = 1 - 0.25 * (((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2) / 2
+    arr = base[None, None, :] * (lum * grain * vig)[..., None]
+    return Image.fromarray(np.clip(arr, 0, 255).astype("uint8"))
+
+
 def render(change_files: list[Path], out: Path, title: str, subtitle: str, size: int = 1080,
            oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None,
            upto: int | None = None, since: int = 0, caption: str | None = None,
-           hide_step: bool = False) -> Path | None:
+           hide_step: bool = False, backdrop: Path | None = None,
+           must_label: list | None = None) -> Path | None:
     """upto — для кадрів відео: показати стан після перших upto днів зі змінами, причому зміни днів
     since..upto (поточний крок) — їхнім кольором (червоним чи блакитним), навіть якщо потім їх знімуть.
     upto=None — підсумок періоду: червоне, блакитне й контур ділянок «позначили й зняли».
@@ -286,6 +305,11 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, size, top - 10], fill=BG)
     d.rectangle([0, top + mh + 10, size, H], fill=BG)
+    if backdrop is not None and Path(backdrop).exists():   # оксамитова підкладка, як у обкладинки
+        bd = velvet(Path(backdrop), size, H)
+        bd.paste(img.crop((ox, top, ox + mw, top + mh)), (ox, top))
+        img = bd
+        d = ImageDraw.Draw(img)
 
     # населені пункти в кадрі: міста + найближчі села до змін
     st_feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
@@ -298,12 +322,14 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             pts.append((is_city(nm, f["properties"].get("ADM2_UA")), -g.distance(new), nm, g))
     near = sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]   # 2 найближчі села
     cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
-    pts = near + cities
+    must = set(must_label or [])
+    # міста з заголовка («Поблизу: …») підписуємо першими й обов'язково — щоб назви збігалися
+    pts = [p for p in cities if p[2] in must] + near + [p for p in cities if p[2] not in must]
     shown, boxes, used = 0, [], set()
     for is_city, _, nm, g in pts:
         if nm in used:
             continue
-        if shown >= 7:
+        if shown >= 7 and nm not in must:
             continue
         x, y = px(g.x, g.y)
         if not (ox + 20 < x < ox + mw - 20 and top + 20 < y < top + mh - 20):

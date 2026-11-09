@@ -930,13 +930,18 @@ def story_blocks_daily(results: dict) -> list[dict]:
 def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
     word = "тиждень" if kind == "week" else "місяць"
     blocks = []
+    dates = [r["date"] for r in rows]
     for k in OBLASTS:
-        net = _net_period(rows, k)
-        if abs(net) >= 0.01:
-            blocks.append({"label": STORY_LABELS[k], "big": f"{fmt_km2(abs(net))} км²",
-                           "text": (f"позначено окупованими за {word}" if net > 0
-                                    else f"позначено деокупованими за {word}")})
-        else:
+        occ, free = _period_totals(rows, k)
+        names = place_names(dates, k)
+        note = ("поблизу: " + " · ".join(names)) if names else ""
+        if occ >= 0.01:
+            blocks.append({"label": STORY_LABELS[k], "big": f"{fmt_km2(occ)} км²",
+                           "text": f"позначено окупованими за {word}", "note": note if free < 0.01 else ""})
+        if free >= 0.01:
+            blocks.append({"label": "" if occ >= 0.01 else STORY_LABELS[k], "big": f"{fmt_km2(free)} км²",
+                           "text": f"позначено деокупованими за {word}", "note": note})
+        if occ < 0.01 and free < 0.01:
             blocks.append({"label": STORY_LABELS[k], "big": "", "text": f"за {word} змін не зафіксовано"})
     return blocks
 
@@ -1096,6 +1101,60 @@ def _nearest_city(day: str, key: str = "donetsk", max_km: float = 20.0) -> str |
         return None
 
 
+def _nearest_city_geom(g, max_km: float = 20.0) -> str | None:
+    """Найближче місто до геометрії (у межах max_km)."""
+    global _CITY_POINTS
+    from shapely.geometry import shape
+    from shapely.ops import nearest_points
+    if _CITY_POINTS is None:
+        feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
+        _CITY_POINTS = [(x["properties"]["ADM4_UA"], shape(x["geometry"]).centroid) for x in feats
+                        if is_city(x["properties"]["ADM4_UA"], x["properties"].get("ADM2_UA"))]
+    k = math.cos(math.radians(g.centroid.y))
+    c = g.centroid
+    cands = []
+    for name, pt in _CITY_POINTS:
+        a, b = nearest_points(g, pt)
+        dkm = math.hypot((a.x - b.x) * k, a.y - b.y) * 111
+        if dkm <= max_km:
+            cands.append((round(dkm), math.hypot((c.x - pt.x) * k, c.y - pt.y), name))   # нічия → ближче до центру
+    return min(cands)[2] if cands else None
+
+
+def place_names(dates: list[str], key: str = "donetsk", n: int = 3) -> list[str]:
+    """ЄДИНИЙ список назв для всіх місць (перший кадр, заголовок мапи, останній кадр, сторіз).
+    Беремо лише те, що лишилося на кінець періоду (без «позначили й зняли»): кожну окрему ділянку
+    підписуємо найближчим містом у межах 20 км; назви — за площею змін, до трьох."""
+    try:
+        import change_map
+        files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
+        red, blue, _ = change_map._timeline(change_map._load_steps(files, key))
+        geoms = [g for g in (red, blue) if g is not None]
+        if not geoms:
+            return []
+        from shapely.ops import unary_union
+        u = unary_union(geoms)
+        parts = list(getattr(u, "geoms", [u]))
+        score: dict[str, float] = {}
+        for g in parts:
+            name = _nearest_city_geom(g)
+            if name:
+                score[name] = score.get(name, 0) + g.area
+        return sorted(score, key=score.get, reverse=True)[:n]
+    except Exception as e:  # noqa: BLE001
+        log(f"Назви ділянок: {e}")
+        return []
+
+
+def names_title(names: list[str]) -> str:
+    """«Біля Костянтинівки» для однієї назви, «Поблизу: A · B · C» — для кількох."""
+    if not names:
+        return ""
+    if len(names) == 1:
+        return "Біля " + CITY_GENITIVE.get(names[0], names[0])
+    return "Поблизу: " + " · ".join(names)
+
+
 def _period_breakdown(rows: list[dict], key: str = "donetsk") -> dict | None:
     """Підсумок періоду за геометрією змін: окуповано / деокуповано / «позначили й зняли» (км²).
     Ділянку, яку за період і позначили, і зняли, не рахуємо ні туди, ні туди."""
@@ -1141,86 +1200,62 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     what = "позначено окупованими" if net > 0 else "позначено деокупованими"
     if not places:
         return big, what, "на Донеччині"
-    areas = _change_areas(rows)
-    if len(areas) > 1:   # кілька окремих ділянок — називаємо всі (до трьох), а не одну
-        return big, what, "поблизу: " + " · ".join(areas[:3])
+    names = place_names([r["date"] for r in rows])   # той самий список, що на мапі й у сторіз
+    if names:
+        t = names_title(names)
+        return big, what, t[:1].lower() + t[1:]
     top = max(places, key=places.get)
     return big, what, (f"біля {CITY_GENITIVE.get(top, top)}" if top in city_names else f"поблизу: {top}")
 
 
 def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path,
                         bg: Path | None = None) -> Path:
-    from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+    """Перший кадр відео: фірмове синє тло, оксамитова обкладинка — точно там і такого ж розміру,
+    як мапа на наступному кадрі (тож здається, що в квадраті оксамит змінюється на мапу).
+    На обкладинці: «Поблизу: …» (той самий список, що на мапі), цифра — жовта."""
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+    import change_map
     fonts = ROOT / "assets" / "fonts"
     f800 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), n)  # noqa: E731
     f500 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-500.ttf"), n)  # noqa: E731
-    im = Image.open(cover).convert("RGB")
-    w, h = im.size  # фон — лише мапа з обкладинки, без тексту
-    mp = im.crop((int(w * .28), int(h * .28), int(w * .98), int(h * .64)))
-    mp = mp.resize((int(1920 * mp.width / mp.height), 1920)).crop((0, 0, 1080, 1920))
-    if bg and bg.exists():   # фон — та сама вертикальна мапа, що йде далі у відео
-        mp = Image.open(bg).convert("RGB").resize((1080, 1920))
-        import change_map
-        ImageDraw.Draw(mp).rectangle([0, 0, 1080, 390], fill=change_map.BG)       # без заголовка мапи
-        ImageDraw.Draw(mp).rectangle([0, 1450, 1080, 1920], fill=change_map.BG)   # без легенди
-        canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(8))).enhance(0.75)
-    else:
-        canvas = ImageEnhance.Brightness(mp.filter(ImageFilter.GaussianBlur(3))).enhance(0.65)
-    # м'яке затемнення під текстом: мапу видно, а написи лишаються контрастними
-    shade = Image.new("L", (1080, 1920), 0)
-    sd = ImageDraw.Draw(shade)
-    sd.rectangle([0, 360, 1080, 1480], fill=150)
-    shade = shade.filter(ImageFilter.GaussianBlur(120))
-    canvas.paste(Image.new("RGB", canvas.size, (8, 12, 26)), (0, 0), shade)
-    d = ImageDraw.Draw(canvas)
+    OX, TOP, MW, MH = 40, 400, 1000, 1040            # як у change_map для висоти 1920
+    img = Image.new("RGB", (1080, 1920), change_map.BG)
+    sq = Image.open(cover).convert("RGB").resize((MH, MH), Image.LANCZOS)
+    img.paste(sq.crop(((MH - MW) // 2, 0, (MH - MW) // 2 + MW, MH)), (OX, TOP))
+    sh = Image.new("L", img.size, 0)
+    ImageDraw.Draw(sh).rectangle([OX, TOP + 330, OX + MW, TOP + 760], fill=75)   # легке затемнення під текстом
+    box = Image.new("L", img.size, 0)
+    ImageDraw.Draw(box).rectangle([OX, TOP, OX + MW, TOP + MH], fill=255)
+    img.paste(Image.new("RGB", img.size, (8, 10, 18)), (0, 0), ImageChops.multiply(sh.filter(ImageFilter.GaussianBlur(70)), box))
+    d = ImageDraw.Draw(img)
     yel, white = (247, 197, 49), (250, 250, 250)
-    big, what, where = _tiktok_headline(kind, rows)
-    title = "DeepState: підсумки тижня" if kind == "week" else "DeepState: підсумки місяця"
 
     def centered(text, font, y, fill):
-        w = d.textlength(text, font=font)
-        d.text(((1080 - w) / 2, y), text, font=font, fill=fill)
+        d.text(((1080 - d.textlength(text, font=font)) / 2, y), text, font=font, fill=fill)
 
-    # головне — де саме; цифра помітна, але не «табло»
-    centered(title, f800(64), 420, yel)
-    centered(date_label, f500(48), 510, white)
-    place = (where[:1].upper() + where[1:]) if where else ""
-    y = 680
-    lines = [place] if place else []
-    if place.startswith("Поблизу: "):          # кілька ділянок: «Поблизу:» окремим рядком, назви — крупно
-        names = place[len("Поблизу: "):].split(" · ")
-        centered("Поблизу:", f500(52), y, white)
-        y += 80
-        lines = [" · ".join(names[:2])] + ([" · ".join(names[2:])] if len(names) > 2 else [])
-    wsize = 104   # один розмір для всіх рядків з назвами
-    while lines and max(d.textlength(ln, font=f800(wsize)) for ln in lines) > 980:
-        wsize -= 4
-    for ln in lines:
-        centered(ln, f800(wsize), y, white)
-        y += wsize + 20
-    y += 30
-    size = 140
-    while d.textlength(big, font=f800(size)) > 980:
-        size -= 10
-    period = "за тиждень" if kind == "week" else "за місяць"
-    occ, free = _period_totals(rows)
-    fy = 1330
-    if occ >= 0.01 and free >= 0.01:   # і окупація, і деокупація — дві цифри різними кольорами
-        blue = (88, 196, 255)
-        n1, n2 = f"{fmt_km2(occ)} км²", f"{fmt_km2(free)} км²"
-        centered(n1, f800(96), y, (255, 90, 90))   # окупація — червоним, як на мапі; жовтий лише для акцентів
-        centered("позначено окупованими", f500(44), y + 110, white)
-        centered(n2, f800(96), y + 175, blue)
-        centered(f"позначено деокупованими {period}", f500(44), y + 285, white)
-        fy = max(fy, y + 285 + 90)
+    d.text((60, TOP - 200), date_label, font=f800(60), fill=yel)   # там, де далі заголовок мапи
+    dates = [r["date"] for r in rows]
+    names = place_names(dates)
+    occ, free = _period_totals(rows, "donetsk")
+    y = TOP + 325
+    if names:
+        centered("Поблизу:" if len(names) > 1 else "Біля", f500(46), y, white)
+        line = " · ".join(names) if len(names) > 1 else CITY_GENITIVE.get(names[0], names[0])
+        fs = 80
+        while d.textlength(line, font=f800(fs)) > 920 and fs > 52:
+            fs -= 4
+        centered(line, f800(fs), y + 60, white)
+        y += 60 + fs + 15
+    word = "за тиждень" if kind == "week" else "за місяць"
+    if occ >= 0.01 and free >= 0.01:
+        centered(f"{fmt_km2(occ)} км² · {fmt_km2(free)} км²", f800(84), y, yel)
+        centered(f"позначено окупованими · деокупованими {word}", f500(36), y + 100, white)
+    elif occ >= 0.01 or free >= 0.01:
+        centered(f"{fmt_km2(max(occ, free))} км²", f800(124), y, yel)
+        centered(f"позначено {'окупованими' if occ >= 0.01 else 'деокупованими'} {word}", f500(42), y + 142, white)
     else:
-        centered(big, f800(size), y, yel)
-        if where.endswith(("тиждень", "місяць")):   # «без змін» — період уже в рядку з місцем
-            period = ""
-        centered(f"{what} {period}".strip(), f500(54), y + size + 30, white)
-    centered("Донеччина · Луганщина", f500(44), fy, white)
-    centered("За даними DeepStateMap.live", f500(34), fy + 70, (200, 200, 200))
-    canvas.save(out, "JPEG", quality=90)
+        centered("без змін", f800(100), y, yel)
+    img.save(out, "JPEG", quality=92)
     return out
 
 
@@ -1248,6 +1283,8 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
     red, blue = (255, 90, 90), (88, 196, 255)
     # мінімум тексту: область, дві цифри з одним словом, заклик. «Позначено» — у рядку джерела внизу.
     period = re.sub(r"\s*20\d\d", "", date_label)
+    if kind == "month":
+        period = period[:1].lower() + period[1:]   # «Донеччина · листопад»
     y = 380
     shown = False
     for k in OBLASTS:
@@ -1256,7 +1293,13 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
             continue
         shown = True
         centered(f"{STORY_LABELS[k][:1]}{STORY_LABELS[k][1:].lower()} · {period}", f500(46), y, white)
-        y += 90
+        y += 70
+        nm = place_names([r["date"] for r in rows], k)
+        if nm:
+            centered(("біля " + CITY_GENITIVE.get(nm[0], nm[0])) if len(nm) == 1 else "поблизу: " + " · ".join(nm),
+                     f500(38), y, grey)
+            y += 60
+        y += 20
         for val, word, col in ((occ, "окуповані", red), (free, "деокуповані", blue)):
             if val >= 0.01:
                 centered(f"{fmt_km2(val)} км²", f800(104), y, col)
@@ -1267,10 +1310,10 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
         centered(f"Донеччина · {period}", f500(46), y, white)
         centered("без змін", f800(80), y + 90, white)
         y += 220
-    y = max(y + 40, 1000)
-    centered("Підписуйтеся,", f800(74), y, yel)
+    centered("За позначеннями DeepStateMap.live", f500(34), y - 10, grey)   # джерело — одразу під цифрами
+    y = max(y + 140, 1150)
+    centered("Підписуйтеся,", f800(74), y, yel)                              # заклик — унизу, жовтим
     centered("щоб не пропустити", f800(64), y + 88, yel)
-    centered("За позначеннями DeepStateMap.live", f500(32), y + 200, grey)
     canvas.save(out, "JPEG", quality=90)
     return out
 
@@ -1670,8 +1713,9 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         pl = oblast_places.get(key) or []
         cities = [re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl if is_city(p)]
         names = list(dict.fromkeys(re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl))
-        if areas and len(areas) > 1:
-            title = "Поблизу: " + " · ".join(areas[:3])
+        pn = place_names(dates, key)
+        if pn:
+            title = names_title(pn)
         elif cities:
             title = "Біля " + CITY_GENITIVE.get(cities[0], cities[0])
         elif names:
@@ -1707,10 +1751,10 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
             for suffix, kw in frames:
                 try:
                     change_map.render(files, DATA / out_name.replace(".jpg", suffix), title, sub, oblast_key=key,
-                                      height=1920, **kw)
+                                      height=1920, must_label=pn, **kw)
                 except Exception as e:  # noqa: BLE001
                     log(f"Вертикальна мапа для відео: {e}")
-        return change_map.render(files, DATA / out_name, title, sub, oblast_key=key)
+        return change_map.render(files, DATA / out_name, title, sub, oblast_key=key, must_label=pn)
     except Exception as e:  # noqa: BLE001
         log(f"Мапа змін: не вдалося — {e}")
         return None
