@@ -1480,7 +1480,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
                                                  image_url=threads_url_for(mp) if mp else None))
         ig_text = fb_text + "\n\n" + _tiktok_tags(_rows_places(rows), _rows_luhansk_changed(rows))
         step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(), ig_text, s["image"], log, alert,
-                                              DRY_RUN, extra_images=[mp] if mp else None))
+                                              DRY_RUN, extra_images=[ig_version(mp)] if mp else None))
         story_date = (s["label"][0].upper() + s["label"][1:]) if s["kind"] == "month" and s.get("label") \
             else _period_label(start, today)
         step("Сторіз", lambda: make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows), s["kind"]))
@@ -1520,10 +1520,22 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
                                       show_new=show, height=1920)
                 except Exception as e:  # noqa: BLE001
                     log(f"Вертикальна мапа для відео: {e}")
+        try:   # 4:5 для каруселі Instagram — мапа більша, без порожніх полів
+            change_map.render(files, DATA / out_name.replace(".jpg", "_45.jpg"), title, sub, oblast_key=key, height=1350)
+        except Exception as e:  # noqa: BLE001
+            log(f"Мапа 4:5 для Instagram: {e}")
         return change_map.render(files, DATA / out_name, title, sub, oblast_key=key)
     except Exception as e:  # noqa: BLE001
         log(f"Мапа змін: не вдалося — {e}")
         return None
+
+
+def ig_version(img: Path | None) -> Path | None:
+    """Для Instagram беремо 4:5-версію мапи, якщо вона є."""
+    if not img:
+        return img
+    p = img.with_name(img.stem + "_45.jpg")
+    return p if p.exists() else img
 
 
 def threads_url_for(img: Path) -> str | None:
@@ -1721,7 +1733,7 @@ def main() -> int:
         step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(),
                                               fb_text + "\n\n" + _tiktok_tags(day_places, lug),
                                               COVER_IMAGE, log, alert, DRY_RUN,
-                                              extra_images=[day_map] if day_map else None))
+                                              extra_images=[ig_version(day_map)] if day_map else None))
     step("Сторіз", lambda: make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results)))
     if now.date().weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
         step("Маркер Threads", lambda: threads_api.refresh_token(log, alert))

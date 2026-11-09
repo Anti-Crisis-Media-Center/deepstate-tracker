@@ -47,7 +47,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     """height=None — квадрат для дописів; height=1920 — вертикальна мапа для відео (TikTok/Shorts),
     з полями під інтерфейс платформ зверху і знизу."""
     H = height or size
-    vertical = H != size
+    vertical = H >= 1600          # TikTok/Shorts 9:16; 1350 — допис Instagram 4:5 (як квадрат, лише вища мапа)
     changes = []
     for p in change_files:
         if p.exists():
@@ -70,6 +70,10 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     half = max((maxx - minx) * kx, maxy - miny) / 2 + 0.16  # у «градусах широти»
     if vertical:
         top, bottom = 400, 480                               # TikTok/Shorts: інтерфейс зверху й знизу
+        mw = size - 80
+        mh = H - top - bottom
+    elif H != size:                                          # Instagram 4:5: мапа майже на всю ширину
+        top, bottom = 230, 170
         mw = size - 80
         mh = H - top - bottom
     else:

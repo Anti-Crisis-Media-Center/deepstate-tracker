@@ -66,6 +66,8 @@ def ig_feed_image(image: Path) -> Path:
     from PIL import Image
     W, H, inner = 1080, 1350, 900
     src = Image.open(image).convert("RGB")
+    if src.size == (W, H):   # уже 4:5 (мапа змін для Instagram) — без полів
+        return image
     bg = Image.new("RGB", (W, H), (12, 18, 38))  # темно-синій, як краї обкладинки
     bg.paste(src.resize((inner, inner), Image.LANCZOS), ((W - inner) // 2, (H - inner) // 2))
     out = Path(__file__).resolve().parent / "data" / f"ig_{image.stem}.jpg"

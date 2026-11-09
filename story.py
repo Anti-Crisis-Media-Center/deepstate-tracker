@@ -58,31 +58,46 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
         c = tuple(int(NAVY_TOP[i] * (1 - t) + NAVY_BOTTOM[i] * t) for i in range(3))
         grad.line([(0, y), (W, y)], fill=c)
 
-    bg = img.copy()
-    # обкладинка зверху з плавним переходом у фон
-    if cover.exists():
+    d = ImageDraw.Draw(img)
+
+    def paste_cover(compact: bool) -> int:
+        """Обкладинка зверху з плавним переходом у фон; повертає її нижній край.
+        compact — без середини з мапою: лише заголовок і нижня смуга (регіон, «24 години» / «7 днів», лого),
+        щоб для довгого змісту зберегти однаковий вигляд з усіма позначками."""
+        if not cover.exists():
+            return SAFE_TOP
         cv = Image.open(cover).convert("RGB").resize((W, W))
-        mask = Image.new("L", (W, W), 255)
+        if compact:
+            top, bot, blend = cv.crop((0, 0, W, 300)), cv.crop((0, 660, W, 1050)), 60
+            c2 = Image.new("RGB", (W, 300 + 390 - blend))
+            c2.paste(top, (0, 0))
+            m = Image.new("L", (W, 390), 255)
+            mdd = ImageDraw.Draw(m)
+            for i in range(blend):
+                mdd.line([(0, i), (W, i)], fill=int(255 * i / blend))
+            c2.paste(bot, (0, 300 - blend), m)
+            cv = c2
+        h = cv.height
+        mask = Image.new("L", (W, h), 255)
         md = ImageDraw.Draw(mask)
-        fade = 220
+        fade = 120 if compact else 220
         for i in range(fade):
-            md.line([(0, W - fade + i), (W, W - fade + i)], fill=int(255 * (1 - i / fade)))
+            md.line([(0, h - fade + i), (W, h - fade + i)], fill=int(255 * (1 - i / fade)))
         for i in range(90):  # м'який перехід і зверху
             md.line([(0, i), (W, i)], fill=int(255 * i / 90))
         img.paste(cv, (0, SAFE_TOP), mask)
-
-    d = ImageDraw.Draw(img)
+        return SAFE_TOP + h
     max_w = W - 2 * MARGIN
     footer_top = H - 200 - SAFE_BOTTOM - 60          # нижня межа для змісту (над лінією підвалу)
 
     def layout(k: float, draw: bool, y0: int, notes: bool = True) -> int:
         """Малює (або лише міряє) зміст із масштабом шрифтів k; повертає кінцеву y."""
-        f_date, f_label = _font("800", int(46 * k)), _font("800", int(38 * k))
+        f_date, f_label = _font("800", int(62 * k)), _font("800", int(38 * k))
         f_big, f_text, f_note = _font("800", int(104 * k)), _font("500", int(44 * k)), _font("500", int(40 * k))
         y = y0
         if draw:
             d.text((MARGIN, y), date_label, font=f_date, fill=YELLOW)
-        y += int(90 * k)
+        y += int(105 * k)
         for b in blocks:
             if b.get("label"):
                 if draw:
@@ -104,24 +119,29 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
             y += int(30 * k)
         return y
 
-    # якщо змісту багато: зменшуємо шрифт (до 80%), прибираємо «поблизу», піднімаємо зміст на низ обкладинки
+    # Повна обкладинка, якщо зміст уміщається (шрифт можна зменшити до 85%); інакше — компактна обкладинка
+    # (заголовок + смуга з регіоном, «24 години» / «7 днів» і лого), а не обрізана знизу.
+    def fits(y0, notes, k_min):
+        k = 1.0
+        while k > k_min and layout(k, False, y0, notes) > footer_top:
+            k -= 0.05
+        return k if layout(k, False, y0, notes) <= footer_top else None
+
+    full_y0 = W - 40 + SAFE_TOP
+    compact_y0 = SAFE_TOP + 300 + 390 - 60 + 10
     choice = None
-    for y0_try, notes_try in ((W - 40 + SAFE_TOP, True), (W - 40 + SAFE_TOP, False), (W - 230 + SAFE_TOP, True), (W - 230 + SAFE_TOP, False), (W - 380 + SAFE_TOP, True), (W - 380 + SAFE_TOP, False)):
-        k_try = 1.0
-        while k_try > 0.8 and layout(k_try, False, y0_try, notes_try) > footer_top:
-            k_try -= 0.05
-        if layout(k_try, False, y0_try, notes_try) <= footer_top:
-            choice = (y0_try, notes_try, k_try)
+    for compact, y0_try, notes_try, k_min in ((False, full_y0, True, 0.85), (False, full_y0, False, 0.85),
+                                              (True, compact_y0, True, 0.8), (True, compact_y0, False, 0.8),
+                                              (True, compact_y0, False, 0.5)):
+        k_try = fits(y0_try, notes_try, k_min)
+        if k_try is not None:
+            choice = (compact, y0_try, notes_try, k_try)
             break
     if choice is None:
-        k_try = 0.8
-        while k_try > 0.5 and layout(k_try, False, W - 380 + SAFE_TOP, False) > footer_top:
-            k_try -= 0.05
-        choice = (W - 380 + SAFE_TOP, False, k_try)
-    y0, notes, k = choice
-    if y0 < W - 40 + SAFE_TOP:
-        img.paste(bg.crop((0, y0 - 40, W, W + SAFE_TOP)), (0, y0 - 40))
-        d = ImageDraw.Draw(img)
+        choice = (True, compact_y0, False, 0.5)
+    compact, y0, notes, k = choice
+    paste_cover(compact)
+    d = ImageDraw.Draw(img)
     layout(k, True, y0, notes)
 
     # підвал: заклик
