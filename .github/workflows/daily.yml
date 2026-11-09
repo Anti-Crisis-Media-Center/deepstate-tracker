@@ -42,6 +42,7 @@ jobs:
       - name: Порівняти карти і опублікувати
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}   # запасне розміщення мапи для Threads (GitHub Releases)
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
           FB_TELEGRAM_LINK: ${{ secrets.FB_TELEGRAM_LINK }}

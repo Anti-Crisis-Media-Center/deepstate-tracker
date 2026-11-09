@@ -1802,11 +1802,36 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         return None
 
 
+def _release_image(img: Path) -> str:
+    """Запасне публічне посилання на мапу: GitHub Releases (тег maps), лишаємо 10 останніх."""
+    import json as _json
+    import subprocess
+    repo = os.getenv("GITHUB_REPOSITORY", "Anti-Crisis-Media-Center/deepstate-tracker")
+    name = f"map_{datetime.now():%Y%m%d_%H%M%S}.jpg"
+    dst = img.with_name(name)
+    dst.write_bytes(img.read_bytes())
+    if subprocess.run(["gh", "release", "view", "maps", "-R", repo], capture_output=True).returncode:
+        subprocess.run(["gh", "release", "create", "maps", "-R", repo, "--title", "Мапи (тимчасові файли)",
+                        "--notes", "Запасні копії мап для Threads. Бот зберігає лише 10 останніх."], check=True)
+    subprocess.run(["gh", "release", "upload", "maps", str(dst), "-R", repo, "--clobber"], check=True)
+    assets = _json.loads(subprocess.run(["gh", "release", "view", "maps", "-R", repo, "--json", "assets"],
+                                        check=True, capture_output=True, text=True).stdout)["assets"]
+    for a in sorted(assets, key=lambda a: a["name"])[:-10]:
+        subprocess.run(["gh", "release", "delete-asset", "maps", a["name"], "-R", repo, "-y"], check=False)
+    return f"https://github.com/{repo}/releases/download/maps/{name}"
+
+
 def threads_url_for(img: Path) -> str | None:
-    """Threads бере картинку за публічною адресою: згенеровану мапу спершу завантажуємо у Facebook."""
+    """Threads бере картинку за публічною адресою: мапу завантажуємо у Facebook,
+    а якщо там збій (напр., токен) — у GitHub Releases. Тоді мапа в Threads не зникає."""
     try:
         pid, ptok = fb_page_credentials()
-        return ig_api._public_url(FB_GRAPH, pid, ptok, img) if pid and ptok else None
+        if pid and ptok:
+            return ig_api._public_url(FB_GRAPH, pid, ptok, img)
+    except Exception as e:  # noqa: BLE001
+        log(f"Threads: мапу через Facebook не підготовлено — {e}; пробую GitHub")
+    try:
+        return _release_image(img)
     except Exception as e:  # noqa: BLE001
         log(f"Threads: не вдалося підготувати мапу — {e}")
         return None
