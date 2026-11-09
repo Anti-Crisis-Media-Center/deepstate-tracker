@@ -47,7 +47,7 @@ def _pad(seconds: float, chords, chord_sec: float = 4.0) -> np.ndarray:
         bass, notes = chords[i % len(chords)]
         n = int((chord_sec + 1.5) * SR)
         t = np.arange(n) / SR
-        tone = 0.5 * np.sin(2 * np.pi * N[bass] * t)
+        tone = 0.22 * np.sin(2 * np.pi * N[bass] * 2 * t)   # бас — на октаву вище і тихіше: на телефоні не «деренчить»
         for nm in notes:
             f = N[nm]
             tone += 0.35 * (np.sin(2 * np.pi * f * t) + np.sin(2 * np.pi * f * 1.003 * t)) / 2
@@ -89,7 +89,7 @@ def _piano(seconds: float, bpm: float = 58) -> np.ndarray:
     pattern = [0, 2, 1, 3, 2, 1]                       # повільний «перебір», по пів долі
     while pos < seconds:
         bass, notes = PIANO[bar % len(PIANO)]
-        b = _soft_key(N[bass], beat * 4 + 2, 0.5)
+        b = _soft_key(N[bass] * 2, beat * 4 + 2, 0.28)
         i0 = int(pos * SR)
         mix[i0:i0 + len(b)] += b[: max(0, total - i0)]
         for k, idx in enumerate(pattern):
@@ -110,6 +110,10 @@ def make_ambient(seconds: float, out: Path, variant: int | str | None = None) ->
         variant = datetime.date.today().isocalendar()[1]
     name = variant if isinstance(variant, str) else ROTATION[variant % len(ROTATION)]
     mix = _piano(seconds) if name == "piano" else _pad(seconds, PADS[name])
+    # чистий звук: прибираємо глибокі низи (динаміки телефонів на них тріщать) і різкі верхи
+    hp = np.convolve(mix, np.ones(300) / 300, mode="same")      # усе нижче ~150 Гц
+    mix = mix - hp
+    mix = np.convolve(mix, np.ones(9) / 9, mode="same")         # м'якше вгорі (~4 кГц)
     mix *= _env(len(mix), 1.5, 2.0)
     mix = mix / (np.abs(mix).max() + 1e-9) * (0.24 if name == "piano" else 0.18)
     stereo = np.stack([mix, np.roll(mix, int(0.012 * SR))], axis=1)
