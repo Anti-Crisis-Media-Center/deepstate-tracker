@@ -1254,28 +1254,28 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     dates = [r["date"] for r in rows]
     names = place_names(dates)
     occ, free = _period_totals(rows, "donetsk")
-    y = TOP + 290                     # текст — між заголовком обкладинки і смугою «Донеччина · Луганщина»
+    y = TOP + 300                     # текст — між заголовком обкладинки і смугою «Донеччина · Луганщина»
     word = "за тиждень" if kind == "week" else "за місяць"
     if names:
         single_city = len(names) == 1 and names[0] in CITY_GENITIVE
-        centered("Біля" if single_city else "Поблизу:", f500(40), y, white)
+        centered("Біля" if single_city else "Поблизу:", f500(36), y, white)
         line = CITY_GENITIVE[names[0]] if single_city else " · ".join(names)
         rows_ = [line]
-        if d.textlength(line, font=f800(72)) > 920 and len(names) > 2:   # три назви — на два рядки
+        if d.textlength(line, font=f800(62)) > 920 and len(names) > 2:   # три назви — на два рядки
             rows_ = [" · ".join(names[:2]), names[2]]
-        fs = 68 if len(rows_) > 1 else 76
+        fs = 58 if len(rows_) > 1 else 64
         while max(d.textlength(r_, font=f800(fs)) for r_ in rows_) > 920 and fs > 48:
             fs -= 4
         for ri, r_ in enumerate(rows_):
-            centered(r_, f800(fs), y + 52 + ri * (fs + 8), white)
-        y += 52 + len(rows_) * (fs + 8) + 6
-    big = 104 if names and len(names) > 2 else 118
+            centered(r_, f800(fs), y + 48 + ri * (fs + 8), white)
+        y += 48 + len(rows_) * (fs + 8) + 14
+    big = 88 if names and len(names) > 2 else 96
     if occ >= 0.01 and free >= 0.01:
         centered(f"{fmt_km2(occ)} км² · {fmt_km2(free)} км²", f800(80), y, yel)
         centered(f"позначено окупованими · деокупованими {word}", f500(34), y + 92, white)
     elif occ >= 0.01 or free >= 0.01:
         centered(f"{fmt_km2(max(occ, free))} км²", f800(big), y, yel)
-        centered(f"позначено {'окупованими' if occ >= 0.01 else 'деокупованими'} {word}", f500(38), y + big + 12, white)
+        centered(f"позначено {'окупованими' if occ >= 0.01 else 'деокупованими'} {word}", f500(36), y + big + 14, white)
     else:
         centered("без змін", f800(100), y, yel)
     img.save(out, "JPEG", quality=92)

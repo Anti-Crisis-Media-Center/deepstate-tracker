@@ -14,7 +14,15 @@ SR = 44100
 # частоти нот (Гц)
 N = {"A2": 110.0, "C3": 130.81, "E3": 164.81, "F2": 87.31, "G2": 98.0, "A3": 220.0, "C4": 261.63,
      "E4": 329.63, "F3": 174.61, "G3": 196.0, "B3": 246.94, "D4": 293.66}
-CHORDS = [("A2", ["A3", "C4", "E4"]), ("F2", ["F3", "A3", "C4"]), ("C3", ["G3", "C4", "E4"]), ("G2", ["G3", "B3", "D4"])]
+N.update({"D3": 146.83, "E2": 82.41, "F4": 349.23, "G4": 392.0, "A4": 440.0, "D2": 73.42, "B2": 123.47})
+# Кілька спокійних мінорних варіантів — бот чергує їх за номером тижня, щоб не звучало однаково
+VARIANTS = [
+    [("A2", ["A3", "C4", "E4"]), ("F2", ["F3", "A3", "C4"]), ("C3", ["G3", "C4", "E4"]), ("G2", ["G3", "B3", "D4"])],
+    [("D2", ["D4", "F4", "A4"]), ("B2", ["B3", "D4", "F4"]), ("F2", ["F3", "A3", "C4"]), ("A2", ["A3", "C4", "E4"])],
+    [("E2", ["E3", "G3", "B3"]), ("C3", ["C4", "E4", "G4"]), ("G2", ["G3", "B3", "D4"]), ("D3", ["D4", "F4", "A4"])],
+    [("A2", ["A3", "C4", "E4"]), ("D3", ["D4", "F4", "A4"]), ("F2", ["F3", "A3", "C4"]), ("E2", ["E3", "G3", "B3"])],
+]
+CHORDS = VARIANTS[0]
 
 
 def _env(n: int, attack: float, release: float) -> np.ndarray:
@@ -25,13 +33,17 @@ def _env(n: int, attack: float, release: float) -> np.ndarray:
     return e
 
 
-def make_ambient(seconds: float, out: Path, chord_sec: float = 4.0) -> Path:
+def make_ambient(seconds: float, out: Path, chord_sec: float = 4.0, variant: int | None = None) -> Path:
+    if variant is None:
+        import datetime
+        variant = datetime.date.today().isocalendar()[1]
+    chords = VARIANTS[variant % len(VARIANTS)]
     total = int(seconds * SR) + SR
     mix = np.zeros(total)
     t0 = 0
     i = 0
     while t0 < total:
-        bass, notes = CHORDS[i % len(CHORDS)]
+        bass, notes = chords[i % len(chords)]
         n = int((chord_sec + 1.5) * SR)          # акорди трохи накладаються — плавні переходи
         t = np.arange(n) / SR
         tone = 0.5 * np.sin(2 * np.pi * N[bass] * t)

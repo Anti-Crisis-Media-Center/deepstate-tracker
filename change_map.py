@@ -363,7 +363,13 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     while tsz > 34 and max(d.textlength(ln, font=_font("800", tsz)) for ln in lines) > size - 120:
         tsz -= 2
     for li, ln in enumerate(lines):
-        d.text((60, ty0 + (66 if vertical else 58) - tsz + li * (tsz + 10)), ln, font=_font("800", tsz), fill=NEW)
+        yy = ty0 + (66 if vertical else 58) - tsz + li * (tsz + 10)
+        if li == 0 and ln.startswith("Поблизу: "):   # «Поблизу:» — нежирним, назви — жирним
+            d.text((60, yy), "Поблизу: ", font=_font("500", tsz), fill=NEW)
+            d.text((60 + d.textlength("Поблизу: ", font=_font("500", tsz)), yy), ln[len("Поблизу: "):],
+                   font=_font("800", tsz), fill=NEW)
+        else:
+            d.text((60, yy), ln, font=_font("800", tsz), fill=NEW)
     if len(lines) > 1:
         ty0 += 62   # підзаголовок — нижче, над мапою
     ssz = 40
