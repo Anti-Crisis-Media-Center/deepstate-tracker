@@ -38,6 +38,8 @@ jobs:
           cache: pip
 
       - run: pip install -r requirements.txt
+      - name: ffmpeg для відео
+        run: command -v ffmpeg || (sudo apt-get update -q && sudo apt-get install -y -q ffmpeg)
 
       - name: Порівняти карти і опублікувати
         env:
