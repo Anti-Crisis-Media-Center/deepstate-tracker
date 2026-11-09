@@ -1,9 +1,9 @@
 """Фонова музика для відео — власна, згенерована тут же (без чужих треків, прав і ліцензій).
 
-Стиль — спокійне «кінематографічне» фортепіано: м'які арпеджіо з довгим відлунням, світлий настрій
-(не похмурий), як у популярних фортепіанних треках для коротких відео. Мелодії — власні: звичайні
-гармонічні послідовності, розкладені на арпеджіо; жоден відомий твір не відтворюється.
-Чотири варіанти (різні тональності й малюнки) — бот чергує їх щотижня.
+Два стилі:
+  pad   — спокійний мінорний «пад» (м'які протяжні акорди з плавними переходами);
+  piano — приглушене, розмите фортепіано в мінорі (м'які клавіші, довге відлуння).
+Бот чергує варіанти зі списку ROTATION щотижня.
 """
 from __future__ import annotations
 
@@ -13,83 +13,106 @@ from pathlib import Path
 import numpy as np
 
 SR = 44100
-A4 = 440.0
-NOTE = {"C": -9, "C#": -8, "D": -7, "D#": -6, "E": -5, "F": -4, "F#": -3, "G": -2, "G#": -1, "A": 0, "A#": 1, "B": 2}
+N = {"A2": 110.0, "C3": 130.81, "E3": 164.81, "F2": 87.31, "G2": 98.0, "A3": 220.0, "C4": 261.63,
+     "E4": 329.63, "F3": 174.61, "G3": 196.0, "B3": 246.94, "D4": 293.66, "D3": 146.83, "E2": 82.41,
+     "F4": 349.23, "G4": 392.0, "A4": 440.0, "D2": 73.42, "B2": 123.47, "G#3": 207.65, "C5": 523.25,
+     "B4": 493.88, "E5": 659.25, "D5": 587.33, "A#2": 116.54, "A#3": 233.08}
+
+# Пади: (бас, ноти акорду), по 4 с на акорд, з накладанням — плавні переходи
+PADS = {
+    "pad1": [("A2", ["A3", "C4", "E4"]), ("F2", ["F3", "A3", "C4"]), ("C3", ["G3", "C4", "E4"]), ("G2", ["G3", "B3", "D4"])],
+    "pad2": [("A2", ["A3", "C4", "E4"]), ("F2", ["F3", "A3", "C4"]), ("D2", ["D4", "F4", "A3"]), ("E2", ["E3", "G#3", "B3"])],
+    "pad3": [("D2", ["D4", "F4", "A3"]), ("A#2", ["A#3", "D4", "F4"]), ("F2", ["F3", "A3", "C4"]), ("A2", ["A3", "C4", "E4"])],
+}
+# Приглушене фортепіано: акорди (бас, ноти), малюнок — повільні розкладені ноти
+PIANO = [("A2", ["A3", "C4", "E4", "A4"]), ("F2", ["F3", "A3", "C4", "F4"]),
+         ("C3", ["C4", "E4", "G4", "C5"]), ("E2", ["E3", "G#3", "B3", "E4"])]
+
+ROTATION = ["pad1", "pad2", "piano"]   # за номером тижня
 
 
-def _hz(semi: int) -> float:
-    return A4 * 2 ** (semi / 12)
+def _env(n: int, attack: float, release: float) -> np.ndarray:
+    e = np.ones(n)
+    a, r = int(attack * SR), int(release * SR)
+    e[:a] = np.linspace(0, 1, a) ** 2
+    e[-r:] = np.linspace(1, 0, r) ** 2
+    return e
 
 
-def n(name: str, octave: int) -> int:
-    return NOTE[name] + 12 * (octave - 4)
+def _pad(seconds: float, chords, chord_sec: float = 4.0) -> np.ndarray:
+    total = int(seconds * SR) + SR
+    mix = np.zeros(total)
+    t0, i = 0, 0
+    while t0 < total:
+        bass, notes = chords[i % len(chords)]
+        n = int((chord_sec + 1.5) * SR)
+        t = np.arange(n) / SR
+        tone = 0.5 * np.sin(2 * np.pi * N[bass] * t)
+        for nm in notes:
+            f = N[nm]
+            tone += 0.35 * (np.sin(2 * np.pi * f * t) + np.sin(2 * np.pi * f * 1.003 * t)) / 2
+        tone *= _env(n, 1.2, 1.8)
+        end = min(total, t0 + n)
+        mix[t0:end] += tone[: end - t0]
+        t0 += int(chord_sec * SR)
+        i += 1
+    mix = mix[: int(seconds * SR)]
+    return np.convolve(mix, np.ones(40) / 40, mode="same")
 
 
-def chord(root: str, kind: str, octave: int = 3) -> list[int]:
-    r = n(root, octave)
-    steps = {"maj": [0, 4, 7], "min": [0, 3, 7], "sus2": [0, 2, 7], "add9": [0, 4, 7, 14]}[kind]
-    return [r + s for s in steps]
-
-
-# (акорди, малюнок арпеджіо — індекси нот акорду, темп BPM)
-VARIANTS = [
-    ([("C", "maj"), ("G", "maj"), ("A", "min"), ("F", "maj")], [0, 1, 2, 3, 2, 1, 2, 3], 76),   # C — світлий
-    ([("G", "maj"), ("D", "maj"), ("E", "min"), ("C", "add9")], [0, 2, 1, 3, 2, 3, 1, 2], 72),  # G — теплий
-    ([("F", "maj"), ("A", "min"), ("D", "min"), ("C", "sus2")], [0, 1, 2, 1, 3, 1, 2, 1], 70),  # F — м'який
-    ([("D", "maj"), ("A", "maj"), ("B", "min"), ("G", "maj")], [0, 2, 3, 2, 1, 2, 3, 2], 78),   # D — надійний
-]
-
-
-def _piano(freq: float, dur: float, vel: float) -> np.ndarray:
-    """М'який фортепіанний тон: гармоніки з різним загасанням."""
+def _soft_key(freq: float, dur: float, vel: float) -> np.ndarray:
+    """Приглушена клавіша: майже без верхніх гармонік, м'який наступ, довге загасання."""
     t = np.arange(int(dur * SR)) / SR
-    tone = np.zeros_like(t)
-    for h, amp, dec in ((1, 1.0, 1.6), (2, 0.42, 2.4), (3, 0.18, 3.4), (4, 0.09, 4.5), (5, 0.04, 6.0)):
-        f = freq * h * (1 + 0.0004 * h * h)
-        tone += amp * np.sin(2 * np.pi * f * t) * np.exp(-dec * t)
-    attack = np.clip(t / 0.006, 0, 1)
-    rel = np.clip((dur - t) / 0.25, 0, 1)
+    tone = (np.sin(2 * np.pi * freq * t) * np.exp(-0.9 * t)
+            + 0.18 * np.sin(2 * np.pi * freq * 2.001 * t) * np.exp(-1.8 * t)
+            + 0.05 * np.sin(2 * np.pi * freq * 3.003 * t) * np.exp(-3.0 * t))
+    attack = np.clip(t / 0.03, 0, 1) ** 1.5           # без різкого удару
+    rel = np.clip((dur - t) / 0.6, 0, 1)
     return tone * attack * rel * vel
 
 
-def _reverb(x: np.ndarray, seconds: float = 2.4, mix: float = 0.32) -> np.ndarray:
-    rng = np.random.default_rng(3)
+def _reverb(x: np.ndarray, seconds: float = 3.2, mix: float = 0.5) -> np.ndarray:
+    rng = np.random.default_rng(5)
     L = int(seconds * SR)
-    ir = rng.standard_normal(L) * np.exp(-np.linspace(0, 7, L))
-    ir = np.convolve(ir, np.ones(30) / 30, mode="same")
+    ir = rng.standard_normal(L) * np.exp(-np.linspace(0, 6, L))
+    ir = np.convolve(ir, np.ones(60) / 60, mode="same")
     size = 1 << int(np.ceil(np.log2(len(x) + L)))
     wet = np.fft.irfft(np.fft.rfft(x, size) * np.fft.rfft(ir, size), size)[: len(x)]
     return (1 - mix) * x + mix * wet / (np.abs(wet).max() + 1e-9) * np.abs(x).max()
 
 
-def make_ambient(seconds: float, out: Path, variant: int | None = None) -> Path:
-    if variant is None:
-        import datetime
-        variant = datetime.date.today().isocalendar()[1]
-    prog, pattern, bpm = VARIANTS[variant % len(VARIANTS)]
-    eighth = 60 / bpm / 2
-    total = int((seconds + 3) * SR)
+def _piano(seconds: float, bpm: float = 58) -> np.ndarray:
+    beat = 60 / bpm
+    total = int((seconds + 4) * SR)
     mix = np.zeros(total)
     pos, bar = 0.0, 0
+    pattern = [0, 2, 1, 3, 2, 1]                       # повільний «перебір», по пів долі
     while pos < seconds:
-        root, kind = prog[bar % len(prog)]
-        ch = chord(root, kind, 3) + [chord(root, kind, 4)[0]]
-        b = _piano(_hz(n(root, 2)), eighth * 8 + 1.0, 0.55)
+        bass, notes = PIANO[bar % len(PIANO)]
+        b = _soft_key(N[bass], beat * 4 + 2, 0.5)
         i0 = int(pos * SR)
         mix[i0:i0 + len(b)] += b[: max(0, total - i0)]
         for k, idx in enumerate(pattern):
-            s = _piano(_hz(ch[idx % len(ch)] + 12), eighth * 3, 0.42 if k % 4 == 0 else 0.30)
-            j = int((pos + k * eighth) * SR)
+            s = _soft_key(N[notes[idx]], beat * 2.5, 0.30 if k else 0.36)
+            j = int((pos + k * beat * 4 / len(pattern)) * SR)
             if j < total:
                 mix[j:j + len(s)] += s[: total - j]
-        pos += eighth * 8
+        pos += beat * 4
         bar += 1
-    mix = _reverb(mix[: int(seconds * SR)])
-    fi, fo = int(0.4 * SR), int(2.0 * SR)
-    mix[:fi] *= np.linspace(0, 1, fi)
-    mix[-fo:] *= np.linspace(1, 0, fo) ** 1.5
-    mix = mix / (np.abs(mix).max() + 1e-9) * 0.30
-    stereo = np.stack([mix, np.roll(mix, int(0.009 * SR))], axis=1)
+    mix = mix[: int(seconds * SR)]
+    mix = np.convolve(mix, np.ones(25) / 25, mode="same")   # ще м'якше — «розмито»
+    return _reverb(mix)
+
+
+def make_ambient(seconds: float, out: Path, variant: int | str | None = None) -> Path:
+    if variant is None:
+        import datetime
+        variant = datetime.date.today().isocalendar()[1]
+    name = variant if isinstance(variant, str) else ROTATION[variant % len(ROTATION)]
+    mix = _piano(seconds) if name == "piano" else _pad(seconds, PADS[name])
+    mix *= _env(len(mix), 1.5, 2.0)
+    mix = mix / (np.abs(mix).max() + 1e-9) * (0.24 if name == "piano" else 0.18)
+    stereo = np.stack([mix, np.roll(mix, int(0.012 * SR))], axis=1)
     data = (np.clip(stereo, -1, 1) * 32767).astype("<i2")
     with wave.open(str(out), "wb") as w:
         w.setnchannels(2)

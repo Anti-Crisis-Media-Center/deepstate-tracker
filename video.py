@@ -81,7 +81,8 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         dur = len(seq) / FPS
         try:   # тиха фонова музика, згенерована тут же (без чужих треків)
             from music import make_ambient
-            audio = ["-i", str(make_ambient(dur, Path(td) / "music.wav"))]
+            import os
+            audio = ["-i", str(make_ambient(dur, Path(td) / "music.wav", os.getenv("MUSIC_VARIANT") or None))]
         except Exception:  # noqa: BLE001
             audio = ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", f"{td}/f%04d.jpg",
