@@ -1121,6 +1121,22 @@ def _nearest_city_geom(g, max_km: float = 20.0) -> str | None:
     return min(cands)[2] if cands else None
 
 
+_ALL_POINTS: list | None = None
+
+
+def _nearest_settlement_geom(g) -> str | None:
+    """Найближчий населений пункт будь-якого розміру (з тієї ж області)."""
+    global _ALL_POINTS
+    from shapely.geometry import shape
+    if _ALL_POINTS is None:
+        feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
+        _ALL_POINTS = [(x["properties"]["ADM4_UA"], shape(x["geometry"]).centroid) for x in feats]
+    k = math.cos(math.radians(g.centroid.y))
+    c = g.centroid
+    best = min(_ALL_POINTS, key=lambda t: (g.distance(t[1]), math.hypot((c.x - t[1].x) * k, c.y - t[1].y)))
+    return best[0]
+
+
 def place_names(dates: list[str], key: str = "donetsk", n: int = 3) -> list[str]:
     """ЄДИНИЙ список назв для всіх місць (перший кадр, заголовок мапи, останній кадр, сторіз).
     Беремо лише те, що лишилося на кінець періоду (без «позначили й зняли»): кожну окрему ділянку
@@ -1137,7 +1153,8 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 3) -> list[str]
         parts = list(getattr(u, "geoms", [u]))
         score: dict[str, float] = {}
         for g in parts:
-            name = _nearest_city_geom(g)
+            # місто — лише якщо ближче 10 км; інакше найближчий населений пункт (рішення 9.11.2026)
+            name = _nearest_city_geom(g, max_km=10.0) or _nearest_settlement_geom(g)
             if name:
                 score[name] = score.get(name, 0) + g.area
         return sorted(score, key=score.get, reverse=True)[:n]
@@ -1151,7 +1168,7 @@ def names_title(names: list[str]) -> str:
     if not names:
         return ""
     if len(names) == 1:
-        return "Біля " + CITY_GENITIVE.get(names[0], names[0])
+        return ("Біля " + CITY_GENITIVE[names[0]]) if names[0] in CITY_GENITIVE else "Поблизу: " + names[0]
     return "Поблизу: " + " · ".join(names)
 
 
@@ -1239,8 +1256,9 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     occ, free = _period_totals(rows, "donetsk")
     y = TOP + 325
     if names:
-        centered("Поблизу:" if len(names) > 1 else "Біля", f500(46), y, white)
-        line = " · ".join(names) if len(names) > 1 else CITY_GENITIVE.get(names[0], names[0])
+        single_city = len(names) == 1 and names[0] in CITY_GENITIVE
+        centered("Біля" if single_city else "Поблизу:", f500(46), y, white)
+        line = CITY_GENITIVE[names[0]] if single_city else " · ".join(names)
         fs = 80
         while d.textlength(line, font=f800(fs)) > 920 and fs > 52:
             fs -= 4
@@ -1296,7 +1314,7 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
         y += 70
         nm = place_names([r["date"] for r in rows], k)
         if nm:
-            centered(("біля " + CITY_GENITIVE.get(nm[0], nm[0])) if len(nm) == 1 else "поблизу: " + " · ".join(nm),
+            centered(("біля " + CITY_GENITIVE[nm[0]]) if len(nm) == 1 and nm[0] in CITY_GENITIVE else "поблизу: " + " · ".join(nm),
                      f500(38), y, grey)
             y += 60
         y += 20
