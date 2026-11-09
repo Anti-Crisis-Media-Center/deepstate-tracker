@@ -142,7 +142,8 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url
         return True
     try:
         uid = _user_id()
-        cover = globals()["image_url"](image) if image.exists() else None
+        c45 = image.with_name(image.stem + "_45.jpg")   # обкладинка 4:5 — під мапу 4:5 у каруселі
+        cover = globals()["image_url"](c45 if (image_url and c45.exists()) else image) if image.exists() else None
         if image_url and cover:
             try:
                 post_id = _carousel(uid, [cover, image_url], text)

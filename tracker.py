@@ -1796,6 +1796,11 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
                                       height=1920, must_label=pn, **kw)
                 except Exception as e:  # noqa: BLE001
                     log(f"Вертикальна мапа для відео: {e}")
+        try:   # 4:5 — для Threads: у каруселі видно край наступної картки
+            change_map.render(files, DATA / out_name.replace(".jpg", "_45.jpg"), title, sub, oblast_key=key,
+                              height=1350, must_label=pn)
+        except Exception as e:  # noqa: BLE001
+            log(f"Мапа 4:5: {e}")
         return change_map.render(files, DATA / out_name, title, sub, oblast_key=key, must_label=pn)
     except Exception as e:  # noqa: BLE001
         log(f"Мапа змін: не вдалося — {e}")
@@ -1822,8 +1827,11 @@ def _release_image(img: Path) -> str:
 
 
 def threads_url_for(img: Path) -> str | None:
-    """Threads бере картинку за публічною адресою: мапу завантажуємо у Facebook,
-    а якщо там збій (напр., токен) — у GitHub Releases. Тоді мапа в Threads не зникає."""
+    """4:5-версію мапи (якщо є) віддаємо в Threads. Threads бере картинку за публічною адресою: мапу завантажуємо у Facebook,
+    а якщо там збій (напр., токен) — у GitHub Releases. Тоді мапа в Threads не зникає.
+    Беремо версію 4:5 (_45.jpg), якщо вона є: у каруселі Threads тоді видно край наступної картки."""
+    v45 = img.with_name(img.stem + "_45.jpg")
+    img = v45 if v45.exists() else img
     try:
         pid, ptok = fb_page_credentials()
         if pid and ptok:

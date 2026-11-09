@@ -175,7 +175,8 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     height=None — квадрат для дописів; height=1920 — вертикальна мапа для відео (TikTok/Shorts),
     з полями під інтерфейс платформ зверху і знизу."""
     H = height or size
-    vertical = H != size
+    vertical = H >= 1600          # TikTok/Shorts 9:16
+    portrait = H != size and not vertical   # 4:5 (1080×1350) — Threads/Instagram: як квадрат, лише вища мапа
     steps = _load_steps(change_files, oblast_key)
     if not steps:
         return None
@@ -222,6 +223,9 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         top, bottom = 400, 480                               # TikTok/Shorts: інтерфейс зверху й знизу
         mw = size - 80
         mh = H - top - bottom
+    elif portrait:
+        top, bottom = 230, 170
+        mw, mh = size - 80, H - 230 - 170
     else:
         top, bottom = 230, 170                               # місце під заголовок і підпис
         mh = mw = size - top - bottom
