@@ -848,6 +848,8 @@ def send_fb_teaser(text: str, image: Path) -> None:
 MONTHS_GEN = ["січня", "лютого", "березня", "квітня", "травня", "червня",
               "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"]
 STORY_LABELS = {"donetsk": "ДОНЕЧЧИНА", "luhansk": "ЛУГАНЩИНА"}
+IG_DAILY_POSTS = os.getenv("IG_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку Instagram вимкнено
+# (9.11.2026): щоб сітка профілю не складалася з однакових мап. Щодня — лише сторіз; у стрічку — тиждень і місяць.
 FB_STORIES = os.getenv("FB_STORIES", "1") != "0"  # сторіз у Facebook увімкнено (4.11.2026)
 
 
@@ -1729,7 +1731,7 @@ def main() -> int:
         step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN,
                                                  image_url=threads_url_for(day_map) if day_map else None))
     step("TikTok-позначка", lambda: tiktok_daily_flag(results, grey))
-    if not quiet:
+    if not quiet and IG_DAILY_POSTS:
         step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(),
                                               fb_text + "\n\n" + _tiktok_tags(day_places, lug),
                                               COVER_IMAGE, log, alert, DRY_RUN,
