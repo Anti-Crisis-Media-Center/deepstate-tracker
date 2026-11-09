@@ -617,7 +617,8 @@ def esc(text: str) -> str:
     return html.escape(text, quote=False)
 
 
-SHORT_NOTE = SOURCE_LINE + "\n<i>Автоматичний аналіз мапи DeepState, не офіційне джерело.</i>"
+SHORT_NOTE = (SOURCE_LINE + "\n\n<blockquote><i>Примітка: це автоматичне зведення змін на мапі DeepState. "
+              "DeepState не є офіційним джерелом інформації.</i></blockquote>")
 
 
 def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None) -> str:
@@ -1462,7 +1463,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
             nets[k] = round(_f(last[f"{k}_occupied_km2"]) - (_f(first[f"{k}_occupied_km2"])
                             - _f(first[f"{k}_newly_occupied_km2"]) + _f(first[f"{k}_deoccupied_km2"])), 2)
         mp = make_change_map(s["kind"], [r["date"] for r in rows], nets, rows_places, f"map_{s['kind']}.jpg")
-        publish(text, mp or s["image"])
+        publish(text, s["image"])   # у Telegram — завжди фірмова обкладинка (рішення Юлі 9.11): там читають текст
         done[s["kind"]] = today          # підсумок у Telegram вийшов — повтору не буде
         if save:
             save()
@@ -1703,7 +1704,7 @@ def main() -> int:
 
     day_map = make_change_map("day", [today], {k: results[k]["newly_km2"] - results[k]["deocc_km2"] for k in OBLASTS},
                               {k: results[k]["newly_places"] + results[k]["deocc_places"] for k in OBLASTS}, "map_day.jpg")
-    publish(text, day_map or COVER_IMAGE, silent=True)  # усі пости в Telegram — без звуку
+    publish(text, COVER_IMAGE, silent=True)  # без звуку; завжди фірмова обкладинка (рішення Юлі 9.11)
     # Позначаємо «опубліковано» одразу після Telegram: якщо далі щось впаде,
     # запасний запуск не повторить пост ще раз.
     new_state["published"] = True
