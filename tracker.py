@@ -778,6 +778,7 @@ def fb_page_credentials() -> tuple[str, str]:
     return result
 
 
+FB_DAILY_POSTS = os.getenv("FB_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку білої сторінки
 FB_POSTS = os.getenv("FB_POSTS", "1") == "1"   # 0 — на сторінці лише сторіз, без дописів у стрічку
 
 
@@ -1476,7 +1477,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
                 alert(f"{name} (підсумок): {e}")
 
         fb_text = build_fb_summary_teaser(s["kind"], rows, s.get("label"))
-        step("Facebook", lambda: send_fb_teaser(fb_text, mp or s["image"]))
+        step("Facebook", lambda: send_fb_teaser(fb_text, s["image"]))   # фірмова обкладинка (рішення Юлі 9.11)
         step("Threads", lambda: threads_api.post(fb_text, s["image"], log, alert, DRY_RUN,
                                                  image_url=threads_url_for(mp) if mp else None))
         ig_text = fb_text + "\n\n" + _tiktok_tags(_rows_places(rows), _rows_luhansk_changed(rows))
@@ -1726,7 +1727,10 @@ def main() -> int:
     if quiet:  # день без змін: у стрічки соцмереж не публікуємо, лише сторіз
         log("Змін немає — дописи у Facebook, Instagram і Threads пропускаємо, лише сторіз.")
     else:
-        step("Facebook", lambda: send_fb_teaser(fb_text, day_map or COVER_IMAGE))
+        if FB_DAILY_POSTS:   # щоденні дописи в стрічку білої сторінки вимкнено (рішення Юлі 9.11)
+            step("Facebook", lambda: send_fb_teaser(fb_text, day_map or COVER_IMAGE))
+        else:
+            log("Facebook: щоденні дописи в стрічку вимкнено (FB_DAILY_POSTS=0), лише сторіз.")
         step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN,
                                                  image_url=threads_url_for(day_map) if day_map else None))
     step("TikTok-позначка", lambda: tiktok_daily_flag(results, grey))
