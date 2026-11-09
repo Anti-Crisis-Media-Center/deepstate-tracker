@@ -146,7 +146,7 @@ MONTHS_UA = ["січень", "лютий", "березень", "квітень",
 SOURCE_LINE = 'За даними <a href="https://deepstatemap.live">DeepStateMap.live</a>'
 EDITOR_NOTE = (
     SOURCE_LINE + "\n\n"
-    "<blockquote><i>Примітка редакції: це автоматизований аналіз змін на мапі "
+    "<blockquote expandable><i>Примітка редакції: це автоматизований аналіз змін на мапі "
     "DeepState. Він показує, як змінилися позначення на мапі порівняно з "
     "попередньою версією, але не підтверджує фактичну зміну лінії фронту в "
     "реальному часі. DeepState не є офіційним джерелом інформації.</i></blockquote>"
@@ -656,24 +656,30 @@ SHORT_NOTE = (SOURCE_LINE + "\n\n<blockquote><i>Примітка: це авто�
               "DeepState не є офіційним джерелом інформації.</i></blockquote>")
 
 
-def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None) -> str:
+def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None,
+               names: dict | None = None) -> str:
+    """Щоденне зведення для Telegram. Стиль як у Threads/Facebook: дата в заголовку, коротко,
+    без канцеляриту; назви — ті самі, що на мапі; рядок про повідомлення DeepState — лише якщо вони є."""
+    names = names or {}
+    head = f"<b>DeepState: зміни за добу, {period}</b>"
     quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] and not results[k]["grey_km2"]
                  for k in OBLASTS)
              and not messages and not any(((grey or {}).get(k) or {}).get("cities") for k in OBLASTS))
     if quiet:  # день без змін — коротка версія
-        return "\n".join(["<b>DeepState: зміни за добу</b>", "", f"Період: {period}", "",
-                          "За добу змін позначень на Донеччині й Луганщині не зафіксовано. "
-                          "Повідомлень DeepState про ці області не було.", "", SHORT_NOTE])
-    lines = ["<b>DeepState: зміни за добу</b>", "", f"Період: {period}", ""]
+        return "\n".join([head, "", "Донеччина й Луганщина: за добу на мапі DeepState без змін.", "", SHORT_NOTE])
+    lines = [head, ""]
     for key, cfg in OBLASTS.items():
         r = results[key]
         parts = []
+        nm = names.get(key) or []
         if r["newly_km2"] > 0:
-            parts.append(change_sentence(r["newly_km2"], "окуповані", r["newly_places"]))
+            near = tg_near(nm, r["newly_places"])
+            parts.append(f"{fmt_km2(r['newly_km2'])} км² позначено окупованими" + (f" — {near}" if near else "") + ".")
         if r["deocc_km2"] > 0:
-            parts.append(change_sentence(r["deocc_km2"], "деокуповані", r["deocc_places"]))
+            near = tg_near([] if r["newly_km2"] > 0 else nm, r["deocc_places"])
+            parts.append(f"{fmt_km2(r['deocc_km2'])} км² позначено деокупованими" + (f" — {near}" if near else "") + ".")
         if r.get("grey_km2", 0) > 0:   # червоне стало сірим — не деокупація
-            g = (f"ще {fmt_km2(r['grey_km2'])} км², раніше позначених окупованими, тепер позначено як район "
+            g = (f"Ще {fmt_km2(r['grey_km2'])} км², раніше позначених окупованими, тепер позначено як район "
                  f"проникнення (сіра зона) — це не деокупація.")
             if r["grey_places"]:
                 g += f" Поблизу: {join_places(r['grey_places'])}."
@@ -681,21 +687,17 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
         gs = (grey_sentence((grey or {}).get(key)) if SHOW_GREY_IN_TEXT
               else penetration_sentence((grey or {}).get(key)))
         if not parts:
-            parts.append("змін позначень окупованих територій не зафіксовано.")
+            parts.append("без змін.")
         if gs:
             parts.append(gs)
-        body = " ".join(parts)
-        lines.append(f"<b>{cfg['title']}:</b> {body[0].upper()}{body[1:]}")
-        lines.append("")
+        lines.append(f"<b>{cfg['short']}:</b> " + " ".join(parts))
+    lines.append("")
     if messages:
         lines.append("<b>Повідомлення на сайті DeepState:</b>")
         for m in messages[:MAX_MESSAGES_IN_POST]:
             lines.append(f"• {m['time']:%d.%m, %H:%M} — {esc(m['text'])}")
         if len(messages) > MAX_MESSAGES_IN_POST:
             lines.append(f"…та ще {len(messages) - MAX_MESSAGES_IN_POST}.")
-        lines.append("")
-    else:
-        lines.append("<b>Повідомлення на сайті DeepState:</b> нових повідомлень про Донеччину й Луганщину за добу не було.")
         lines.append("")
     lines.append(SHORT_NOTE)
     return "\n".join(lines)
@@ -759,6 +761,17 @@ def near_phrase(names: list[str], villages: list[str]) -> str:
         head = "поблизу: " + " · ".join(names)
     vs = [v for v in dict.fromkeys(re.sub(r"\s*\(.*?\)", "", v).strip() for v in villages) if v not in names][:3]
     return head + (f" ({', '.join(vs)})" if vs else "")
+
+
+def tg_near(names: list[str], villages: list[str]) -> str:
+    """Для Telegram: ті самі назви, що на мапі й у Threads, а села — з районом (Telegram читають уважно):
+    «поблизу Добропілля та Білицького (Василівка, Світле — Покровський р-н)»."""
+    base = near_phrase(names, [])
+    vs = [v for v in dict.fromkeys(villages) if re.sub(r"\s*\(.*?\)", "", v).strip() not in names][:4]
+    if not vs:
+        return base
+    vtxt = re.sub(r" \((.*?)\)", r" — \1", join_places(vs))
+    return f"{base} ({vtxt})" if base else f"поблизу: {vtxt}"
 
 
 def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_pl: list,
@@ -1590,46 +1603,40 @@ def _places(rows: list[dict], col: str, limit: int = PLACES_MAX_IN_TEXT) -> list
 
 
 def build_summary(kind: str, rows: list[dict], period_start: str, period_end: str, label: str | None = None) -> str:
-    title = "DeepState: підсумки тижня" if kind == "week" else f"DeepState: підсумки місяця — {label}"
-    word = "За тиждень" if kind == "week" else "За місяць"
-    lines = [f"<b>{title}</b>", "", f"Період: {fmt_date(period_start)}–{fmt_date(period_end)}", ""]
+    """Підсумок для Telegram. Одна цифра на область — чистий підсумок за період (як у Threads/Facebook);
+    період — календарні дні, за які зміни (дата рядка мінус день)."""
+    d0 = (datetime.fromisoformat(rows[0]["date"]) - timedelta(days=1)).strftime("%d.%m")
+    d1 = (datetime.fromisoformat(rows[-1]["date"]) - timedelta(days=1)).strftime("%d.%m.%Y")
+    title = (f"DeepState: підсумки тижня, {d0}–{d1}" if kind == "week"
+             else f"DeepState: підсумки місяця — {label}")
+    word = "за тиждень" if kind == "week" else "за місяць"
+    lines = [f"<b>{title}</b>", ""]
     for key, cfg in OBLASTS.items():
         newly = round(sum(_f(r[f"{key}_newly_occupied_km2"]) for r in rows), 2)
         deocc = round(sum(_f(r[f"{key}_deoccupied_km2"]) for r in rows), 2)
+        grey_p = round(sum(_f(r.get(f"{key}_to_grey_km2")) for r in rows), 2)
         days = sum(1 for r in rows if _f(r[f"{key}_newly_occupied_km2"]) > 0 or _f(r[f"{key}_deoccupied_km2"]) > 0)
-        if newly == 0 and deocc == 0 and not sum(_f(r.get(f"{key}_to_grey_km2")) for r in rows):
-            body = "Змін позначень окупованих територій не зафіксовано."
+        net = _net_period(rows, key)
+        if newly == 0 and deocc == 0 and not grey_p:
+            body = f"{word} без змін."
         else:
-            parts = []
-            if newly > 0:
-                parts.append(f"{fmt_km2(newly)} км² територій змінили позначення на окуповані")
-            if deocc > 0:
-                parts.append(f"{fmt_km2(deocc)} км² — на деокуповані")
-            grey_p = round(sum(_f(r.get(f"{key}_to_grey_km2")) for r in rows), 2)
-            if grey_p > 0:
-                parts.append(f"{fmt_km2(grey_p)} км² — з окупованих на сіру зону")
-            body = f"{word.lower()} на мапі DeepState " + ", ".join(parts) + "."
-            body += f" Зміни фіксувалися в {days} із {len(rows)} днів."
-            newly_pl = _places(rows, f"{key}_newly_places")
-            deocc_pl = _places(rows, f"{key}_deoccupied_places")
-            if newly_pl:
-                body += f" Окуповані — поблизу населених пунктів: {join_places(newly_pl)}."
-            if deocc_pl:
-                body += f" Деокуповані — поблизу населених пунктів: {join_places(deocc_pl)}."
-            body = body[0].upper() + body[1:]
-            # Чистий баланс: стан на кінець періоду мінус стан перед його початком
-            first, last_row = rows[0], rows[-1]
-            before = (_f(first[f"{key}_occupied_km2"]) - _f(first[f"{key}_newly_occupied_km2"])
-                      + _f(first[f"{key}_deoccupied_km2"]))
-            net = round(_f(last_row[f"{key}_occupied_km2"]) - before, 2)
-            period_word = "тиждень" if kind == "week" else "місяць"
-            if net >= 0.01:
-                body += f" У підсумку площа, позначена окупованою, за {period_word} зросла на {fmt_km2(net)} км²."
-            elif net <= -0.01:
-                body += f" У підсумку площа, позначена окупованою, за {period_word} зменшилася на {fmt_km2(-net)} км²."
+            near = tg_near(place_names([r["date"] for r in rows], key),
+                           _places(rows, f"{key}_newly_places") + _places(rows, f"{key}_deoccupied_places"))
+            near = f" — {near}" if near else ""
+            if newly > 0 and deocc > 0:   # були і окупація, і деокупація — показуємо обидві та підсумок
+                body = (f"{word} {fmt_km2(newly)} км² позначено окупованими, {fmt_km2(deocc)} км² — "
+                        f"деокупованими{near}. У підсумку окупована площа "
+                        + (f"зросла на {fmt_km2(net)} км²." if net >= 0.01 else
+                           f"зменшилася на {fmt_km2(-net)} км²." if net <= -0.01 else "майже не змінилася."))
+            elif newly > 0:
+                body = f"{word} {fmt_km2(net if net > 0 else newly)} км² позначено окупованими{near}."
+            elif deocc > 0:
+                body = f"{word} {fmt_km2(-net if net < 0 else deocc)} км² позначено деокупованими{near}."
             else:
-                body += f" У підсумку площа, позначена окупованою, за {period_word} майже не змінилася."
-        grey_net = round(sum(_f(r.get(f"{key}_unknown_net_km2")) for r in rows), 2)
+                body = ""
+            if grey_p > 0:
+                body += f" Ще {fmt_km2(grey_p)} км² змінили позначення з окупованих на сіру зону."
+            body += f" Зміни були в {days} із {len(rows)} днів."
         pen = []
         for r in rows:
             for c in (r.get(f"{key}_penetration_cities") or "").split(";"):
@@ -1637,17 +1644,15 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
                 if c and c not in pen:
                     pen.append(c)
         if pen and not SHOW_GREY_IN_TEXT:
-            names = [CITY_GENITIVE.get(c, c) for c in pen[:4]]
-            where = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " та " + names[-1]
-            body += (f" За {'тиждень' if kind == 'week' else 'місяць'} нові райони проникнення "
-                     f"(території, що потребують уточнення) з'являлися біля {where}.")
-        if SHOW_GREY_IN_TEXT and abs(grey_net) >= 0.01:
-            body += (f" Сіра зона {'збільшилася' if grey_net > 0 else 'зменшилася'} на {fmt_km2(abs(grey_net))} км².")
+            nms = [CITY_GENITIVE.get(c, c) for c in pen[:4]]
+            where = nms[0] if len(nms) == 1 else ", ".join(nms[:-1]) + " та " + nms[-1]
+            body += f" Нові райони проникнення (території, що потребують уточнення) з'являлися біля {where}."
         last = rows[-1]
         pct = _f(last.get(f"{key}_occupied_percent"))
-        total = f" Загалом позначено окупованими {fmt_km2(_f(last[f'{key}_occupied_km2']))} км²"
+        total = f" Загалом окупованими позначено {fmt_km2(_f(last[f'{key}_occupied_km2']))} км²"
         total += f" ({str(round(pct, 1)).replace('.', ',')}% області)." if pct else "."
-        lines.append(f"<b>{cfg['title']}:</b> {body}{total}")
+        body = body.strip()
+        lines.append(f"<b>{cfg['short']}:</b> {body[0].upper()}{body[1:]}{total}")
         lines.append("")
     if kind == "week":
         # Тижневий підсумок: перелік повідомлень DeepState за тиждень (місячний — без них)
@@ -1961,7 +1966,9 @@ def main() -> int:
     messages = get_messages(base_state.get("deepstate_id"), deepstate.get("id"), oblasts, places)
     log(f"Повідомлень DeepState про Донеччину/Луганщину за період: {len(messages)}")
 
-    text = build_text(period, results, grey, messages)
+    text = build_text(period, results, grey, messages,
+                      {k: place_names([today], k) for k in OBLASTS
+                       if results[k]["newly_km2"] or results[k]["deocc_km2"]})
 
     # Зберігаємо стан ДО публікації: якщо Telegram впаде, дані не загубляться
     if current_state and current_state["date"] < today:
