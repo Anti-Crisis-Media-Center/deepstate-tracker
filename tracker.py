@@ -746,28 +746,44 @@ FB_CTA = ("Повідомлення DeepState, щодобові, щотижне�
 FB_COMMENT = f"Підписуйтеся на наш Telegram, щоб щоранку бачити зміни на мапі DeepState по Донеччині й Луганщині: {FB_TELEGRAM_LINK}"
 
 
+def near_phrase(names: list[str], villages: list[str]) -> str:
+    """Ті самі назви, що на мапі; села DeepState — у дужках (рішення Юлі 9.11):
+    «поблизу Добропілля та Білицького (Василівка, Світле)»."""
+    if not names:
+        return f"поблизу: {join_places(villages[:3])}" if villages else ""
+    if all(n in CITY_GENITIVE for n in names):
+        g = [CITY_GENITIVE[n] for n in names]
+        head = "поблизу " + (g[0] if len(g) == 1 else ", ".join(g[:-1]) + " та " + g[-1])
+    else:
+        head = "поблизу: " + " · ".join(names)
+    vs = [v for v in dict.fromkeys(re.sub(r"\s*\(.*?\)", "", v).strip() for v in villages) if v not in names][:3]
+    return head + (f" ({', '.join(vs)})" if vs else "")
+
+
 def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_pl: list,
-                 grey: float = 0.0) -> str | None:
+                 grey: float = 0.0, names: list[str] | None = None) -> str | None:
     parts = []
     if newly > 0:
         s = f"{fmt_km2(newly)} км² позначено окупованими"
-        if newly_pl:
-            s += f" — поблизу: {join_places(newly_pl[:3])}"
+        if names or newly_pl:
+            s += " " + near_phrase(names or [], newly_pl) if names else f" — поблизу: {join_places(newly_pl[:3])}"
         parts.append(s)
     if deocc > 0:
         s = f"{fmt_km2(deocc)} км² — деокупованими"
-        if deocc_pl:
-            s += f" — поблизу: {join_places(deocc_pl[:3])}"
+        if deocc_pl and not (names and newly > 0):
+            s += " " + near_phrase(names or [], deocc_pl) if names else f" — поблизу: {join_places(deocc_pl[:3])}"
         parts.append(s)
     if grey > 0:
         parts.append(f"{fmt_km2(grey)} км² — з окупованих на сіру зону")
     return f"{title}: " + "; ".join(parts) + "." if parts else None
 
 
-def build_fb_teaser(day: str, results: dict) -> str:
+def build_fb_teaser(day: str, results: dict, names: dict | None = None) -> str:
     lines = [f"DeepState: зміни за добу, {day}", ""]
+    names = names or {}
     found = [_teaser_line(cfg["short"], results[k]["newly_km2"], results[k]["deocc_km2"],
-                          results[k]["newly_places"], results[k]["deocc_places"], results[k].get("grey_km2", 0))
+                          results[k]["newly_places"], results[k]["deocc_places"], results[k].get("grey_km2", 0),
+                          names.get(k))
              or f"{cfg['short']}: без змін." for k, cfg in OBLASTS.items()]
     lines += found
     lines += ["", FB_CTA, "", "За даними DeepStateMap.live"]
@@ -780,10 +796,15 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
     lines = [title, ""]
     for key, cfg in OBLASTS.items():
         net = _net_period(rows, key)
+        near = ""
+        if abs(net) >= 0.01:
+            vil = [x for r in rows for x in (r.get(f"{key}_newly_places") or "").split("; ") if x]
+            near = near_phrase(place_names([r["date"] for r in rows], key), vil)
+            near = (" " + near) if near else ""
         if net >= 0.01:
-            lines.append(f"{cfg['short']}: за {word} {fmt_km2(net)} км² позначено окупованими.")
+            lines.append(f"{cfg['short']}: за {word} {fmt_km2(net)} км² позначено окупованими{near}.")
         elif net <= -0.01:
-            lines.append(f"{cfg['short']}: за {word} {fmt_km2(-net)} км² позначено деокупованими.")
+            lines.append(f"{cfg['short']}: за {word} {fmt_km2(-net)} км² позначено деокупованими{near}.")
         else:
             lines.append(f"{cfg['short']}: за {word} без змін.")
     lines += ["", "Збережіть, щоб стежити за змінами, та поділіться з тими, хто слідкує за Донеччиною.",
@@ -1706,7 +1727,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
         fb_text = build_fb_summary_teaser(s["kind"], rows, s.get("label"))
         step("Facebook", lambda: send_fb_teaser(fb_text, mp or s["image"]))
         step("Threads", lambda: threads_api.post(fb_text, s["image"], log, alert, DRY_RUN,
-                                                 image_url=threads_url_for(mp) if mp else None))
+                                                 image_url=threads_url_for(mp) if mp else None, reply=True))
         ig_text = fb_text + "\n\n" + _tiktok_tags(_rows_places(rows), _rows_luhansk_changed(rows))
         step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(), ig_text, s["image"], log, alert,
                                               DRY_RUN, extra_images=[mp] if mp else None))
@@ -1962,7 +1983,9 @@ def main() -> int:
             log(f"{name}: помилка — {e}")
             alert(f"{name}: {e}")
 
-    fb_text = build_fb_teaser(fmt_date(today), results)
+    fb_text = build_fb_teaser(fmt_date(today), results,
+                              {k: place_names([today], k) for k in OBLASTS
+                               if results[k]["newly_km2"] or results[k]["deocc_km2"]})
     day_places = [p for k in OBLASTS for p in results[k]["newly_places"] + results[k]["deocc_places"]]
     day_places += [c for k in OBLASTS for c in ((grey or {}).get(k) or {}).get("cities") or []]
     lug = bool(results["luhansk"]["newly_km2"] or results["luhansk"]["deocc_km2"])

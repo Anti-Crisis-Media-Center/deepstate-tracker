@@ -203,9 +203,20 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     region = unary_union([shape(f["geometry"]) for f in obl["features"]])  # обидві області
 
     # кадр: нова ділянка + ~18 км навколо, квадрат з урахуванням широти
-    cx, cy = new.centroid.x, new.centroid.y
+    frame = new
+    if must_label:   # назви із заголовка мають потрапити в кадр — розширюємо його до цих міст
+        try:
+            from shapely.geometry import MultiPoint
+            st_all = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
+            pts_m = [shape(f["geometry"]).centroid for f in st_all if f["properties"]["ADM4_UA"] in set(must_label)]
+            pts_m = [p for p in pts_m if p.distance(new) < 0.25]       # не далі ~25 км — інакше це інший тезка
+            if pts_m:
+                frame = unary_union([new.envelope, MultiPoint(pts_m).envelope.buffer(0.03)])
+        except Exception:  # noqa: BLE001
+            frame = new
+    cx, cy = frame.centroid.x, frame.centroid.y
     kx = math.cos(math.radians(cy))
-    minx, miny, maxx, maxy = new.bounds
+    minx, miny, maxx, maxy = frame.bounds
     half = max((maxx - minx) * kx, maxy - miny) / 2 + 0.16  # у «градусах широти»
     if vertical:
         top, bottom = 400, 480                               # TikTok/Shorts: інтерфейс зверху й знизу
@@ -336,10 +347,16 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             continue
         f = _font("800" if is_city else "500", 34 if is_city else 28)
         w = d.textlength(nm, font=f)
-        tx, ty = (x + 12, y - 18) if x + 12 + w < ox + mw else (x - 12 - w, y - 18)
-        bb = (tx - 4, ty - 2, tx + w + 4, ty + 40)
-        if any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes):
+        hit = lambda bb: any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes)
+        cand = [(x + 12, y - 18), (x - 12 - w, y - 18)]
+        if nm in must:   # назву із заголовка не пропускаємо: пробуємо також під і над точкою
+            cand += [(x + 12, y + 14), (x - 12 - w, y + 14), (x + 12, y - 52), (x - 12 - w, y - 52)]
+        cand = [c for c in cand if ox <= c[0] and c[0] + w <= ox + mw] or cand[:1]
+        pos = next(((tx_, ty_) for tx_, ty_ in cand if not hit((tx_ - 4, ty_ - 2, tx_ + w + 4, ty_ + 40))), None)
+        if pos is None:
             continue
+        tx, ty = pos
+        bb = (tx - 4, ty - 2, tx + w + 4, ty + 40)
         boxes.append(bb)
         used.add(nm)
         r = 7 if is_city else 5

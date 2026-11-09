@@ -104,3 +104,9 @@ def test_net_ignores_grey():
             {"date": "2026-01-02", "donetsk_occupied_km2": 98, "donetsk_newly_occupied_km2": 0,
              "donetsk_deoccupied_km2": 0, "donetsk_to_grey_km2": 2}]
     assert tracker._net_period(rows, "donetsk") == 0
+
+
+def test_near_phrase_same_names_as_map():
+    assert tracker.near_phrase(["Добропілля", "Білицьке"], ["Василівка (Покровський р-н)", "Світле (Покровський р-н)"]) \
+        == "поблизу Добропілля та Білицького (Василівка, Світле)"
+    assert tracker.near_phrase(["Русин Яр"], ["Русин Яр (Краматорський р-н)"]) == "поблизу: Русин Яр"

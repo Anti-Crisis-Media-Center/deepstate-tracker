@@ -69,13 +69,42 @@ def _wait_ready(container_id: str, tries: int = 10) -> None:
 
 def _publish(uid: str, data: dict) -> str:
     data = {**data, "access_token": _token()}
-    cid = _check(requests.post(f"{GRAPH}/{uid}/threads", data=data, timeout=60).json())["id"]
+    if "reply_to_id" not in data:
+        data["topic_tag"] = TOPIC
+    js = requests.post(f"{GRAPH}/{uid}/threads", data=data, timeout=60).json()
+    if "error" in js and "topic_tag" in data:   # тему не прийняли — публікуємо без неї
+        data.pop("topic_tag")
+        js = requests.post(f"{GRAPH}/{uid}/threads", data=data, timeout=60).json()
+    cid = _check(js)["id"]
     _wait_ready(cid)
     return _check(requests.post(f"{GRAPH}/{uid}/threads_publish",
                                 data={"creation_id": cid, "access_token": _token()}, timeout=60).json())["id"]
 
 
+TOPIC = "Донеччина"   # тема допису в Threads (одна на допис)
+CTA = "Поширте, якщо стежите за Донеччиною."
+
+
 def adapt_text(fb_text: str) -> str:
+    """Threads: першим рядком — сама новина, назва рубрики й джерело — наприкінці (рішення Юлі 9.11)."""
+    paras = [p for p in fb_text.split("\n\n") if "Telegram" not in p and "коментар" not in p]
+    if len(paras) < 2:
+        return _old_adapt(fb_text)
+    head, body = paras[0], paras[1].split("\n")
+    rest = [p for p in paras[2:] if "DeepStateMap" not in p]
+    rest = [CTA if "Збережіть" in p else p for p in rest]
+    word = "добу" if "за добу" in head else ("тиждень" if "тижня" in head else "місяць")
+    if all(l.rstrip(".").endswith("без змін") for l in body):
+        lead = [f"За {word} на мапі DeepState Донеччина й Луганщина без змін."]
+    else:
+        lead = sorted(body, key=lambda l: l.rstrip(".").endswith("без змін"))   # спершу області зі змінами
+    text = "\n\n".join(["\n".join(lead), *rest, f"{head} · за даними DeepStateMap.live"])
+    if len(text) > MAX_LEN:
+        text = text[: MAX_LEN - 1].rstrip() + "…"
+    return text
+
+
+def _old_adapt(fb_text: str) -> str:
     """Тизер із Facebook → Threads. Threads — окремий канал, а не воронка в Telegram:
     прибираємо абзаци із закликом перейти в Telegram, лишаємо саму інформацію. Ліміт 500 знаків."""
     paras = [p for p in fb_text.split("\n\n") if "Telegram" not in p and "коментар" not in p]
@@ -97,7 +126,8 @@ def _carousel(uid: str, urls: list[str], text: str) -> str:
     return _publish(uid, {"media_type": "CAROUSEL", "children": ",".join(kids), "text": text})
 
 
-def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url: str | None = None) -> bool:
+def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url: str | None = None,
+         reply: bool = False) -> bool:
     """Допис + відповідь із посиланням на Telegram. Помилка не зупиняє бота.
     Є мапа змін (image_url) → карусель «обкладинка + мапа»; немає → лише обкладинка."""
     if not enabled():
@@ -105,7 +135,7 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url
     text = adapt_text(fb_text)
     link = (os.getenv("THREADS_TELEGRAM_LINK", "").strip()
             or os.getenv("FB_TELEGRAM_LINK", "").strip() or "https://t.me/acmc_ua")
-    reply = f"Ці зведення щоранку о 8:00 виходять і в нашому Telegram-каналі: {link}"
+    reply_text = f"Ці зведення щоранку о 8:00 виходять і в нашому Telegram-каналі: {link}"
     if dry_run:
         log(("DRY_RUN — у Threads не публікується (карусель: обкладинка + мапа). Текст:\n" if image_url
              else "DRY_RUN — у Threads не публікується. Текст:\n") + text)
@@ -124,8 +154,10 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url
             data = {"media_type": "IMAGE", "image_url": url, "text": text} if url else {"media_type": "TEXT", "text": text}
             post_id = _publish(uid, data)
         log(f"Допис у Threads опубліковано: {post_id}")
+        if not reply:   # відповідь із посиланням — лише під тижневим і місячним підсумком
+            return True
         try:
-            _publish(uid, {"media_type": "TEXT", "text": reply, "reply_to_id": post_id})
+            _publish(uid, {"media_type": "TEXT", "text": reply_text, "reply_to_id": post_id})
         except Exception as e:  # noqa: BLE001
             log(f"Threads: відповідь із посиланням не додано — {e}")
             alert(f"Допис у Threads вийшов, але відповідь із посиланням на Telegram не додано: {e}")
