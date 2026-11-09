@@ -189,7 +189,7 @@ def section(title: str, d: dict | None, reach_word: str) -> list[str]:
     for i, p in enumerate(top, 1):
         val = f"{fmt(p['reach'])} охопл." if p["reach"] is not None else f"{fmt(p['eng'])} взаємодій"
         if p.get("comm"):
-            val += f", {fmt(p['comm'])} коментарів"
+            val += f", коментарі: {fmt(p['comm'])}"
         name = short(p["text"])
         lines.append(f"{i}. <a href=\"{p['url']}\">{name}</a> — {val}" if p.get("url") else f"{i}. {name} — {val}")
     ds = [p for p in posts if is_deepstate(p["text"])]
