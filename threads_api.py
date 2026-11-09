@@ -85,8 +85,21 @@ def adapt_text(fb_text: str) -> str:
     return text
 
 
+def _carousel(uid: str, urls: list[str], text: str) -> str:
+    """Карусель: фірмова обкладинка + мапа змін (рішення Юлі 9.11)."""
+    kids = []
+    for u in urls:
+        cid = _check(requests.post(f"{GRAPH}/{uid}/threads", data={
+            "media_type": "IMAGE", "image_url": u, "is_carousel_item": "true",
+            "access_token": _token()}, timeout=60).json())["id"]
+        _wait_ready(cid)
+        kids.append(cid)
+    return _publish(uid, {"media_type": "CAROUSEL", "children": ",".join(kids), "text": text})
+
+
 def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url: str | None = None) -> bool:
-    """Допис із картинкою + відповідь із посиланням на Telegram. Помилка не зупиняє бота."""
+    """Допис + відповідь із посиланням на Telegram. Помилка не зупиняє бота.
+    Є мапа змін (image_url) → карусель «обкладинка + мапа»; немає → лише обкладинка."""
     if not enabled():
         return False
     text = adapt_text(fb_text)
@@ -94,13 +107,22 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url
             or os.getenv("FB_TELEGRAM_LINK", "").strip() or "https://t.me/acmc_ua")
     reply = f"Ці зведення щоранку о 8:00 виходять і в нашому Telegram-каналі: {link}"
     if dry_run:
-        log("DRY_RUN — у Threads не публікується. Текст:\n" + text)
+        log(("DRY_RUN — у Threads не публікується (карусель: обкладинка + мапа). Текст:\n" if image_url
+             else "DRY_RUN — у Threads не публікується. Текст:\n") + text)
         return True
     try:
         uid = _user_id()
-        url = image_url or (globals()["image_url"](image) if image.exists() else None)
-        data = {"media_type": "IMAGE", "image_url": url, "text": text} if url else {"media_type": "TEXT", "text": text}
-        post_id = _publish(uid, data)
+        cover = globals()["image_url"](image) if image.exists() else None
+        if image_url and cover:
+            try:
+                post_id = _carousel(uid, [cover, image_url], text)
+            except Exception as e:  # noqa: BLE001 — карусель не вийшла: публікуємо хоча б мапу
+                log(f"Threads: карусель не вийшла ({e}) — публікую одну мапу")
+                post_id = _publish(uid, {"media_type": "IMAGE", "image_url": image_url, "text": text})
+        else:
+            url = image_url or cover
+            data = {"media_type": "IMAGE", "image_url": url, "text": text} if url else {"media_type": "TEXT", "text": text}
+            post_id = _publish(uid, data)
         log(f"Допис у Threads опубліковано: {post_id}")
         try:
             _publish(uid, {"media_type": "TEXT", "text": reply, "reply_to_id": post_id})

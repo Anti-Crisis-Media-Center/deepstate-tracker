@@ -93,7 +93,7 @@ def test_names_real_week():
 
 
 def test_names_title():
-    assert tracker.names_title(["Покровськ"]) == "Біля Покровська"
+    assert tracker.names_title(["Покровськ"]) == "Поблизу: Покровськ"
     assert tracker.names_title(["Русин Яр", "Покровськ"]) == "Поблизу: Русин Яр · Покровськ"
 
 

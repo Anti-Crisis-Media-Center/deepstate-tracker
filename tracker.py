@@ -1164,11 +1164,10 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 3) -> list[str]
 
 
 def names_title(names: list[str]) -> str:
-    """«Біля Костянтинівки» для однієї назви, «Поблизу: A · B · C» — для кількох."""
+    """Завжди нейтральний перелік: «Поблизу: Білицьке» / «Поблизу: A · B · C» (рішення Юлі 9.11 —
+    «Біля Білицького» звучить як анонс наступу)."""
     if not names:
         return ""
-    if len(names) == 1:
-        return ("Біля " + CITY_GENITIVE[names[0]]) if names[0] in CITY_GENITIVE else "Поблизу: " + names[0]
     return "Поблизу: " + " · ".join(names)
 
 
@@ -1257,9 +1256,8 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     y = TOP + 300                     # текст — між заголовком обкладинки і смугою «Донеччина · Луганщина»
     word = "за тиждень" if kind == "week" else "за місяць"
     if names:
-        single_city = len(names) == 1 and names[0] in CITY_GENITIVE
-        centered("Біля" if single_city else "Поблизу:", f500(36), y, white)
-        line = CITY_GENITIVE[names[0]] if single_city else " · ".join(names)
+        centered("Поблизу:", f500(36), y, white)
+        line = " · ".join(names)
         rows_ = [line]
         if d.textlength(line, font=f800(62)) > 920 and len(names) > 2:   # три назви — на два рядки
             rows_ = [" · ".join(names[:2]), names[2]]
@@ -1740,7 +1738,7 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         if pn:
             title = names_title(pn)
         elif cities:
-            title = "Біля " + CITY_GENITIVE.get(cities[0], cities[0])
+            title = "Поблизу: " + cities[0]
         elif names:
             title = "Поблизу: " + ", ".join(names[:2])
         else:
