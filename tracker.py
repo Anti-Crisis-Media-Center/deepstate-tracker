@@ -652,7 +652,8 @@ def esc(text: str) -> str:
     return html.escape(text, quote=False)
 
 
-SHORT_NOTE = SOURCE_LINE + "\n<i>Автоматичний аналіз мапи DeepState, не офіційне джерело.</i>"
+SHORT_NOTE = (SOURCE_LINE + "\n\n<blockquote><i>Примітка: це автоматичне зведення змін на мапі DeepState. "
+              "DeepState не є офіційним джерелом інформації.</i></blockquote>")
 
 
 def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None) -> str:
