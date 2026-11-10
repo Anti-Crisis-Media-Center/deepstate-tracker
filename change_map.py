@@ -22,6 +22,7 @@ BG = (13, 20, 40)
 LAND = (34, 46, 78)
 OCC = (80, 38, 48)           # окуповано раніше (темний, щоб нові червоні ділянки вирізнялися)
 DEOCC = (88, 196, 255)   # деокуповані ділянки — блакитні
+TITLE_RED = (255, 110, 110)   # назви біля окупованих у заголовку, коли є обидва напрямки
 FLIP = (235, 235, 245)      # «позначили й зняли» — світлий контур
 GREY = (128, 128, 142)       # район проникнення (сіра зона) — світліша, як у DeepState
 GREY_NEW = (190, 190, 205)   # з окупованих стали сірими — світло-сірі (це не деокупація)
@@ -168,7 +169,8 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
            oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None,
            upto: int | None = None, since: int = 0, caption: str | None = None,
            hide_step: bool = False, backdrop: Path | None = None,
-           must_label: list | None = None, blue_label: list | None = None) -> Path | None:
+           must_label: list | None = None, blue_label: list | None = None,
+           red_label: list | None = None) -> Path | None:
     """upto — для кадрів відео: показати стан після перших upto днів зі змінами, причому зміни днів
     since..upto (поточний крок) — їхнім кольором (червоним чи блакитним), навіть якщо потім їх знімуть.
     upto=None — підсумок періоду: червоне, блакитне й контур ділянок «позначили й зняли».
@@ -366,7 +368,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         r = 7 if is_city else 5
         d.ellipse([x - r, y - r, x + r, y + r], fill=WHITE)
         d.text((tx + 2, ty + 2), nm, font=f, fill=(0, 0, 0))
-        d.text((tx, ty), nm, font=f, fill=DEOCC if nm in set(blue_label or []) else WHITE)
+        d.text((tx, ty), nm, font=f, fill=WHITE)   # на самій мапі — білим: блакитний на мапі погано читається (рішення 10.11)
         shown += 1
 
     km_px = sc / 111.0
@@ -390,12 +392,12 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             d.text((xx, yy), "Поблизу: ", font=_font("500", tsz), fill=NEW)
             xx += d.textlength("Поблизу: ", font=_font("500", tsz))
             ln = ln[len("Поблизу: "):]
-        blue_set = set(blue_label or [])
+        blue_set, red_set = set(blue_label or []), set(red_label or [])
         for ni, nm_ in enumerate(ln.split(" · ")):   # назви біля деокупованих ділянок — блакитним
             if ni:
                 d.text((xx, yy), " · ", font=_font("800", tsz), fill=NEW)
                 xx += d.textlength(" · ", font=_font("800", tsz))
-            d.text((xx, yy), nm_, font=_font("800", tsz), fill=DEOCC if nm_ in blue_set else NEW)
+            d.text((xx, yy), nm_, font=_font("800", tsz), fill=DEOCC if nm_ in blue_set else TITLE_RED if nm_ in red_set else NEW)
             xx += d.textlength(nm_, font=_font("800", tsz))
     if len(lines) > 1:
         ty0 += 62 if vertical else 50   # підзаголовок — нижче, над мапою

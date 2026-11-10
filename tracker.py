@@ -1883,8 +1883,9 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         cities = [re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl if is_city(p)]
         names = list(dict.fromkeys(re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl))
         pn = place_names(dates, key)
-        # обидва напрямки: назви біля деокупованих ділянок — блакитним (у заголовку й на мапі)
+        # обидва напрямки: у заголовку назви біля окупованих — рожево-червоним, біля деокупованих — блакитним
         blue_nm = [x for x in pn.deocc if x not in pn.occ] if isinstance(pn, Names) and pn.both else []
+        red_nm = [x for x in pn.occ if x not in pn.deocc] if isinstance(pn, Names) and pn.both else []
         if pn:
             title = names_title(pn)
         elif cities:
@@ -1922,16 +1923,16 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
             for suffix, kw in frames:
                 try:
                     change_map.render(files, DATA / out_name.replace(".jpg", suffix), title, sub, oblast_key=key,
-                                      height=1920, must_label=pn, blue_label=blue_nm, **kw)
+                                      height=1920, must_label=pn, blue_label=blue_nm, red_label=red_nm, **kw)
                 except Exception as e:  # noqa: BLE001
                     log(f"Вертикальна мапа для відео: {e}")
         try:   # 4:5 — для Threads: у каруселі видно край наступної картки
             change_map.render(files, DATA / out_name.replace(".jpg", "_45.jpg"), title, sub, oblast_key=key,
-                              height=1350, must_label=pn, blue_label=blue_nm)
+                              height=1350, must_label=pn, blue_label=blue_nm, red_label=red_nm)
         except Exception as e:  # noqa: BLE001
             log(f"Мапа 4:5: {e}")
         return change_map.render(files, DATA / out_name, title, sub, oblast_key=key, must_label=pn,
-                                 blue_label=blue_nm)
+                                 blue_label=blue_nm, red_label=red_nm)
     except Exception as e:  # noqa: BLE001
         log(f"Мапа змін: не вдалося — {e}")
         return None
