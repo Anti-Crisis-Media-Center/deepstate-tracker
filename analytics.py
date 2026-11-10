@@ -204,9 +204,13 @@ def section(title: str, d: dict | None, reach_word: str) -> list[str]:
 
 
 def build() -> str:
-    end = (NOW + timedelta(hours=2)).date()
-    start = end - timedelta(days=DAYS - 1)
-    lines = [f"📊 <b>Аналітика АКМЦ: {start:%d.%m}–{end:%d.%m}</b>", ""]
+    # Період — ковзний: останні DAYS×24 год до моменту запуску. Тому для доби — 9.11 20:24 – 10.11 20:24,
+    # а не «10.11–10.11» (рішення 10.11.2026). Час — київський.
+    from zoneinfo import ZoneInfo
+    kyiv = ZoneInfo("Europe/Kyiv")
+    s_, e_ = SINCE.astimezone(kyiv), NOW.astimezone(kyiv)
+    label = (f"{s_:%d.%m %H:%M} – {e_:%d.%m %H:%M}" if DAYS <= 3 else f"{s_:%d.%m}–{e_:%d.%m}")
+    lines = [f"📊 <b>Аналітика АКМЦ: {label}</b>", ""]
     tg = telegram()
     lines += [f"<b>Telegram @acmc_ua</b>", f"Підписники: {fmt(tg)}", ""]
     lines += section("Facebook «У фокусі»", facebook(), "Охоплення сторінки")
