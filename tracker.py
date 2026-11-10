@@ -1181,7 +1181,8 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
     """ЄДИНИЙ список назв для всіх місць (перший кадр, заголовок мапи, останній кадр, сторіз).
     Беремо лише те, що лишилося на кінець періоду (без «позначили й зняли»). Ділянки, ближчі одна
     до одної ніж ~5 км, — одне місце й одна назва (щоб «Добропілля · Білицьке» не займали два місця);
-    назва — місто в межах 10 км, інакше найближчий населений пункт; до чотирьох, за площею (рішення 10.11)."""
+    назва — місто в межах 10 км, інакше найближчий населений пункт; до чотирьох найбільших за площею,
+    перелічені зліва направо, як людина читає мапу (рішення 10.11)."""
     try:
         import change_map
         files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
@@ -1199,12 +1200,15 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
             clusters = [c for c in clusters if c not in hit] + [merged]
         parts = [unary_union(c) for c in clusters]
         score: dict[str, float] = {}
+        west: dict[str, float] = {}        # довгота — щоб перелічувати зліва направо, як читають мапу
         for g in parts:
             # місто — лише якщо ближче 10 км; інакше найближчий населений пункт (рішення 9.11.2026)
             name = _nearest_city_geom(g, max_km=10.0) or _nearest_settlement_geom(g)
             if name:
                 score[name] = score.get(name, 0) + g.area
-        return sorted(score, key=score.get, reverse=True)[:n]
+                west[name] = min(west.get(name, 999), g.centroid.x)
+        top = sorted(score, key=score.get, reverse=True)[:n]       # ЯКІ назви — за площею змін
+        return sorted(top, key=lambda nm: west[nm])                # ПОРЯДОК — зліва направо (рішення 10.11)
     except Exception as e:  # noqa: BLE001
         log(f"Назви ділянок: {e}")
         return []
