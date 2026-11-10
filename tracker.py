@@ -691,7 +691,11 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
             parts.append("без змін.")
         if gs:
             parts.append(gs)
-        lines.append(f"<b>{cfg['short']}:</b> " + " ".join(parts))
+        if r["newly_km2"] > 0 and r["deocc_km2"] > 0:   # обидва напрямки — кожен окремим рядком
+            lines.append(f"<b>{cfg['short']}:</b>\n" + "\n".join("— " + p.rstrip(".") for p in parts[:2])
+                         + ("\n" + " ".join(parts[2:]) if parts[2:] else ""))
+        else:
+            lines.append(f"<b>{cfg['short']}:</b> " + " ".join(parts))
     lines.append("")
     if messages:
         lines.append("<b>Повідомлення на сайті DeepState:</b>")
@@ -791,6 +795,15 @@ def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_p
         elif deocc_pl and not (names and newly > 0):
             s += " " + near_phrase(dn, deocc_pl) if dn else f" — поблизу: {join_places(deocc_pl[:3])}"
         parts.append(s)
+    if newly > 0 and deocc > 0:   # обидва напрямки — кожен окремим рядком (рішення 10.11)
+        def ln(v, w, nm_, pl):
+            near = near_phrase(nm_, pl) if nm_ else (f"поблизу: {join_places(pl[:3])}" if pl else "")
+            return f"— {fmt_km2(v)} км² позначено {w}" + (f" — {near}" if near else "")
+        rows_ = [ln(newly, "окупованими", pick(names, "occ"), newly_pl),
+                 ln(deocc, "деокупованими", pick(names, "deocc") if split else [], deocc_pl)]
+        if grey > 0:
+            rows_.append(f"— {fmt_km2(grey)} км² — з окупованих на сіру зону")
+        return f"{title}:\n" + "\n".join(rows_)
     if grey > 0:
         parts.append(f"{fmt_km2(grey)} км² — з окупованих на сіру зону")
     return f"{title}: " + "; ".join(parts) + "." if parts else None
@@ -819,9 +832,9 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
         if occ >= 0.01 and free >= 0.01:   # обидва напрямки — дві цифри, кожна зі своїми назвами
             nm = place_names([r["date"] for r in rows], key)
             no, nd = near_phrase(pick(nm, "occ"), []), near_phrase(pick(nm, "deocc"), [])
-            lines.append(f"{cfg['short']}: за {word} {fmt_km2(occ)} км² позначено окупованими"
-                         + (f" {no}" if no else "") + f"; {fmt_km2(free)} км² — деокупованими"
-                         + (f" {nd}" if nd else "") + ".")
+            lines += [f"{cfg['short']} за {word}:",
+                      f"— {fmt_km2(occ)} км² позначено окупованими" + (f" — {no}" if no else ""),
+                      f"— {fmt_km2(free)} км² позначено деокупованими" + (f" — {nd}" if nd else "")]
             continue
         if abs(net) >= 0.01:
             vil = [x for r in rows for x in (r.get(f"{key}_newly_places") or "").split("; ") if x]
@@ -959,13 +972,14 @@ def story_blocks_daily(results: dict, names: dict | None = None) -> list[dict]:
         if r["newly_km2"] > 0:
             blocks.append({"label": STORY_LABELS[k], "big": f"{fmt_km2(r['newly_km2'])} км²",
                            "text": "позначено окупованими",
-                           "note": (near_phrase(pick(nm, "occ"), r["newly_places"]) if nm else
+                           "note": (near_phrase(pick(nm, "occ"), [] if r["deocc_km2"] > 0 else r["newly_places"]) if nm else
                                     f"поблизу: {_short_places(r['newly_places'])}" if r["newly_places"] else "")})
         if r["deocc_km2"] > 0:
             blocks.append({"label": "" if r["newly_km2"] > 0 else STORY_LABELS[k],
                            "big": f"{fmt_km2(r['deocc_km2'])} км²", "text": "позначено деокупованими",
                            "note": (near_phrase(pick(nm, "deocc") if (isinstance(nm, Names) and nm.both)
-                                                or r["newly_km2"] <= 0 else [], r["deocc_places"]) if nm else
+                                                or r["newly_km2"] <= 0 else [],
+                                                [] if r["newly_km2"] > 0 else r["deocc_places"]) if nm else
                                     f"поблизу: {_short_places(r['deocc_places'])}" if r["deocc_places"] else "")})
         if r.get("grey_km2", 0) > 0:
             blocks.append({"label": "" if (r["newly_km2"] > 0 or r["deocc_km2"] > 0) else STORY_LABELS[k],
@@ -976,7 +990,8 @@ def story_blocks_daily(results: dict, names: dict | None = None) -> list[dict]:
     else:
         for k in OBLASTS:
             if results[k]["newly_km2"] <= 0 and results[k]["deocc_km2"] <= 0 and not results[k].get("grey_km2"):
-                blocks.append({"label": STORY_LABELS[k], "big": "", "text": "без змін"})
+                # одним рядком — економить місце (рішення 10.11)
+                blocks.append({"label": "", "big": "", "text": f"{OBLASTS[k]['short']} — без змін"})
     return blocks
 
 
@@ -997,7 +1012,7 @@ def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
             blocks.append({"label": "" if occ >= 0.01 else STORY_LABELS[k], "big": f"{fmt_km2(free)} км²",
                            "text": f"позначено деокупованими за {word}", "note": nt(pick(names, "deocc"))})
         if occ < 0.01 and free < 0.01:
-            blocks.append({"label": STORY_LABELS[k], "big": "", "text": f"за {word} без змін"})
+            blocks.append({"label": "", "big": "", "text": f"{OBLASTS[k]['short']} — без змін"})
     return blocks
 
 
@@ -1739,9 +1754,9 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
                 nd = tg_near(pick(nmp, "deocc"), _places(rows, f"{key}_deoccupied_places"))
                 o_, f_ = _period_totals(rows, key)   # ті самі цифри, що на мапі, у відео й сторіз
                 net = round(o_ - f_, 2)              # щоб підсумок точно дорівнював різниці двох цифр
-                body = (f"{word} {fmt_km2(o_)} км² позначено окупованими" + (f" — {no}" if no else "")
-                        + f"; {fmt_km2(f_)} км² — деокупованими" + (f" — {nd}" if nd else "")
-                        + ". У підсумку окупована площа "
+                body = (f"— {fmt_km2(o_)} км² позначено окупованими" + (f" — {no}" if no else "")
+                        + f"\n— {fmt_km2(f_)} км² позначено деокупованими" + (f" — {nd}" if nd else "")
+                        + "\nУ підсумку окупована площа "
                         + (f"зросла на {fmt_km2(net)} км²." if net >= 0.01 else
                            f"зменшилася на {fmt_km2(-net)} км²." if net <= -0.01 else "майже не змінилася."))
             elif newly > 0 and deocc > 0:   # були і окупація, і деокупація — показуємо обидві та підсумок
@@ -1773,7 +1788,10 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
         total = f" Загалом окупованими позначено {fmt_km2(_f(last[f'{key}_occupied_km2']))} км²"
         total += f" ({str(round(pct, 1)).replace('.', ',')}% області)." if pct else "."
         body = body.strip()
-        lines.append(f"<b>{cfg['short']}:</b> {body[0].upper()}{body[1:]}{total}")
+        if body.startswith("— "):   # обидва напрямки — кожен окремим рядком
+            lines.append(f"<b>{cfg['short']} {word}:</b>\n{body}{total}")
+        else:
+            lines.append(f"<b>{cfg['short']}:</b> {body[0].upper()}{body[1:]}{total}")
         lines.append("")
     if kind == "week":
         # Тижневий підсумок: перелік повідомлень DeepState за тиждень (місячний — без них)
