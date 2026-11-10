@@ -85,7 +85,8 @@ def run_day(hist: list[dict]) -> None:
     photo(card, f"🧪 Тінь v9 · сторіз за добу ({day})")
     nets = {k: res[k]["newly_km2"] - res[k]["deocc_km2"] for k in T.OBLASTS}
     places = {k: res[k]["newly_places"] + res[k]["deocc_places"] for k in T.OBLASTS}
-    mp = T.make_change_map("day", [day], nets, places, "shadow_map_day.jpg") if any(abs(v) > 0 for v in nets.values()) else None
+    mp = T.make_change_map("day", [day], nets, places, "shadow_map_day.jpg",
+                                totals={k: (res[k]["newly_km2"], res[k]["deocc_km2"]) for k in T.OBLASTS}) if any(abs(v) > 0 for v in nets.values()) else None
     try:
         import threads_api
         prev = (datetime.strptime(day, "%Y-%m-%d").date() - timedelta(days=1)).strftime("%d.%m.%Y")

@@ -755,11 +755,9 @@ def near_phrase(names: list[str], villages: list[str]) -> str:
     «поблизу Добропілля та Білицького (Василівка, Світле)»."""
     if not names:
         return f"поблизу: {join_places(villages[:3])}" if villages else ""
-    if all(n in CITY_GENITIVE for n in names):
-        g = [CITY_GENITIVE[n] for n in names]
-        head = "поблизу " + (g[0] if len(g) == 1 else ", ".join(g[:-1]) + " та " + g[-1])
-    else:
-        head = "поблизу: " + " · ".join(names)
+    # завжди «поблизу:» і називний відмінок (рішення Юлі 10.11): однаково для міст і сіл, без
+    # помилок у відмінках сіл; так само, як у заголовку мапи («Поблизу: Білицьке · Костянтинівка»)
+    head = "поблизу: " + ", ".join(names)
     vs = [v for v in dict.fromkeys(re.sub(r"\s*\(.*?\)", "", v).strip() for v in villages) if v not in names][:3]
     return head + (f" ({', '.join(vs)})" if vs else "")
 
@@ -959,13 +957,13 @@ def story_blocks_daily(results: dict, names: dict | None = None) -> list[dict]:
         r = results[k]
         nm = names.get(k) or []
         if r["newly_km2"] > 0:
-            blocks.append({"label": STORY_LABELS[k], "big": f"+{fmt_km2(r['newly_km2'])} км²",
+            blocks.append({"label": STORY_LABELS[k], "big": f"{fmt_km2(r['newly_km2'])} км²",
                            "text": "позначено окупованими",
                            "note": (near_phrase(pick(nm, "occ"), r["newly_places"]) if nm else
                                     f"поблизу: {_short_places(r['newly_places'])}" if r["newly_places"] else "")})
         if r["deocc_km2"] > 0:
             blocks.append({"label": "" if r["newly_km2"] > 0 else STORY_LABELS[k],
-                           "big": f"−{fmt_km2(r['deocc_km2'])} км²", "text": "позначено деокупованими",
+                           "big": f"{fmt_km2(r['deocc_km2'])} км²", "text": "позначено деокупованими",
                            "note": (near_phrase(pick(nm, "deocc") if (isinstance(nm, Names) and nm.both)
                                                 or r["newly_km2"] <= 0 else [], r["deocc_places"]) if nm else
                                     f"поблизу: {_short_places(r['deocc_places'])}" if r["deocc_places"] else "")})
@@ -1873,7 +1871,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
 
 
 def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places: dict, out_name: str,
-                    areas: list[str] | None = None) -> Path | None:
+                    areas: list[str] | None = None, totals: dict | None = None) -> Path | None:
     """Мапа нових ділянок за добу/період. oblast_km2: {key: км² (додатне — окупованими)}."""
     try:
         import change_map
@@ -1900,6 +1898,8 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         sub = f"{fmt_km2(abs(km))} км² позначено {'окупованими' if km > 0 else 'деокупованими'} {word}"
         files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
         bd = change_map.breakdown(files, key)
+        if totals and key in totals:   # доба: ті самі цифри, що в тексті й сторіз (а не перерахунок площі)
+            bd = {**bd, "occupied": totals[key][0], "deoccupied": totals[key][1]}
         if bd["occupied"] >= 0.01 and bd["deoccupied"] >= 0.01:   # обидва напрямки — дві цифри
             sub = (f"позначено окупованими {fmt_km2(bd['occupied'])} км², "
                    f"деокупованими — {fmt_km2(bd['deoccupied'])} км² {word}")
@@ -2137,7 +2137,8 @@ def main() -> int:
     })
 
     day_map = make_change_map("day", [today], {k: results[k]["newly_km2"] - results[k]["deocc_km2"] for k in OBLASTS},
-                              {k: results[k]["newly_places"] + results[k]["deocc_places"] for k in OBLASTS}, "map_day.jpg")
+                              {k: results[k]["newly_places"] + results[k]["deocc_places"] for k in OBLASTS}, "map_day.jpg",
+                              totals={k: (results[k]["newly_km2"], results[k]["deocc_km2"]) for k in OBLASTS})
     publish(text, COVER_IMAGE, silent=True)  # без звуку; завжди фірмова обкладинка (рішення Юлі 9.11)
     # Позначаємо «опубліковано» одразу після Telegram: якщо далі щось впаде,
     # запасний запуск не повторить пост ще раз.
