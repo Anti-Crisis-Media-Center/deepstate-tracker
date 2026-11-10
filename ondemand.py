@@ -45,8 +45,8 @@ def setup() -> None:
     kb = {"inline_keyboard": [[{"text": t, "callback_data": f"rep:{d}"} for d, t in BUTTONS]]}
     r = tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), reply_markup=kb, parse_mode="HTML",
            text="📊 <b>Звіт аналітики на вимогу</b>\n\nНатисніть, за який період потрібен звіт.\n"
-                "Інший період — напишіть команду <code>/report 5</code> (від 1 до 90 днів). "
-                "Просто число бот не бачить.\n\n"
+                "Інший період — напишіть <code>/report</code>, пробіл і кількість днів (від 1 до 90), "
+                "наприклад <code>/report 5</code>. Просто число бот не бачить.\n\n"
                 "<i>Звіт приходить сюди через 2–5 хвилин.</i>")
     print("Кнопки:", "опубліковано" if r.get("ok") else r)
     if r.get("ok"):
