@@ -102,8 +102,13 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
         return y
 
     choice = None
-    for compact, notes, kmin in ((False, True, 0.85), (False, False, 0.85), (True, True, 0.8), (True, False, 0.8),
-                                 (True, False, 0.55)):
+    opts = [(False, True, 0.85), (False, False, 0.85), (True, True, 0.8), (True, False, 0.8), (True, False, 0.55)]
+    if sum(1 for b in blocks if b.get("big") and b.get("note")) >= 2:
+        # кілька цифр, кожна зі своїми назвами (напр. окупація й деокупація) — назви важливіші
+        # за повну обкладинку: спершу пробуємо зменшену обкладинку, але з назвами (рішення 10.11)
+        opts = [(False, True, 0.85), (True, True, 0.8), (True, True, 0.6), (False, False, 0.85),
+                (True, False, 0.8), (True, False, 0.55)]
+    for compact, notes, kmin in opts:
         cv = cover_img(compact)
         y0 = TOP + cv.height + 40
         k = 1.0

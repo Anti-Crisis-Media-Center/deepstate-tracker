@@ -168,7 +168,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
            oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None,
            upto: int | None = None, since: int = 0, caption: str | None = None,
            hide_step: bool = False, backdrop: Path | None = None,
-           must_label: list | None = None) -> Path | None:
+           must_label: list | None = None, blue_label: list | None = None) -> Path | None:
     """upto — для кадрів відео: показати стан після перших upto днів зі змінами, причому зміни днів
     since..upto (поточний крок) — їхнім кольором (червоним чи блакитним), навіть якщо потім їх знімуть.
     upto=None — підсумок періоду: червоне, блакитне й контур ділянок «позначили й зняли».
@@ -366,7 +366,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         r = 7 if is_city else 5
         d.ellipse([x - r, y - r, x + r, y + r], fill=WHITE)
         d.text((tx + 2, ty + 2), nm, font=f, fill=(0, 0, 0))
-        d.text((tx, ty), nm, font=f, fill=WHITE)
+        d.text((tx, ty), nm, font=f, fill=DEOCC if nm in set(blue_label or []) else WHITE)
         shown += 1
 
     km_px = sc / 111.0
@@ -385,12 +385,18 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         tsz -= 2
     for li, ln in enumerate(lines):
         yy = ty0 + (66 if vertical else 58) - tsz + li * (tsz + 10)
+        xx = 60
         if li == 0 and ln.startswith("Поблизу: "):   # «Поблизу:» — нежирним, назви — жирним
-            d.text((60, yy), "Поблизу: ", font=_font("500", tsz), fill=NEW)
-            d.text((60 + d.textlength("Поблизу: ", font=_font("500", tsz)), yy), ln[len("Поблизу: "):],
-                   font=_font("800", tsz), fill=NEW)
-        else:
-            d.text((60, yy), ln, font=_font("800", tsz), fill=NEW)
+            d.text((xx, yy), "Поблизу: ", font=_font("500", tsz), fill=NEW)
+            xx += d.textlength("Поблизу: ", font=_font("500", tsz))
+            ln = ln[len("Поблизу: "):]
+        blue_set = set(blue_label or [])
+        for ni, nm_ in enumerate(ln.split(" · ")):   # назви біля деокупованих ділянок — блакитним
+            if ni:
+                d.text((xx, yy), " · ", font=_font("800", tsz), fill=NEW)
+                xx += d.textlength(" · ", font=_font("800", tsz))
+            d.text((xx, yy), nm_, font=_font("800", tsz), fill=DEOCC if nm_ in blue_set else NEW)
+            xx += d.textlength(nm_, font=_font("800", tsz))
     if len(lines) > 1:
         ty0 += 62 if vertical else 50   # підзаголовок — нижче, над мапою
     ssz = 40

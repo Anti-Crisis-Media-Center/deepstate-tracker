@@ -673,10 +673,11 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
         parts = []
         nm = names.get(key) or []
         if r["newly_km2"] > 0:
-            near = tg_near(nm, r["newly_places"])
+            near = tg_near(pick(nm, "occ"), r["newly_places"])
             parts.append(f"{fmt_km2(r['newly_km2'])} км² позначено окупованими" + (f" — {near}" if near else "") + ".")
         if r["deocc_km2"] > 0:
-            near = tg_near([] if r["newly_km2"] > 0 else nm, r["deocc_places"])
+            dn = pick(nm, "deocc") if (isinstance(nm, Names) and nm.both) or r["newly_km2"] <= 0 else []
+            near = tg_near(dn, r["deocc_places"])
             parts.append(f"{fmt_km2(r['deocc_km2'])} км² позначено деокупованими" + (f" — {near}" if near else "") + ".")
         if r.get("grey_km2", 0) > 0:   # червоне стало сірим — не деокупація
             g = (f"Ще {fmt_km2(r['grey_km2'])} км², раніше позначених окупованими, тепер позначено як район "
@@ -777,15 +778,20 @@ def tg_near(names: list[str], villages: list[str]) -> str:
 def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_pl: list,
                  grey: float = 0.0, names: list[str] | None = None) -> str | None:
     parts = []
+    split = isinstance(names, Names) and names.both
     if newly > 0:
         s = f"{fmt_km2(newly)} км² позначено окупованими"
-        if names or newly_pl:
-            s += " " + near_phrase(names or [], newly_pl) if names else f" — поблизу: {join_places(newly_pl[:3])}"
+        on = pick(names, "occ")
+        if on or newly_pl:
+            s += " " + near_phrase(on, newly_pl) if on else f" — поблизу: {join_places(newly_pl[:3])}"
         parts.append(s)
     if deocc > 0:
         s = f"{fmt_km2(deocc)} км² — деокупованими"
-        if deocc_pl and not (names and newly > 0):
-            s += " " + near_phrase(names or [], deocc_pl) if names else f" — поблизу: {join_places(deocc_pl[:3])}"
+        dn = pick(names, "deocc")
+        if split:
+            s += " " + near_phrase(dn, deocc_pl)
+        elif deocc_pl and not (names and newly > 0):
+            s += " " + near_phrase(dn, deocc_pl) if dn else f" — поблизу: {join_places(deocc_pl[:3])}"
         parts.append(s)
     if grey > 0:
         parts.append(f"{fmt_km2(grey)} км² — з окупованих на сіру зону")
@@ -811,6 +817,14 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
     for key, cfg in OBLASTS.items():
         net = _net_period(rows, key)
         near = ""
+        occ, free = _period_totals(rows, key)
+        if occ >= 0.01 and free >= 0.01:   # обидва напрямки — дві цифри, кожна зі своїми назвами
+            nm = place_names([r["date"] for r in rows], key)
+            no, nd = near_phrase(pick(nm, "occ"), []), near_phrase(pick(nm, "deocc"), [])
+            lines.append(f"{cfg['short']}: за {word} {fmt_km2(occ)} км² позначено окупованими"
+                         + (f" {no}" if no else "") + f"; {fmt_km2(free)} км² — деокупованими"
+                         + (f" {nd}" if nd else "") + ".")
+            continue
         if abs(net) >= 0.01:
             vil = [x for r in rows for x in (r.get(f"{key}_newly_places") or "").split("; ") if x]
             near = near_phrase(place_names([r["date"] for r in rows], key), vil)
@@ -947,12 +961,13 @@ def story_blocks_daily(results: dict, names: dict | None = None) -> list[dict]:
         if r["newly_km2"] > 0:
             blocks.append({"label": STORY_LABELS[k], "big": f"+{fmt_km2(r['newly_km2'])} км²",
                            "text": "позначено окупованими",
-                           "note": (near_phrase(nm, r["newly_places"]) if nm else
+                           "note": (near_phrase(pick(nm, "occ"), r["newly_places"]) if nm else
                                     f"поблизу: {_short_places(r['newly_places'])}" if r["newly_places"] else "")})
         if r["deocc_km2"] > 0:
             blocks.append({"label": "" if r["newly_km2"] > 0 else STORY_LABELS[k],
                            "big": f"−{fmt_km2(r['deocc_km2'])} км²", "text": "позначено деокупованими",
-                           "note": (near_phrase([] if r["newly_km2"] > 0 else nm, r["deocc_places"]) if nm else
+                           "note": (near_phrase(pick(nm, "deocc") if (isinstance(nm, Names) and nm.both)
+                                                or r["newly_km2"] <= 0 else [], r["deocc_places"]) if nm else
                                     f"поблизу: {_short_places(r['deocc_places'])}" if r["deocc_places"] else "")})
         if r.get("grey_km2", 0) > 0:
             blocks.append({"label": "" if (r["newly_km2"] > 0 or r["deocc_km2"] > 0) else STORY_LABELS[k],
@@ -974,13 +989,15 @@ def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
     for k in OBLASTS:
         occ, free = _period_totals(rows, k)
         names = place_names(dates, k)
-        note = ("поблизу: " + " · ".join(names)) if names else ""
+        nt = lambda xs: ("поблизу: " + " · ".join(xs)) if xs else ""   # noqa: E731
+        split = isinstance(names, Names) and names.both
         if occ >= 0.01:
             blocks.append({"label": STORY_LABELS[k], "big": f"{fmt_km2(occ)} км²",
-                           "text": f"позначено окупованими за {word}", "note": note if free < 0.01 else ""})
+                           "text": f"позначено окупованими за {word}",
+                           "note": nt(pick(names, "occ")) if free < 0.01 or split else ""})
         if free >= 0.01:
             blocks.append({"label": "" if occ >= 0.01 else STORY_LABELS[k], "big": f"{fmt_km2(free)} км²",
-                           "text": f"позначено деокупованими за {word}", "note": note})
+                           "text": f"позначено деокупованими за {word}", "note": nt(pick(names, "deocc"))})
         if occ < 0.01 and free < 0.01:
             blocks.append({"label": STORY_LABELS[k], "big": "", "text": f"за {word} без змін"})
     return blocks
@@ -1177,6 +1194,26 @@ def _nearest_settlement_geom(g) -> str | None:
     return best[0]
 
 
+class Names(list):
+    """Список назв (усі — для заголовка мапи) + ті самі назви окремо за напрямком:
+    .occ — біля ділянок, позначених окупованими, .deocc — деокупованими (рішення 10.11:
+    коли є обидва напрямки, назви не змішуємо, щоб було видно, де що)."""
+    occ: list = []
+    deocc: list = []
+
+    @property
+    def both(self) -> bool:
+        return bool(self.occ) and bool(self.deocc)
+
+
+def pick(nm, which: str) -> list:
+    """Назви для рядка про окупацію (which="occ") чи деокупацію ("deocc"). Якщо за період був лише
+    один напрямок — повний список, як і раніше."""
+    if isinstance(nm, Names) and nm.both:
+        return list(getattr(nm, which))
+    return list(nm or [])
+
+
 def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]:
     """ЄДИНИЙ список назв для всіх місць (перший кадр, заголовок мапи, останній кадр, сторіз).
     Беремо лише те, що лишилося на кінець періоду (без «позначили й зняли»). Ділянки, ближчі одна
@@ -1201,14 +1238,22 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
         parts = [unary_union(c) for c in clusters]
         score: dict[str, float] = {}
         west: dict[str, float] = {}        # довгота — щоб перелічувати зліва направо, як читають мапу
+        side: dict[str, set] = {}          # біля якої ділянки назва: окупованої, деокупованої чи обох
         for g in parts:
             # місто — лише якщо ближче 10 км; інакше найближчий населений пункт (рішення 9.11.2026)
             name = _nearest_city_geom(g, max_km=10.0) or _nearest_settlement_geom(g)
             if name:
                 score[name] = score.get(name, 0) + g.area
                 west[name] = min(west.get(name, 999), g.centroid.x)
+                if red is not None and g.intersection(red).area > 0:
+                    side.setdefault(name, set()).add("occ")
+                if blue is not None and g.intersection(blue).area > 0:
+                    side.setdefault(name, set()).add("deocc")
         top = sorted(score, key=score.get, reverse=True)[:n]       # ЯКІ назви — за площею змін
-        return sorted(top, key=lambda nm: west[nm])                # ПОРЯДОК — зліва направо (рішення 10.11)
+        out = Names(sorted(top, key=lambda nm: west[nm]))          # ПОРЯДОК — зліва направо (рішення 10.11)
+        out.occ = [x for x in out if "occ" in side.get(x, ())]
+        out.deocc = [x for x in out if "deocc" in side.get(x, ())]
+        return out
     except Exception as e:  # noqa: BLE001
         log(f"Назви ділянок: {e}")
         return []
@@ -1312,6 +1357,25 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     occ, free = _period_totals(rows, "donetsk")
     y = TOP + 300                     # текст — між заголовком обкладинки і смугою «Донеччина · Луганщина»
     word = "за тиждень" if kind == "week" else "за місяць"
+    split = isinstance(names, Names) and names.both and occ >= 0.01 and free >= 0.01
+    if split:
+        # обидва напрямки (рішення 10.11): кожна цифра — зі своїми назвами, щоб не було каші
+        y += 10
+        centered(f"позначено {word}:", f500(38), y, white)
+        y += 50
+        for v, w, nm_ in ((occ, "окупованими", names.occ), (free, "деокупованими", names.deocc)):
+            num, lab = f"{fmt_km2(v)} км²", f"  {w}"
+            x = (1080 - d.textlength(num, font=f800(70)) - d.textlength(lab, font=f800(42))) / 2
+            d.text((x, y + 66), num, font=f800(70), fill=yel, anchor="ls")
+            d.text((x + d.textlength(num, font=f800(70)), y + 66), lab, font=f800(42), fill=white, anchor="ls")
+            ln = near_phrase(nm_, [])
+            fs = 38
+            while d.textlength(ln, font=f500(fs)) > 920 and fs > 28:
+                fs -= 2
+            centered(ln, f500(fs), y + 80, white)
+            y += 80 + fs + 34
+        img.save(out, "JPEG", quality=92)
+        return out
     if names:
         # ієрархія (рішення Юлі 10.11): «Поблизу:» помітніше, назви — спокійніше, головне — цифра
         centered("Поблизу:", f500(44), y, white)
@@ -1381,6 +1445,20 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
         centered(f"{STORY_LABELS[k][:1]}{STORY_LABELS[k][1:].lower()} · {period}", f500(46), y, white)
         y += 70
         nm = place_names([r["date"] for r in rows], k)
+        if isinstance(nm, Names) and nm.both and occ >= 0.01 and free >= 0.01:
+            # обидва напрямки: під кожною цифрою — свої назви
+            y += 20
+            for val, word, col, xs in ((occ, "окуповані", red, nm.occ), (free, "деокуповані", blue, nm.deocc)):
+                centered(f"{fmt_km2(val)} км²", f800(104), y, col)
+                centered(word, f500(46), y + 120, white)
+                ln = near_phrase(xs, [])
+                fs = 36
+                while d.textlength(ln, font=f500(fs)) > 960 and fs > 28:
+                    fs -= 2
+                centered(ln, f500(fs), y + 180, grey)
+                y += 260
+            y += 30
+            continue
         if nm:
             ln = "поблизу: " + " · ".join(nm)
             if d.textlength(ln, font=f500(38)) > 960 and len(nm) > 2:   # 3–4 назви — на два рядки
@@ -1657,7 +1735,16 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             near = tg_near(place_names([r["date"] for r in rows], key),
                            _places(rows, f"{key}_newly_places") + _places(rows, f"{key}_deoccupied_places"))
             near = f" — {near}" if near else ""
-            if newly > 0 and deocc > 0:   # були і окупація, і деокупація — показуємо обидві та підсумок
+            nmp = place_names([r["date"] for r in rows], key)
+            if newly > 0 and deocc > 0 and isinstance(nmp, Names) and nmp.both:   # назви окремо за напрямком
+                no = tg_near(pick(nmp, "occ"), _places(rows, f"{key}_newly_places"))
+                nd = tg_near(pick(nmp, "deocc"), _places(rows, f"{key}_deoccupied_places"))
+                body = (f"{word} {fmt_km2(newly)} км² позначено окупованими" + (f" — {no}" if no else "")
+                        + f"; {fmt_km2(deocc)} км² — деокупованими" + (f" — {nd}" if nd else "")
+                        + ". У підсумку окупована площа "
+                        + (f"зросла на {fmt_km2(net)} км²." if net >= 0.01 else
+                           f"зменшилася на {fmt_km2(-net)} км²." if net <= -0.01 else "майже не змінилася."))
+            elif newly > 0 and deocc > 0:   # були і окупація, і деокупація — показуємо обидві та підсумок
                 body = (f"{word} {fmt_km2(newly)} км² позначено окупованими, {fmt_km2(deocc)} км² — "
                         f"деокупованими{near}. У підсумку окупована площа "
                         + (f"зросла на {fmt_km2(net)} км²." if net >= 0.01 else
@@ -1796,6 +1883,8 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         cities = [re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl if is_city(p)]
         names = list(dict.fromkeys(re.sub(r"\s*\(.*?\)", "", p).strip() for p in pl))
         pn = place_names(dates, key)
+        # обидва напрямки: назви біля деокупованих ділянок — блакитним (у заголовку й на мапі)
+        blue_nm = [x for x in pn.deocc if x not in pn.occ] if isinstance(pn, Names) and pn.both else []
         if pn:
             title = names_title(pn)
         elif cities:
@@ -1833,15 +1922,16 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
             for suffix, kw in frames:
                 try:
                     change_map.render(files, DATA / out_name.replace(".jpg", suffix), title, sub, oblast_key=key,
-                                      height=1920, must_label=pn, **kw)
+                                      height=1920, must_label=pn, blue_label=blue_nm, **kw)
                 except Exception as e:  # noqa: BLE001
                     log(f"Вертикальна мапа для відео: {e}")
         try:   # 4:5 — для Threads: у каруселі видно край наступної картки
             change_map.render(files, DATA / out_name.replace(".jpg", "_45.jpg"), title, sub, oblast_key=key,
-                              height=1350, must_label=pn)
+                              height=1350, must_label=pn, blue_label=blue_nm)
         except Exception as e:  # noqa: BLE001
             log(f"Мапа 4:5: {e}")
-        return change_map.render(files, DATA / out_name, title, sub, oblast_key=key, must_label=pn)
+        return change_map.render(files, DATA / out_name, title, sub, oblast_key=key, must_label=pn,
+                                 blue_label=blue_nm)
     except Exception as e:  # noqa: BLE001
         log(f"Мапа змін: не вдалося — {e}")
         return None
