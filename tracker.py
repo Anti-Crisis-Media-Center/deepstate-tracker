@@ -1739,8 +1739,10 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             if newly > 0 and deocc > 0 and isinstance(nmp, Names) and nmp.both:   # назви окремо за напрямком
                 no = tg_near(pick(nmp, "occ"), _places(rows, f"{key}_newly_places"))
                 nd = tg_near(pick(nmp, "deocc"), _places(rows, f"{key}_deoccupied_places"))
-                body = (f"{word} {fmt_km2(newly)} км² позначено окупованими" + (f" — {no}" if no else "")
-                        + f"; {fmt_km2(deocc)} км² — деокупованими" + (f" — {nd}" if nd else "")
+                o_, f_ = _period_totals(rows, key)   # ті самі цифри, що на мапі, у відео й сторіз
+                net = round(o_ - f_, 2)              # щоб підсумок точно дорівнював різниці двох цифр
+                body = (f"{word} {fmt_km2(o_)} км² позначено окупованими" + (f" — {no}" if no else "")
+                        + f"; {fmt_km2(f_)} км² — деокупованими" + (f" — {nd}" if nd else "")
                         + ". У підсумку окупована площа "
                         + (f"зросла на {fmt_km2(net)} км²." if net >= 0.01 else
                            f"зменшилася на {fmt_km2(-net)} км²." if net <= -0.01 else "майже не змінилася."))

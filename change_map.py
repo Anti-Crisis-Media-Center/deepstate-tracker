@@ -388,14 +388,15 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     for li, ln in enumerate(lines):
         yy = ty0 + (66 if vertical else 58) - tsz + li * (tsz + 10)
         xx = 60
+        two_way = bool(blue_label) or bool(red_label)   # обидва напрямки: кольорові лише назви, решта — біла
         if li == 0 and ln.startswith("Поблизу: "):   # «Поблизу:» — нежирним, назви — жирним
-            d.text((xx, yy), "Поблизу: ", font=_font("500", tsz), fill=NEW)
+            d.text((xx, yy), "Поблизу: ", font=_font("500", tsz), fill=WHITE if two_way else NEW)
             xx += d.textlength("Поблизу: ", font=_font("500", tsz))
             ln = ln[len("Поблизу: "):]
         blue_set, red_set = set(blue_label or []), set(red_label or [])
         for ni, nm_ in enumerate(ln.split(" · ")):   # назви біля деокупованих ділянок — блакитним
             if ni:
-                d.text((xx, yy), " · ", font=_font("800", tsz), fill=NEW)
+                d.text((xx, yy), " · ", font=_font("800", tsz), fill=WHITE if two_way else NEW)
                 xx += d.textlength(" · ", font=_font("800", tsz))
             d.text((xx, yy), nm_, font=_font("800", tsz), fill=DEOCC if nm_ in blue_set else TITLE_RED if nm_ in red_set else NEW)
             xx += d.textlength(nm_, font=_font("800", tsz))
