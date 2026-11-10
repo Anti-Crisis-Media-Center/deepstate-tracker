@@ -1492,7 +1492,7 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
         centered(f"Донеччина · {period}", f500(46), y, white)
         centered("без змін", f800(80), y + 90, white)
         y += 220
-    centered("За позначеннями DeepStateMap.live", f500(34), y - 10, grey)   # джерело — одразу під цифрами
+    centered("За даними DeepStateMap.live", f500(34), y - 10, grey)   # джерело — одразу під цифрами
     y = max(y + 140, 1150)
     centered("Підписуйтеся,", f800(74), y, yel)                              # заклик — унизу, жовтим
     centered("щоб не пропустити", f800(64), y + 88, yel)
