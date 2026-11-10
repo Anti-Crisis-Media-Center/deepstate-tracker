@@ -1,13 +1,19 @@
 name: Аналітика на вимогу (кнопки в боті)
 on:
-  schedule:
-    - cron: "*/10 * * * *"   # кожні 10 хвилин перевіряє, чи натискали кнопки
-  workflow_dispatch:
+  workflow_dispatch:          # запускає Make, щойно в боті натиснули кнопку (див. ondemand.py)
     inputs:
       setup:
         description: "Опублікувати й закріпити кнопки в гілці «Аналітика»"
         type: boolean
         default: false
+      webhook_url:
+        description: "Адреса вебхука Make (вставити один раз при налаштуванні)"
+        type: string
+        default: ""
+      update:
+        description: "Заповнює Make автоматично — вручну не чіпати"
+        type: string
+        default: ""
 concurrency:
   group: analytics-ondemand
   cancel-in-progress: false
@@ -27,6 +33,8 @@ jobs:
           ANALYTICS_CHAT_ID: ${{ secrets.ANALYTICS_CHAT_ID }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
           SETUP: ${{ inputs.setup && '1' || '0' }}
+          WEBHOOK_URL: ${{ inputs.webhook_url }}
+          UPDATE_B64: ${{ inputs.update }}
         run: python ondemand.py
       - if: steps.req.outputs.days != ''
         run: pip install -q -r requirements.txt
