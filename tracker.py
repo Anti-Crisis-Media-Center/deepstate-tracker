@@ -1327,9 +1327,14 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
         y += 58 + len(rows_) * (fs + 10) + 22
     big = 88 if names and len(names) > 2 else 96
     if occ >= 0.01 and free >= 0.01:
-        centered(f"{fmt_km2(occ)} км² · {fmt_km2(free)} км²", f800(80), y, yel)
-        centered_mix([("позначено ", f500(36)), ("окупованими · деокупованими", f800(36)), (f" {word}", f500(36))],
-                     y + 92, white)
+        # обидва напрямки: дві короткі рядки замість одного довгого (довгий виходив за краї кадру)
+        centered(f"позначено {word}:", f500(36), y - 8, white)
+        for i, (v, w) in enumerate(((occ, "окупованими"), (free, "деокупованими"))):
+            num, lab = f"{fmt_km2(v)} км²", f"  {w}"
+            x = (1080 - d.textlength(num, font=f800(64)) - d.textlength(lab, font=f800(40))) / 2
+            base = y + 86 + i * 76
+            d.text((x, base), num, font=f800(64), fill=yel, anchor="ls")
+            d.text((x + d.textlength(num, font=f800(64)), base), lab, font=f800(40), fill=white, anchor="ls")
     elif occ >= 0.01 or free >= 0.01:
         centered(f"{fmt_km2(max(occ, free))} км²", f800(big), y, yel)
         centered_mix([("позначено ", f500(42)), ("окупованими" if occ >= 0.01 else "деокупованими", f800(42)),
