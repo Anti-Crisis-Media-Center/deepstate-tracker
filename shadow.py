@@ -42,6 +42,28 @@ def photo(p: Path, caption: str) -> None:
         send("sendPhoto", {"caption": caption}, {"photo": fh})
 
 
+def threads_preview(cover: Path, mp: Path | None, text: str, title: str) -> None:
+    """Як допис виглядатиме в Threads: обкладинка 4:5 (+ мапа 4:5, якщо є зміни) і текст."""
+    import json as _json
+    c45 = cover.with_name(cover.stem + "_45.jpg")
+    imgs = [c45 if c45.exists() else cover]
+    if mp:
+        m45 = mp.with_name(mp.stem + "_45.jpg")
+        imgs.append(m45 if m45.exists() else mp)
+    cap = f"🧪 {title}\n\n{text}"[:1000]
+    if len(imgs) == 1:
+        photo(imgs[0], cap)
+        return
+    fhs = {f"f{i}": p.open("rb") for i, p in enumerate(imgs)}
+    try:
+        media = [{"type": "photo", "media": f"attach://f{i}", **({"caption": cap} if i == 0 else {})}
+                 for i in range(len(imgs))]
+        send("sendMediaGroup", {"media": _json.dumps(media, ensure_ascii=False)}, fhs)
+    finally:
+        for fh in fhs.values():
+            fh.close()
+
+
 def results_from_row(r: dict) -> dict:
     out = {}
     for k in T.OBLASTS:
@@ -63,10 +85,15 @@ def run_day(hist: list[dict]) -> None:
     photo(card, f"🧪 Тінь v9 · сторіз за добу ({day})")
     nets = {k: res[k]["newly_km2"] - res[k]["deocc_km2"] for k in T.OBLASTS}
     places = {k: res[k]["newly_places"] + res[k]["deocc_places"] for k in T.OBLASTS}
-    mp = T.make_change_map("day", [day], nets, places, "shadow_map_day.jpg")
-    if mp:
-        v45 = mp.with_name(mp.stem + "_45.jpg")
-        photo(v45 if v45.exists() else mp, f"🧪 Тінь v9 · мапа за добу для Threads, 4:5 ({day})")
+    mp = T.make_change_map("day", [day], nets, places, "shadow_map_day.jpg") if any(abs(v) > 0 for v in nets.values()) else None
+    try:
+        import threads_api
+        prev = (datetime.strptime(day, "%Y-%m-%d").date() - timedelta(days=1)).strftime("%d.%m.%Y")
+        names = {k: T.place_names([day], k) for k in T.OBLASTS if res[k]["newly_km2"] or res[k]["deocc_km2"]}
+        text = threads_api.adapt_text(T.build_fb_teaser(prev, res, names))
+    except Exception as e:  # noqa: BLE001
+        text = f"(текст не зібрався: {e})"
+    threads_preview(T.COVER_IMAGE, mp, text, f"Тінь v9 · Threads за добу ({day}) — гортайте")
 
 
 def release_upload(video: Path) -> str | None:
@@ -134,6 +161,12 @@ def run_week(hist: list[dict]) -> None:
     card = render_story(T.COVER_WEEK, label, T.story_blocks_summary("week", rows), OUT / "story_week.jpg",
                         footer=foot, handle=handle)
     photo(card, f"🧪 Тінь v9 · сторіз тижня ({label})")
+    try:
+        import threads_api
+        text = threads_api.adapt_text(T.build_fb_summary_teaser("week", rows))
+    except Exception as e:  # noqa: BLE001
+        text = f"(текст не зібрався: {e})"
+    threads_preview(T.COVER_WEEK, mp, text, f"Тінь v9 · Threads, тиждень ({label}) — гортайте")
     if not v:
         send("sendMessage", {"text": "🧪 Тінь v9: відео не зібралося (немає ffmpeg або помилка) — Reels не перевірено"})
     if v:
