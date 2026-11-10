@@ -1177,10 +1177,11 @@ def _nearest_settlement_geom(g) -> str | None:
     return best[0]
 
 
-def place_names(dates: list[str], key: str = "donetsk", n: int = 3) -> list[str]:
+def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]:
     """ЄДИНИЙ список назв для всіх місць (перший кадр, заголовок мапи, останній кадр, сторіз).
-    Беремо лише те, що лишилося на кінець періоду (без «позначили й зняли»): кожну окрему ділянку
-    підписуємо найближчим містом у межах 20 км; назви — за площею змін, до трьох."""
+    Беремо лише те, що лишилося на кінець періоду (без «позначили й зняли»). Ділянки, ближчі одна
+    до одної ніж ~5 км, — одне місце й одна назва (щоб «Добропілля · Білицьке» не займали два місця);
+    назва — місто в межах 10 км, інакше найближчий населений пункт; до чотирьох, за площею (рішення 10.11)."""
     try:
         import change_map
         files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
@@ -1190,7 +1191,13 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 3) -> list[str]
             return []
         from shapely.ops import unary_union
         u = unary_union(geoms)
-        parts = list(getattr(u, "geoms", [u]))
+        parts = [p for p in getattr(u, "geoms", [u]) if not p.is_empty]
+        clusters: list[list] = []          # групуємо ділянки, що ближче ~5 км одна до одної
+        for p in parts:
+            hit = [c for c in clusters if any(p.distance(q) < 0.05 for q in c)]
+            merged = [p] + [q for c in hit for q in c]
+            clusters = [c for c in clusters if c not in hit] + [merged]
+        parts = [unary_union(c) for c in clusters]
         score: dict[str, float] = {}
         for g in parts:
             # місто — лише якщо ближче 10 км; інакше найближчий населений пункт (рішення 9.11.2026)
@@ -1299,8 +1306,8 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
         centered("Поблизу:", f500(36), y, white)
         line = " · ".join(names)
         rows_ = [line]
-        if d.textlength(line, font=f800(62)) > 920 and len(names) > 2:   # три назви — на два рядки
-            rows_ = [" · ".join(names[:2]), names[2]]
+        if d.textlength(line, font=f800(62)) > 920 and len(names) > 2:   # 3–4 назви — на два рядки
+            rows_ = [" · ".join(names[:2]), " · ".join(names[2:])]
         fs = 58 if len(rows_) > 1 else 64
         while max(d.textlength(r_, font=f800(fs)) for r_ in rows_) > 920 and fs > 48:
             fs -= 4
@@ -1357,8 +1364,12 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
         y += 70
         nm = place_names([r["date"] for r in rows], k)
         if nm:
-            centered("поблизу: " + " · ".join(nm),
-                     f500(38), y, grey)
+            ln = "поблизу: " + " · ".join(nm)
+            if d.textlength(ln, font=f500(38)) > 960 and len(nm) > 2:   # 3–4 назви — на два рядки
+                centered("поблизу: " + " · ".join(nm[:2]), f500(38), y, grey)
+                y += 50
+                ln = " · ".join(nm[2:])
+            centered(ln, f500(38), y, grey)
             y += 60
         y += 20
         for val, word, col in ((occ, "окуповані", red), (free, "деокуповані", blue)):

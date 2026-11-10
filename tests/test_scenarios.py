@@ -88,8 +88,8 @@ REAL_WEEK = [f"2026-11-0{i}" for i in range(3, 10)]
 
 @pytest.mark.skipif(not (tracker.CHANGES_DIR / "2026-11-05.geojson").exists(), reason="немає даних тижня 2–9.11")
 def test_names_real_week():
-    """Справжній тиждень 2–9.11.2026: місто лише ближче 10 км, інакше — найближчий населений пункт."""
-    assert tracker.place_names(REAL_WEEK) == ["Русин Яр", "Покровськ", "Добропілля"]
+    """Справжній тиждень 2–9.11.2026: сусідні ділянки (<5 км) — одна назва; місто лише ближче 10 км; до 4 назв."""
+    assert tracker.place_names(REAL_WEEK) == ["Білицьке", "Русин Яр", "Костянтинівка"]
 
 
 def test_names_title():

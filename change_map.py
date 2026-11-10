@@ -224,8 +224,8 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         mw = size - 80
         mh = H - top - bottom
     elif portrait:
-        top, bottom = 230, 170
-        mw, mh = size - 80, H - 230 - 170
+        top, bottom = 280, 170                               # місце під заголовок у два рядки (3–4 назви)
+        mw, mh = size - 80, H - top - bottom
     else:
         top, bottom = 230, 170                               # місце під заголовок і підпис
         mh = mw = size - top - bottom
@@ -374,13 +374,13 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     ty0 = top - 200 if vertical else 60
     tsz = 66 if vertical else 58
     lines = [title]
-    if vertical and d.textlength(title, font=_font("800", 60)) > size - 120 and " · " in title:
+    if d.textlength(title, font=_font("800", 60 if vertical else 56)) > size - 120 and " · " in title:
         # довгий список назв — на два рядки, а не дрібним шрифтом
         head, rest = title.split(": ", 1) if ": " in title else ("", title)
         parts = rest.split(" · ")
         lines = [(head + ": " if head else "") + " · ".join(parts[:-1]), parts[-1]] if len(parts) == 2 else \
                 [(head + ": " if head else "") + " · ".join(parts[:2]), " · ".join(parts[2:])]
-        tsz = 60
+        tsz = 60 if vertical else 52
     while tsz > 34 and max(d.textlength(ln, font=_font("800", tsz)) for ln in lines) > size - 120:
         tsz -= 2
     for li, ln in enumerate(lines):
@@ -392,7 +392,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         else:
             d.text((60, yy), ln, font=_font("800", tsz), fill=NEW)
     if len(lines) > 1:
-        ty0 += 62   # підзаголовок — нижче, над мапою
+        ty0 += 62 if vertical else 50   # підзаголовок — нижче, над мапою
     ssz = 40
     while ssz > 26 and d.textlength(subtitle, font=_font("500", ssz)) > size - 120:
         ssz -= 2
