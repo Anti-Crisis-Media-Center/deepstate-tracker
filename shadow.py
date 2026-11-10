@@ -65,7 +65,8 @@ def run_day(hist: list[dict]) -> None:
     places = {k: res[k]["newly_places"] + res[k]["deocc_places"] for k in T.OBLASTS}
     mp = T.make_change_map("day", [day], nets, places, "shadow_map_day.jpg")
     if mp:
-        photo(mp, f"🧪 Тінь v9 · мапа за добу ({day})")
+        v45 = mp.with_name(mp.stem + "_45.jpg")
+        photo(v45 if v45.exists() else mp, f"🧪 Тінь v9 · мапа за добу для Threads, 4:5 ({day})")
 
 
 def release_upload(video: Path) -> str | None:
