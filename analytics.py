@@ -180,7 +180,7 @@ def section(title: str, d: dict | None, reach_word: str) -> list[str]:
         lines.append(f"{reach_word}: {fmt(d['reach'])}{delta(d.get('reach'), d.get('reach_prev'))}")
     lines.append(f"Підписники: {fmt(d.get('followers'))}")
     posts = d["posts"]
-    lines.append(f"Дописів за тиждень: {len(posts)}")
+    lines.append(f"Дописів {'за тиждень' if DAYS == 7 else 'за добу' if DAYS == 1 else f'за {DAYS} дн.'}: {len(posts)}")
     if any("comm" in p for p in posts):   # реакції й коментарі — щоб бачити, де реагують і що модерувати
         lines.append(f"Реакції: {fmt(sum(p.get('react', 0) for p in posts))} · "
                      f"коментарі: {fmt(sum(p.get('comm', 0) for p in posts))}")
@@ -215,9 +215,9 @@ def build() -> str:
     if os.getenv("TIKTOK_REFRESH_TOKEN", "").strip():
         lines += section("TikTok @acmc.ua", tiktok_api.stats(SINCE, log), "Перегляди нових відео")
     lines += youtube_api.sections(SINCE, log)
-    per = "добу" if DAYS == 1 else f"{DAYS} дн."
+    per = "останню добу" if DAYS == 1 else f"останні {DAYS} дн."
     prev = "попередньої доби" if DAYS == 1 else ("попереднього тижня" if DAYS == 7 else f"попередніх {DAYS} дн.")
-    lines.append(f"<i>Охоплення — за останні {per}, у дужках — зміна до {prev}.</i>")
+    lines.append(f"<i>Охоплення — за {per}, у дужках — зміна до {prev}.</i>")
     return "\n".join(lines)
 
 

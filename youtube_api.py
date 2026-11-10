@@ -72,7 +72,8 @@ def section(ref: str, since: datetime, log) -> list[str]:
     uploads = ch.get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
     vids = _videos(_playlist_ids(uploads)) if uploads else []
     new = [v for v in vids if v["snippet"]["publishedAt"] >= since.strftime("%Y-%m-%dT%H:%M:%SZ")]
-    lines.append(f"Нових відео за тиждень: {len(new)}"
+    _d = int(os.getenv("ANALYTICS_DAYS", "7"))
+    lines.append(f"Нових відео {'за тиждень' if _d == 7 else 'за добу' if _d == 1 else f'за {_d} дн.'}: {len(new)}"
                  + (f", переглядів у них: {_fmt(sum(_views(v) for v in new))}" if new else ""))
     for i, v in enumerate(sorted(new, key=_views, reverse=True)[:3], 1):
         s = v["statistics"]

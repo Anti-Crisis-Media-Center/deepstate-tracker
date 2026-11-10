@@ -31,6 +31,9 @@ API = f"https://api.telegram.org/bot{TOK}/"
 BUTTONS = [(1, "Доба"), (3, "3 дні"), (7, "7 днів"), (14, "14 днів"), (30, "30 днів")]
 
 
+BTN_MSGS: list[int] = []   # id повідомлення з кнопками, під яким натиснули (щоб потім перенести кнопки вниз)
+
+
 def tg(method: str, **data) -> dict:
     try:
         return requests.post(API + method, json=data, timeout=40).json()
@@ -47,6 +50,19 @@ def setup() -> None:
     print("Кнопки:", "опубліковано" if r.get("ok") else r)
     if r.get("ok"):
         tg("pinChatMessage", chat_id=CHAT, message_id=r["result"]["message_id"], disable_notification=True)
+
+
+def move_buttons_down(old_id: int, prep_ids: list[int]) -> None:
+    """Після звіту: прибрати «⏳ Готую…» і перенести кнопки вниз гілки, щоб не шукати їх угорі
+    (рішення 10.11.2026). Нові кнопки публікуємо, лише якщо вдалося видалити старі — так при
+    двох швидких натисканнях не з'являться два набори кнопок."""
+    for pid in prep_ids:
+        tg("deleteMessage", chat_id=CHAT, message_id=pid)
+    r = tg("deleteMessage", chat_id=CHAT, message_id=old_id)
+    if r.get("ok"):
+        setup()
+    else:
+        print("Старі кнопки вже прибрано іншим запуском — нові не публікую:", r)
 
 
 def set_webhook(url: str) -> None:
@@ -88,6 +104,8 @@ def collect() -> list[int]:
             if str(msg.get("chat", {}).get("id")) != CHAT:
                 continue
             m = re.match(r"rep:(\d+)$", cq.get("data", ""))
+            if msg.get("message_id"):
+                BTN_MSGS.append(int(msg["message_id"]))
             tg("answerCallbackQuery", callback_query_id=cq["id"], text="Прийнято, звіт буде за кілька хвилин")
             if m:
                 days.append(int(m.group(1)))
@@ -112,17 +130,26 @@ if __name__ == "__main__":
     if not TOK or not CHAT:
         print("Немає ANALYTICS_BOT_TOKEN або чату — пропускаю.")
         sys.exit(0)
+    if os.getenv("REFRESH_OLD", "").strip():   # окремий крок після звітів
+        move_buttons_down(int(os.getenv("REFRESH_OLD")),
+                          [int(x) for x in os.getenv("PREP_IDS", "").split() if x.isdigit()])
+        sys.exit(0)
     if os.getenv("WEBHOOK_URL", "").strip():
         set_webhook(os.getenv("WEBHOOK_URL").strip())
     if os.getenv("SETUP") == "1":
         setup()
     days = collect()
+    prep: list[int] = []
     for d in days:
         per = "добу" if d == 1 else f"{d} дн."
-        tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), text=f"⏳ Готую звіт за {per}…",
-           disable_notification=True)
+        r = tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), text=f"⏳ Готую звіт за {per}…",
+               disable_notification=True)
+        if r.get("ok"):
+            prep.append(r["result"]["message_id"])
     print("Запити:", days or "немає")
     gh_out = os.getenv("GITHUB_OUTPUT")
     if gh_out:
         with open(gh_out, "a") as fh:
             fh.write(f"days={' '.join(map(str, days))}\n")
+            fh.write(f"old_btn={BTN_MSGS[0] if (BTN_MSGS and days) else ''}\n")
+            fh.write(f"prep={' '.join(map(str, prep))}\n")

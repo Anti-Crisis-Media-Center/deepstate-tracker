@@ -57,3 +57,11 @@ jobs:
           for d in ${{ steps.req.outputs.days }}; do
             ANALYTICS_DAYS=$d python analytics.py || echo "Звіт за $d дн. не вдався"
           done
+      - if: steps.req.outputs.old_btn != ''
+        env:
+          ANALYTICS_BOT_TOKEN: ${{ secrets.ANALYTICS_BOT_TOKEN }}
+          ANALYTICS_CHAT_ID: ${{ secrets.ANALYTICS_CHAT_ID }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          REFRESH_OLD: ${{ steps.req.outputs.old_btn }}
+          PREP_IDS: ${{ steps.req.outputs.prep }}
+        run: python ondemand.py   # кнопки — знову внизу гілки
