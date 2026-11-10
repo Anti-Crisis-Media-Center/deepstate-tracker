@@ -79,14 +79,26 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         for i, im in enumerate(seq):
             im.save(f"{td}/f{i:04d}.jpg", quality=90)
         dur = len(seq) / FPS
-        try:   # тиха фонова музика, згенерована тут же (без чужих треків)
-            from music import make_ambient
-            import os
-            audio = ["-i", str(make_ambient(dur, Path(td) / "music.wav", os.getenv("MUSIC_VARIANT") or None))]
-        except Exception:  # noqa: BLE001
-            audio = ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
+        af = []
+        news = Path(__file__).parent / "assets" / "music" / "news.mp3"
+        if news.exists():
+            # Ньюсовий підклад, який Сергій написав для АКМЦ (рішення Юлі 10.11) — на всі Reels/Shorts/TikTok.
+            # Трек рівний (~4 хв), тож щотижня беремо інший фрагмент, щоб звук не набридав.
+            import datetime
+            total = 264.0
+            span = max(1.0, total - dur - 2)
+            start = (datetime.date.today().isocalendar()[1] * 37) % int(span)
+            audio = ["-ss", str(start), "-t", f"{dur:.2f}", "-i", str(news)]
+            af = ["-af", f"loudnorm=I=-16:TP=-1.5,afade=t=in:d=0.3,afade=t=out:st={max(0, dur - 1.7):.2f}:d=1.7"]
+        else:
+            try:   # запасний варіант: тиха музика, згенерована тут же
+                from music import make_ambient
+                import os
+                audio = ["-i", str(make_ambient(dur, Path(td) / "music.wav", os.getenv("MUSIC_VARIANT") or None))]
+            except Exception:  # noqa: BLE001
+                audio = ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-i", f"{td}/f%04d.jpg",
-                        *audio, "-shortest",
+                        *audio, *af, "-shortest",
                         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
                         "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out)], check=True)
     return out

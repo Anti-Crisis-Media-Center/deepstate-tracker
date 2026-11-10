@@ -1461,7 +1461,8 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
         if isinstance(nm, Names) and nm.both and occ >= 0.01 and free >= 0.01:
             # обидва напрямки: під кожною цифрою — свої назви
             y += 20
-            for val, word, col, xs in ((occ, "окуповані", red, nm.occ), (free, "деокуповані", blue, nm.deocc)):
+            for val, word, col, xs in ((occ, "позначено окупованими", red, nm.occ),
+                                       (free, "позначено деокупованими", blue, nm.deocc)):
                 centered(f"{fmt_km2(val)} км²", f800(104), y, col)
                 centered(word, f500(46), y + 120, white)
                 ln = near_phrase(xs, [])
@@ -1481,7 +1482,7 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
             centered(ln, f500(38), y, grey)
             y += 60
         y += 20
-        for val, word, col in ((occ, "окуповані", red), (free, "деокуповані", blue)):
+        for val, word, col in ((occ, "позначено окупованими", red), (free, "позначено деокупованими", blue)):
             if val >= 0.01:
                 centered(f"{fmt_km2(val)} км²", f800(104), y, col)
                 centered(word, f500(46), y + 120, white)
