@@ -83,9 +83,15 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
                 if draw:
                     d.text((MARGIN, y), b["big"], font=f_big, fill=YELLOW)
                 y += int(122 * k)
+            f_bold = _font("800", int(44 * k))
             for line in _wrap(d, b.get("text", ""), f_text, max_w):
-                if draw:
-                    d.text((MARGIN, y), line, font=f_text, fill=WHITE)
+                if draw:   # «окупованими» / «деокупованими» — жирним, як на першому кадрі відео (рішення 10.11)
+                    x = MARGIN
+                    for wi, w in enumerate(line.split(" ")):
+                        fnt = f_bold if w.strip(".,:;·") in ("окупованими", "деокупованими") else f_text
+                        tok = (" " if wi else "") + w
+                        d.text((x, y), tok, font=fnt, fill=WHITE)
+                        x += d.textlength(tok, font=fnt)
                 y += int(58 * k)
             if notes and b.get("note"):
                 for line in _wrap(d, b["note"], f_note, max_w):
