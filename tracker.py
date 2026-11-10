@@ -937,29 +937,33 @@ def _date_label(d) -> str:
     return f"{d.day} {MONTHS_GEN[d.month - 1]} {d.year}"
 
 
-def story_blocks_daily(results: dict) -> list[dict]:
+def story_blocks_daily(results: dict, names: dict | None = None) -> list[dict]:
+    """Сторіз за добу. Назви — ті самі, що на мапі й у текстах (села DeepState — у дужках)."""
+    names = names or {}
     blocks = []
     for k in OBLASTS:
         r = results[k]
+        nm = names.get(k) or []
         if r["newly_km2"] > 0:
             blocks.append({"label": STORY_LABELS[k], "big": f"+{fmt_km2(r['newly_km2'])} км²",
                            "text": "позначено окупованими",
-                           "note": f"поблизу: {_short_places(r['newly_places'])}" if r["newly_places"] else ""})
+                           "note": (near_phrase(nm, r["newly_places"]) if nm else
+                                    f"поблизу: {_short_places(r['newly_places'])}" if r["newly_places"] else "")})
         if r["deocc_km2"] > 0:
             blocks.append({"label": "" if r["newly_km2"] > 0 else STORY_LABELS[k],
                            "big": f"−{fmt_km2(r['deocc_km2'])} км²", "text": "позначено деокупованими",
-                           "note": f"поблизу: {_short_places(r['deocc_places'])}" if r["deocc_places"] else ""})
+                           "note": (near_phrase([] if r["newly_km2"] > 0 else nm, r["deocc_places"]) if nm else
+                                    f"поблизу: {_short_places(r['deocc_places'])}" if r["deocc_places"] else "")})
         if r.get("grey_km2", 0) > 0:
             blocks.append({"label": "" if (r["newly_km2"] > 0 or r["deocc_km2"] > 0) else STORY_LABELS[k],
                            "big": f"{fmt_km2(r['grey_km2'])} км²", "text": "з окупованих — на сіру зону",
                            "note": f"поблизу: {_short_places(r['grey_places'])}" if r["grey_places"] else ""})
     if not blocks:
-        blocks.append({"big": "", "text": "На Донеччині й Луганщині змін позначень окупованих територій "
-                                          "за добу не зафіксовано."})
+        blocks.append({"big": "", "text": "Донеччина й Луганщина: за добу на мапі DeepState без змін."})
     else:
         for k in OBLASTS:
             if results[k]["newly_km2"] <= 0 and results[k]["deocc_km2"] <= 0 and not results[k].get("grey_km2"):
-                blocks.append({"label": STORY_LABELS[k], "big": "", "text": "змін не зафіксовано"})
+                blocks.append({"label": STORY_LABELS[k], "big": "", "text": "без змін"})
     return blocks
 
 
@@ -978,7 +982,7 @@ def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
             blocks.append({"label": "" if occ >= 0.01 else STORY_LABELS[k], "big": f"{fmt_km2(free)} км²",
                            "text": f"позначено деокупованими за {word}", "note": note})
         if occ < 0.01 and free < 0.01:
-            blocks.append({"label": STORY_LABELS[k], "big": "", "text": f"за {word} змін не зафіксовано"})
+            blocks.append({"label": STORY_LABELS[k], "big": "", "text": f"за {word} без змін"})
     return blocks
 
 
@@ -1257,7 +1261,7 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
         t = names_title(names)
         return big, what, t[:1].lower() + t[1:]
     top = max(places, key=places.get)
-    return big, what, (f"біля {CITY_GENITIVE.get(top, top)}" if top in city_names else f"поблизу: {top}")
+    return big, what, f"поблизу: {top}"
 
 
 def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path,
@@ -1353,7 +1357,7 @@ def _tiktok_end_card(kind: str, rows: list[dict], cover: Path, date_label: str, 
         y += 70
         nm = place_names([r["date"] for r in rows], k)
         if nm:
-            centered(("біля " + CITY_GENITIVE[nm[0]]) if len(nm) == 1 and nm[0] in CITY_GENITIVE else "поблизу: " + " · ".join(nm),
+            centered("поблизу: " + " · ".join(nm),
                      f500(38), y, grey)
             y += 60
         y += 20
@@ -2050,7 +2054,8 @@ def main() -> int:
                                               fb_text + "\n\n" + _tiktok_tags(day_places, lug),
                                               COVER_IMAGE, log, alert, DRY_RUN,
                                               extra_images=[day_map] if day_map else None))
-    step("Сторіз", lambda: make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results)))
+    step("Сторіз", lambda: make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results,
+                                                     {k: place_names([today], k) for k in OBLASTS})))
     if now.date().weekday() == WEEKLY_WEEKDAY and not DRY_RUN:
         step("Маркер Threads", lambda: threads_api.refresh_token(log, alert))
 

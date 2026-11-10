@@ -59,7 +59,7 @@ def run_day(hist: list[dict]) -> None:
     res = results_from_row(r)
     label = T._date_label(datetime.strptime(day, "%Y-%m-%d").date())
     foot, handle = T.STORY_FOOTERS["day"]
-    card = render_story(T.COVER_IMAGE, label, T.story_blocks_daily(res), OUT / "story_day.jpg", footer=foot, handle=handle)
+    card = render_story(T.COVER_IMAGE, label, T.story_blocks_daily(res, {k: T.place_names([day], k) for k in T.OBLASTS}), OUT / "story_day.jpg", footer=foot, handle=handle)
     photo(card, f"🧪 Тінь v9 · сторіз за добу ({day})")
     nets = {k: res[k]["newly_km2"] - res[k]["deocc_km2"] for k in T.OBLASTS}
     places = {k: res[k]["newly_places"] + res[k]["deocc_places"] for k in T.OBLASTS}
