@@ -37,7 +37,7 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         n = int(sec * FPS)
         seq.extend(Image.blend(x, y, i / n) for i in range(1, n + 1))
 
-    hold(a, 4.0)   # перший кадр: 4 с — щоб устигнути прочитати назви й цифру (рішення 10.11)
+    hold(a, 5.0)   # перший кадр: 5 с — щоб устигнути прочитати назви й цифри (рішення 10.11: +1 с після фідбеку)
     if map_base and map_full:
         mb, mf = _vert(Image.open(map_base)), _vert(Image.open(map_full))
         fade(a, mb, 0.5)
@@ -58,23 +58,23 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
                 hold(st, max(0.8, sec - blinks * 1.0 - 1.2))
                 prev = st
             fade(prev, mf, 0.6)
-            hold(mf, 4)
+            hold(mf, 5)
         else:
             for _ in range(2):                # нові ділянки «наливаються» й пульсують
                 fade(mb, mf, 0.8)
                 hold(mf, 0.4)
                 fade(mf, mb, 0.4)
             fade(mb, mf, 0.8)
-            hold(mf, 4)
+            hold(mf, 5)
         fade(mf, c, 0.5)
     elif map_full:                            # без кадру «до змін» — просто мапа
         mf = _vert(Image.open(map_full))
         fade(a, mf, 0.5)
-        hold(mf, 5)
+        hold(mf, 6)
         fade(mf, c, 0.5)
     else:
         fade(a, c, 0.5)
-    hold(c, 5)
+    hold(c, 6)
     with tempfile.TemporaryDirectory() as td:
         for i, im in enumerate(seq):
             im.save(f"{td}/f{i:04d}.jpg", quality=90)

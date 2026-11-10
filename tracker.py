@@ -1343,7 +1343,7 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     fonts = ROOT / "assets" / "fonts"
     f800 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), n)  # noqa: E731
     f500 = lambda n: ImageFont.truetype(str(fonts / "Montserrat-500.ttf"), n)  # noqa: E731
-    OX, TOP, MW, MH = 40, 400, 1000, 1040            # як у change_map для висоти 1920
+    OX, TOP, MW, MH = 40, 500, 1000, 1040            # верх — як у change_map для висоти 1920 (дата й заголовок у зоні, видимій у стрічці)
     img = Image.new("RGB", (1080, 1920), change_map.BG)
     sq = Image.open(cover).convert("RGB").resize((MH, MH), Image.LANCZOS)
     img.paste(sq.crop(((MH - MW) // 2, 0, (MH - MW) // 2 + MW, MH)), (OX, TOP))

@@ -222,7 +222,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     minx, miny, maxx, maxy = frame.bounds
     half = max((maxx - minx) * kx, maxy - miny) / 2 + 0.16  # у «градусах широти»
     if vertical:
-        top, bottom = 400, 480                               # TikTok/Shorts: інтерфейс зверху й знизу
+        top, bottom = 500, 480                               # TikTok/Shorts: інтерфейс зверху й знизу; заголовок — у зоні, яку видно в стрічці FB/IG (обріз до 4:5)
         mw = size - 80
         mh = H - top - bottom
     elif portrait:
@@ -373,7 +373,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
 
     km_px = sc / 111.0
 
-    ty0 = top - 200 if vertical else 60
+    ty0 = top - 200 if vertical else 60   # vertical: 300 — нижче верхніх ~285 px, що їх стрічка ховає
     tsz = 66 if vertical else 58
     lines = [title]
     if d.textlength(title, font=_font("800", 60 if vertical else 56)) > size - 120 and " · " in title:
