@@ -37,7 +37,7 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         n = int(sec * FPS)
         seq.extend(Image.blend(x, y, i / n) for i in range(1, n + 1))
 
-    hold(a, 4.3)   # перший кадр: 4,3 с — щоб устигнути прочитати назви й цифру (рішення 10.11)
+    hold(a, 4.0)   # перший кадр: 4 с — щоб устигнути прочитати назви й цифру (рішення 10.11)
     if map_base and map_full:
         mb, mf = _vert(Image.open(map_base)), _vert(Image.open(map_full))
         fade(a, mb, 0.5)
