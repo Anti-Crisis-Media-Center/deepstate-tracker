@@ -62,8 +62,18 @@ def move_buttons_down(old_id: int, prep_ids: list[int]) -> None:
     r = tg("deleteMessage", chat_id=CHAT, message_id=old_id)
     if r.get("ok"):
         setup()
+        return
+    # Старі кнопки вже переніс попередній запуск (два швидкі натискання). Запуски йдуть по черзі
+    # (concurrency у workflow), тож беремо актуальні кнопки — закріплене повідомлення бота —
+    # і знову переносимо їх під щойно надісланий звіт (виправлення 11.11.2026).
+    pin = (tg("getChat", chat_id=CHAT).get("result") or {}).get("pinned_message") or {}
+    me = (tg("getMe").get("result") or {}).get("id")
+    if pin.get("reply_markup") and me and (pin.get("from") or {}).get("id") == me \
+            and tg("deleteMessage", chat_id=CHAT, message_id=pin["message_id"]).get("ok"):
+        setup()
+        print("Кнопки перенесено вниз (після іншого запуску).")
     else:
-        print("Старі кнопки вже прибрано іншим запуском — нові не публікую:", r)
+        print("Старі кнопки вже прибрано, актуальних не знайдено — нові не публікую:", r, pin.get("message_id"))
 
 
 def set_webhook(url: str) -> None:
