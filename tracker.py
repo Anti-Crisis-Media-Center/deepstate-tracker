@@ -749,6 +749,8 @@ def publish(text: str, image: Path = COVER_IMAGE, silent: bool = True) -> None:
 # а друге повідомлення — у перший коментар. Повна версія лишається в Telegram.
 
 FB_TELEGRAM_LINK = os.getenv("FB_TELEGRAM_LINK", "https://t.me/acmc_ua").strip() or "https://t.me/acmc_ua"
+# окреме посилання-запрошення для YouTube (створене з «АКМЦ Робочий»), щоб рахувати переходи з YouTube (11.11)
+YOUTUBE_TELEGRAM_LINK = os.getenv("YOUTUBE_TELEGRAM_LINK", "https://t.me/acmc_ua").strip() or "https://t.me/acmc_ua"
 FB_CTA = ("Повідомлення DeepState, щодобові, щотижневі та щомісячні підсумки змін на мапі — "
           "щоранку о 8:00 у нашому Telegram-каналі. Посилання в першому коментарі 👇")
 FB_COMMENT = f"Підписуйтеся на наш Telegram, щоб щоранку бачити зміни на мапі DeepState по Донеччині й Луганщині: {FB_TELEGRAM_LINK}"
@@ -1522,7 +1524,7 @@ def youtube_text(kind: str, body: list[str], date_label: str, places: list[str],
     desc = [*[b for b in body if b.strip()], "",
             f"Підсумки змін на мапі DeepState для Донеччини та Луганщини за {period}. "
             + ("Нові підсумки щопонеділка." if kind == "week" else "Нові підсумки щомісяця."),
-            "Зміни за кожну добу — щоранку о 8:00 у нашому Telegram: https://t.me/acmc_ua", "",
+            "Зміни за кожну добу — щоранку о 8:00 у нашому Telegram: " + YOUTUBE_TELEGRAM_LINK, "",
             "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
             "#Донеччина #DeepState #Shorts"]
     return "\n".join(["▶️ YouTube Shorts", "", "Назва:", title, "", "Опис:", *desc, "",

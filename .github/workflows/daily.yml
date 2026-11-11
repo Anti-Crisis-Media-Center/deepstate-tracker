@@ -50,6 +50,7 @@ jobs:
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
           THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
           THREADS_TELEGRAM_LINK: ${{ secrets.THREADS_TELEGRAM_LINK }}
+          YOUTUBE_TELEGRAM_LINK: ${{ secrets.YOUTUBE_TELEGRAM_LINK }}
           GH_ADMIN_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
           FORCE_RUN: ${{ inputs.force && '1' || '0' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
