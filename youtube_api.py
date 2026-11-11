@@ -81,9 +81,12 @@ def section(ref: str, since: datetime, log) -> list[str]:
                      f"{_fmt(_views(v))} перегл., {_fmt(s.get('likeCount'))} вподоб., {_fmt(s.get('commentCount'))} коментарів")
     # рубрика DeepState — окремо, якщо на каналі є такий плейлист
     pls = _get("playlists", part="snippet", channelId=ch["id"], maxResults=50).get("items", [])
-    ds = next((p for p in pls if "DeepState" in p["snippet"]["title"]), None)
+    log(f"YouTube «{name}»: публічні плейлисти — " + "; ".join(p["snippet"]["title"] for p in pls))
+    ds = next((p for p in pls if "deepstate" in p["snippet"]["title"].lower().replace(" ", "")), None)
     if ds:
         dv = sorted(_videos(_playlist_ids(ds["id"])), key=lambda v: v["snippet"]["publishedAt"], reverse=True)
+        if not dv:
+            lines.append("🗺 DeepState: плейлист є, відео в ньому ще немає")
         if dv:
             last4 = dv[:4]
             avg = sum(_views(v) for v in last4) / len(last4)
