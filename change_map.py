@@ -376,18 +376,19 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     ty0 = top - 200 if vertical else 60   # vertical: 300 — нижче верхніх ~285 px, що їх стрічка ховає
     tsz = 66 if vertical else 58
     lines = [title]
-    if d.textlength(title, font=_font("800", 60 if vertical else 56)) > size - 120 and " · " in title:
+    # Заголовок, підзаголовок, легенда й підпис — рівно по лівому й правому краю мапи (рішення 11.11)
+    if d.textlength(title, font=_font("800", 60 if vertical else 56)) > mw and " · " in title:
         # довгий список назв — на два рядки, а не дрібним шрифтом
         head, rest = title.split(": ", 1) if ": " in title else ("", title)
         parts = rest.split(" · ")
         lines = [(head + ": " if head else "") + " · ".join(parts[:-1]), parts[-1]] if len(parts) == 2 else \
                 [(head + ": " if head else "") + " · ".join(parts[:2]), " · ".join(parts[2:])]
         tsz = 60 if vertical else 52
-    while tsz > 34 and max(d.textlength(ln, font=_font("800", tsz)) for ln in lines) > size - 120:
+    while tsz > 34 and max(d.textlength(ln, font=_font("800", tsz)) for ln in lines) > mw:
         tsz -= 2
     for li, ln in enumerate(lines):
         yy = ty0 + (66 if vertical else 58) - tsz + li * (tsz + 10)
-        xx = 60
+        xx = ox
         two_way = bool(blue_label) or bool(red_label)   # обидва напрямки: кольорові лише назви, решта — біла
         if li == 0 and ln.startswith("Поблизу: "):   # «Поблизу:» — нежирним, назви — жирним
             d.text((xx, yy), "Поблизу: ", font=_font("500", tsz), fill=WHITE if two_way else NEW)
@@ -403,16 +404,21 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     if len(lines) > 1:
         ty0 += 62 if vertical else 50   # підзаголовок — нижче, над мапою
     ssz = 40
-    while ssz > 26 and d.textlength(subtitle, font=_font("500", ssz)) > size - 120:
+    while ssz > 30 and d.textlength(subtitle, font=_font("500", ssz)) > mw:
         ssz -= 2
-    d.text((60, ty0 + 85), subtitle, font=_font("500", ssz), fill=WHITE)
+    if d.textlength(subtitle, font=_font("500", ssz)) > mw:   # не влазить — коротший варіант
+        import re as _re
+        subtitle = _re.sub(r" за (добу|тиждень|місяць)$", "", subtitle).replace(" — ", " ")
+        while ssz > 26 and d.textlength(subtitle, font=_font("500", ssz)) > mw:
+            ssz -= 2
+    d.text((ox, ty0 + 85), subtitle, font=_font("500", ssz), fill=WHITE)
     if caption:   # для кадрів відео: коли це сталося («3–5 листопада · позначено окупованими»)
         cf = _font("800", 34)
         cw = d.textlength(caption, font=cf)
         cx0, cy0 = ox + 20, top + 20
         d.rounded_rectangle([cx0, cy0, cx0 + cw + 40, cy0 + 60], radius=14, fill=(8, 12, 26))
         d.text((cx0 + 20, cy0 + 10), caption, font=cf, fill=WHITE)
-    lx, ly = 60, top + mh + 40
+    lx, ly = ox, top + mh + 40
     lf = _font("500", 26)
     legend = ([(NEW_OCC, "позначені окупованими")] if new_occ is not None else []) + \
              ([(DEOCC, "позначені деокупованими")] if final_free is not None else []) + \
@@ -427,8 +433,8 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     lf_size = 26 if len(legend) <= 3 else 22
     lf = _font("500", lf_size)
     for col, label in legend:
-        if lx + 36 + d.textlength(label, font=lf) > size - 50:   # не вміщається — новий рядок
-            lx, ly = 60, ly + 40
+        if lx + 36 + d.textlength(label, font=lf) > ox + mw:   # не вміщається — новий рядок
+            lx, ly = ox, ly + 40
         d.rectangle([lx, ly + 4, lx + 26, ly + 30], fill=LAND if col == FLIP else col,
                     outline=col if col == FLIP else None, width=2)
         d.text((lx + 36, ly), label, font=lf, fill=MUTED)
@@ -441,7 +447,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     t2 = f"{km} км"
     w2 = d.textlength(t2, font=lf)
     total = w1 + 14 + bar + 14 + w2
-    sx = size - 60 - total
+    sx = ox + mw - total
     sy2 = min(ly + 70, H - 45)
     d.text((sx, sy2), t1, font=lf, fill=MUTED)
     bx0, bx1, by = sx + w1 + 14, sx + w1 + 14 + bar, sy2 + 17
@@ -449,7 +455,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     d.line([bx0, by - 9, bx0, by + 9], fill=MUTED, width=3)
     d.line([bx1, by - 9, bx1, by + 9], fill=MUTED, width=3)
     d.text((bx1 + 14, sy2), t2, font=lf, fill=MUTED)
-    d.text((60, sy2), "За даними DeepStateMap.live · АКМЦ", font=_font("500", 26), fill=MUTED)
+    d.text((ox, sy2), "За даними DeepStateMap.live · АКМЦ", font=_font("500", 26), fill=MUTED)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "JPEG", quality=92)
     return out
