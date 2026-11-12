@@ -341,7 +341,18 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
     must = set(must_label or [])
     # міста з заголовка («Поблизу: …») підписуємо першими й обов'язково — щоб назви збігалися
-    pts = [p for p in cities if p[2] in must] + near + [p for p in cities if p[2] not in must]
+    # усі назви із заголовка (і міста, і села) — першими й обов'язково; для тезок береться найближчий до змін
+    # (виправлення 12.11.2026: села із заголовка, що не входили в 2 найближчі, не потрапляли на мапу)
+    must_pts, seen_m = [], set()
+    for p_ in sorted([p for p in pts if p[2] in must], key=lambda p: -p[1]):   # лише найближчий тезка
+        if p_[2] not in seen_m:
+            seen_m.add(p_[2])
+            must_pts.append(p_)
+    pts = [p for p in pts if p[2] not in must]   # далекі тезки (інша Миколаївка) не підписуємо
+    # є назви із заголовка — інших сіл не додаємо, щоб на мапі не з'являлися «зайві» назви
+    near = [] if must_pts else sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]
+    cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
+    pts = must_pts + near + [p for p in cities if p[2] not in must]
     shown, boxes, used = 0, [], set()
     for is_city, _, nm, g in pts:
         if nm in used:
@@ -449,13 +460,25 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     total = w1 + 14 + bar + 14 + w2
     sx = ox + mw - total
     sy2 = min(ly + 70, H - 45)
+    foot = "За даними DeepStateMap.live · АКМЦ"
+    ff = _font("500", 26)
+    fw = d.textlength(foot, font=ff)
+    if ox + fw + 24 > sx:   # не вміщається в один рядок з підписом джерела — без слова «масштаб» (12.11.2026)
+        t1, w1 = "", -14
+        total = bar + 14 + w2
+        sx = ox + mw - total
+    fy = sy2
+    if ox + fw + 24 > sx:   # і так тісно — дрібніший шрифт підпису джерела
+        ff = _font("500", 22)
+        fw = d.textlength(foot, font=ff)
+        fy = sy2 + 3
     d.text((sx, sy2), t1, font=lf, fill=MUTED)
     bx0, bx1, by = sx + w1 + 14, sx + w1 + 14 + bar, sy2 + 17
     d.line([bx0, by, bx1, by], fill=MUTED, width=4)
     d.line([bx0, by - 9, bx0, by + 9], fill=MUTED, width=3)
     d.line([bx1, by - 9, bx1, by + 9], fill=MUTED, width=3)
     d.text((bx1 + 14, sy2), t2, font=lf, fill=MUTED)
-    d.text((ox, sy2), "За даними DeepStateMap.live · АКМЦ", font=_font("500", 26), fill=MUTED)
+    d.text((ox, fy), foot, font=ff, fill=MUTED)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "JPEG", quality=92)
     return out
