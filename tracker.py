@@ -1211,6 +1211,50 @@ def _nearest_settlement_geom(g) -> str | None:
     return best[0]
 
 
+
+def _mentioned_names(dates: list[str], parts: list) -> list[tuple[str, object]]:
+    """Населені пункти, які DeepState назвав у своїх повідомленнях за ці дні, — лише ті, що в межах
+    ~10 км від наших ділянок (щоб не зачепити тезку деінде). Порядок — як у повідомленнях.
+    Рішення 12.11.2026: якщо DeepState назвав пункт, він завжди є в нашому списку і стоїть першим."""
+    global _ALL_POINTS
+    try:
+        rows = [r for r in read_history() if r.get("date") in set(dates)]
+        text = " ".join(r.get("messages") or "" for r in rows)
+        if not text.strip() or not parts:
+            return []
+        from shapely.geometry import shape
+        from shapely.ops import unary_union
+        if _ALL_POINTS is None:
+            feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
+            _ALL_POINTS = [(x["properties"]["ADM4_UA"], shape(x["geometry"]).centroid) for x in feats]
+        u = unary_union(parts)
+        k = math.cos(math.radians(u.centroid.y))
+        found = []
+        for name, pt in _ALL_POINTS:
+            if u.distance(pt) * 111 * max(k, 0.5) > 10:
+                continue
+            def word_rx(w: str) -> str:
+                # відмінки: Костянтинівк-и / Костянтинівц-і, Червон-ого, Русин-ого Яр-у
+                stem = w[:-1] if len(w) > 3 and w[-1] in "аяеоиіїуюь" else w
+                alts = [re.escape(stem)]
+                if w.endswith("ка") and len(w) > 4:
+                    alts.append(re.escape(w[:-2] + "ц"))
+                return "(?:" + "|".join(alts) + r")\w{0,3}"
+            rx = r"(?<![\w'’ʼ])" + r"\s+".join(word_rx(w) for w in name.split()) + r"(?![\w'’ʼ])"
+            pos = [m.start() for m in re.finditer(rx, text)]
+            if pos:
+                found.append((min(pos), u.distance(pt), name, pt))
+        out, seen = [], set()
+        for _, _, name, pt in sorted(found):
+            if name not in seen:
+                seen.add(name)
+                out.append((name, pt))
+        return out
+    except Exception as e:  # noqa: BLE001
+        log(f"Назви з повідомлень DeepState: {e}")
+        return []
+
+
 class Names(list):
     """Список назв (усі — для заголовка мапи) + ті самі назви окремо за напрямком:
     .occ — біля ділянок, позначених окупованими, .deocc — деокупованими (рішення 10.11:
@@ -1267,7 +1311,18 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
                 if blue is not None and g.intersection(blue).area > 0:
                     side.setdefault(name, set()).add("deocc")
         top = sorted(score, key=score.get, reverse=True)[:n]       # ЯКІ назви — за площею змін
-        out = Names(sorted(top, key=lambda nm: west[nm]))          # ПОРЯДОК — зліва направо (рішення 10.11)
+        ordered = sorted(top, key=lambda nm: west[nm])             # ПОРЯДОК — зліва направо (рішення 10.11)
+        # названі в повідомленнях DeepState — першими й обов'язково (рішення 12.11.2026)
+        # лише для доби: за тиждень/місяць повідомлень багато, і вони витіснили б найбільші ділянки
+        ment = _mentioned_names(dates, parts) if len(dates) == 1 else []
+        for nm, pt in ment:
+            near_part = min(parts, key=lambda g: g.distance(pt))
+            if red is not None and near_part.intersection(red).area > 0:
+                side.setdefault(nm, set()).add("occ")
+            if blue is not None and near_part.intersection(blue).area > 0:
+                side.setdefault(nm, set()).add("deocc")
+        mnames = [nm for nm, _ in ment]
+        out = Names((mnames + [x for x in ordered if x not in mnames])[:n])
         out.occ = [x for x in out if "occ" in side.get(x, ())]
         out.deocc = [x for x in out if "deocc" in side.get(x, ())]
         return out
