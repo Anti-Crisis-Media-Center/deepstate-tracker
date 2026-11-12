@@ -1470,7 +1470,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
             nets[k] = round(_f(last[f"{k}_occupied_km2"]) - (_f(first[f"{k}_occupied_km2"])
                             - _f(first[f"{k}_newly_occupied_km2"]) + _f(first[f"{k}_deoccupied_km2"])), 2)
         mp = make_change_map(s["kind"], [r["date"] for r in rows], nets, rows_places, f"map_{s['kind']}.jpg")
-        publish(text, s["image"])   # у Telegram — завжди фірмова обкладинка (рішення Юлі 9.11): там читають текст
+        publish(text, s["image"], silent=False)   # зі звуком (12.11); у Telegram — завжди фірмова обкладинка (рішення Юлі 9.11): там читають текст
         done[s["kind"]] = today          # підсумок у Telegram вийшов — повтору не буде
         if save:
             save()
@@ -1711,7 +1711,7 @@ def main() -> int:
 
     day_map = make_change_map("day", [today], {k: results[k]["newly_km2"] - results[k]["deocc_km2"] for k in OBLASTS},
                               {k: results[k]["newly_places"] + results[k]["deocc_places"] for k in OBLASTS}, "map_day.jpg")
-    publish(text, COVER_IMAGE, silent=True)  # без звуку; завжди фірмова обкладинка (рішення Юлі 9.11)
+    publish(text, COVER_IMAGE, silent=False)  # зі звуком (рішення Юлі 12.11); завжди фірмова обкладинка (9.11)
     # Позначаємо «опубліковано» одразу після Telegram: якщо далі щось впаде,
     # запасний запуск не повторить пост ще раз.
     new_state["published"] = True
