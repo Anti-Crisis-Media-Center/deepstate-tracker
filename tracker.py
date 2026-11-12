@@ -2269,9 +2269,11 @@ def main() -> int:
     day_places = [p for k in OBLASTS for p in results[k]["newly_places"] + results[k]["deocc_places"]]
     day_places += [c for k in OBLASTS for c in ((grey or {}).get(k) or {}).get("cities") or []]
     lug = bool(results["luhansk"]["newly_km2"] or results["luhansk"]["deocc_km2"])
+    # «тихий» день для соцмереж — лише за змінами на мапі. Повідомлення DeepState без змін на мапі
+    # показуємо тільки в Telegram, тож через них Instagram не публікує пост «без змін» (виправлення 12.11.2026)
     quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] and not results[k]["grey_km2"]
                  for k in OBLASTS)
-             and not messages and not any((grey.get(k) or {}).get("cities") for k in OBLASTS))
+             and not any((grey.get(k) or {}).get("cities") for k in OBLASTS))
     if quiet:  # день без змін: Facebook і Instagram пропускаємо; Threads — щодня (рішення Юлі 9.11)
         log("Змін немає — дописи у Facebook і Instagram пропускаємо; у Threads — обкладинка.")
         step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN))
