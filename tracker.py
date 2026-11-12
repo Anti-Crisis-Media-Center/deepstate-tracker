@@ -889,6 +889,7 @@ def fb_page_credentials() -> tuple[str, str]:
 
 
 FB_DAILY_POSTS = os.getenv("FB_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку білої сторінки
+IG_DAILY_POSTS = os.getenv("IG_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку Instagram вимкнено (9.11): лише сторіз; тиждень і місяць — Reels
 FB_POSTS = os.getenv("FB_POSTS", "1") == "1"   # 0 — на сторінці лише сторіз, без дописів у стрічку
 
 
@@ -2285,7 +2286,7 @@ def main() -> int:
         step("Threads", lambda: threads_api.post(fb_text, COVER_IMAGE, log, alert, DRY_RUN,
                                                  image_url=threads_url_for(day_map) if day_map else None))
     step("TikTok-позначка", lambda: tiktok_daily_flag(results, grey))
-    if not quiet:
+    if not quiet and IG_DAILY_POSTS:   # у стрічку Instagram щодня не публікуємо — лише сторіз (рішення Юлі 9.11)
         step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(),
                                               fb_text + "\n\n" + _tiktok_tags(day_places, lug),
                                               COVER_IMAGE, log, alert, DRY_RUN,
