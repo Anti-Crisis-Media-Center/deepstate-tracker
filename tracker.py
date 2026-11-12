@@ -759,26 +759,27 @@ FB_COMMENT = f"Підписуйтеся на наш Telegram, щоб щоран�
 
 
 def near_phrase(names: list[str], villages: list[str]) -> str:
-    """Ті самі назви, що на мапі; села DeepState — у дужках (рішення Юлі 9.11):
-    «поблизу Добропілля та Білицького (Василівка, Світле)»."""
+    """Ті самі назви, що на мапі: «поблизу: Добропілля, Білицьке». Дужки з селами прибрано 12.11.2026.""""
     if not names:
         return f"поблизу: {join_places(villages[:3])}" if villages else ""
     # завжди «поблизу:» і називний відмінок (рішення Юлі 10.11): однаково для міст і сіл, без
     # помилок у відмінках сіл; так само, як у заголовку мапи («Поблизу: Білицьке · Костянтинівка»)
-    head = "поблизу: " + ", ".join(names)
-    vs = [v for v in dict.fromkeys(re.sub(r"\s*\(.*?\)", "", v).strip() for v in villages) if v not in names][:3]
-    return head + (f" ({', '.join(vs)})" if vs else "")
+    # без дужок із селами (рішення Юлі 12.11.2026: читачеві незрозуміло, що означають дужки) —
+    # лише ті самі назви, що на мапі; села потрібні тільки тоді, коли головних назв немає
+    return "поблизу: " + ", ".join(names)
 
 
 def tg_near(names: list[str], villages: list[str]) -> str:
     """Для Telegram: ті самі назви, що на мапі й у Threads, а села — з районом (Telegram читають уважно):
-    «поблизу Добропілля та Білицького (Василівка, Світле — Покровський р-н)»."""
+    «поблизу: Добропілля, Білицьке». Дужки з селами прибрано 12.11.2026."""
     base = near_phrase(names, [])
-    vs = [v for v in dict.fromkeys(villages) if re.sub(r"\s*\(.*?\)", "", v).strip() not in names][:4]
+    if base:
+        return base   # без дужок із селами (рішення 12.11.2026) — як на мапі й в інших мережах
+    vs = list(dict.fromkeys(villages))[:4]
     if not vs:
-        return base
+        return ""
     vtxt = re.sub(r" \((.*?)\)", r" — \1", join_places(vs))
-    return f"{base} ({vtxt})" if base else f"поблизу: {vtxt}"
+    return "поблизу: " + vtxt
 
 
 def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_pl: list,
@@ -967,7 +968,7 @@ def _date_label(d) -> str:
 
 
 def story_blocks_daily(results: dict, names: dict | None = None) -> list[dict]:
-    """Сторіз за добу. Назви — ті самі, що на мапі й у текстах (села DeepState — у дужках)."""
+    """Сторіз за добу. Назви — ті самі, що на мапі й у текстах (без дужок із селами — з 12.11.2026)."""
     names = names or {}
     blocks = []
     for k in OBLASTS:
