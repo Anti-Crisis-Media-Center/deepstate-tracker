@@ -20,6 +20,9 @@ import youtube_api
 
 G = "https://graph.facebook.com/v24.0"
 PAGE_ID = os.getenv("FACEBOOK_PAGE_ID", "111460408546782")
+# жовта сторінка «Антикризовий медіа-центр» (36 тис.): бот бачить її з 12.11.2026 — Тетяна призначила її
+# основному портфоліо («Призначити партнерів», дозвіл «Статистика») і системному користувачу
+YELLOW_PAGE_ID = os.getenv("FACEBOOK_YELLOW_PAGE_ID", "414302258746592")
 DAYS = int(os.getenv("ANALYTICS_DAYS", "7"))
 NOW = datetime.now(timezone.utc)
 SINCE = NOW - timedelta(days=DAYS)
@@ -68,7 +71,7 @@ def _metric(js) -> int | None:
 
 
 # ============================ FACEBOOK ============================
-def facebook():
+def facebook(PAGE_ID: str = PAGE_ID):
     tok = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
     if not tok:
         return None
@@ -214,6 +217,8 @@ def build() -> str:
     tg = telegram()
     lines += [f"<b>Telegram @acmc_ua</b>", f"Підписники: {fmt(tg)}", ""]
     lines += section("Facebook «У фокусі»", facebook(), "Охоплення сторінки")
+    if YELLOW_PAGE_ID:
+        lines += section("Facebook «Антикризовий медіа-центр» (жовта)", facebook(YELLOW_PAGE_ID), "Охоплення сторінки")
     lines += section("Instagram acmc.ua", instagram(), "Охоплення")
     lines += section("Threads acmc.ua", threads(), "Перегляди")
     if os.getenv("TIKTOK_REFRESH_TOKEN", "").strip():
