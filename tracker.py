@@ -1217,6 +1217,7 @@ def _nearest_settlement_geom(g) -> str | None:
 
 
 
+MERGE_KM = 3.0     # ділянки, ближчі за 3 км, — одне місце й одна назва (12.11.2026; до того ~5 км)
 MENTION_KM = 5.0   # назва з повідомлення DeepState — лише якщо пункт не далі 5 км від змін
 
 
@@ -1310,7 +1311,7 @@ def pick(nm, which: str) -> list:
 def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]:
     """ЄДИНИЙ список назв для всіх місць (перший кадр, заголовок мапи, останній кадр, сторіз).
     Беремо лише те, що лишилося на кінець періоду (без «позначили й зняли»). Ділянки, ближчі одна
-    до одної ніж ~5 км, — одне місце й одна назва (щоб «Добропілля · Білицьке» не займали два місця);
+    до одної ніж 3 км (MERGE_KM), — одне місце й одна назва (щоб «Добропілля · Білицьке» не займали два місця);
     назва — місто в межах 10 км, інакше найближчий населений пункт; до чотирьох найбільших за площею,
     перелічені зліва направо, як людина читає мапу (рішення 10.11)."""
     try:
@@ -1323,9 +1324,15 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
         from shapely.ops import unary_union
         u = unary_union(geoms)
         parts = [p for p in getattr(u, "geoms", [u]) if not p.is_empty]
-        clusters: list[list] = []          # групуємо ділянки, що ближче ~5 км одна до одної
+        # групуємо ділянки, ближчі за MERGE_KM одна до одної (справжні км, а не градуси).
+        # 12.11.2026: було ~5 км — ділянка біля Часового Яру за 4,4 км «злилася» з Костянтинівкою й лишилася
+        # без назви; тепер 3 км (рішення Юлі: по одній назві на кожну ділянку)
+        from shapely.affinity import scale as _scale
+        _k = math.cos(math.radians(u.centroid.y))
+        km = {id(p): _scale(p, xfact=111.32 * _k, yfact=110.57, origin=(0, 0)) for p in parts}
+        clusters: list[list] = []
         for p in parts:
-            hit = [c for c in clusters if any(p.distance(q) < 0.05 for q in c)]
+            hit = [c for c in clusters if any(km[id(p)].distance(km[id(q)]) < MERGE_KM for q in c)]
             merged = [p] + [q for c in hit for q in c]
             clusters = [c for c in clusters if c not in hit] + [merged]
         parts = [unary_union(c) for c in clusters]
