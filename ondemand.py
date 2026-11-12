@@ -50,7 +50,8 @@ def setup() -> None:
     r = tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), reply_markup=kb, parse_mode="HTML",
            text="📊 <b>Звіт аналітики на вимогу</b>\n\nНатисніть, за який період потрібен звіт.\n"
                 "Інший період — напишіть <code>/report</code>, пробіл і кількість днів (від 1 до 90), "
-                "наприклад <code>/report 5</code>. Просто число бот не бачить.\n\n"
+                "наприклад <code>/report 5</code>. Просто число бот не бачить.\n"
+                "Кнопки зникли — напишіть сюди <code>/start</code>.\n\n"
                 "<i>Звіт приходить сюди через 2–5 хвилин.</i>")
     print("Кнопки:", "опубліковано" if r.get("ok") else r)
     if r.get("ok"):
@@ -111,6 +112,9 @@ def recent_reports(minutes: int = 10) -> dict:
         return {}
 
 
+RESTORE = False   # хтось написав /start — опублікувати кнопки заново
+
+
 def collect() -> list[int]:
     """Забирає нові запити; повертає список днів (без повторів, до 3 звітів за раз)."""
     res = updates_from_env()
@@ -140,6 +144,10 @@ def collect() -> list[int]:
         if str(msg.get("chat", {}).get("id")) != CHAT:
             continue
         text = (msg.get("text") or "").strip()
+        if re.match(r"^/(start|buttons|knopky)(@\w+)?\b", text):   # кнопки зникли — повернути (12.11.2026)
+            global RESTORE
+            RESTORE = True
+            continue
         m = re.match(r"^/report(?:@\w+)?\s+(\d+)", text) or (
             re.match(r"^(\d+)", text) if (msg.get("reply_to_message") or {}).get("from", {}).get("is_bot") else None)
         if m:
@@ -165,6 +173,8 @@ if __name__ == "__main__":
     if os.getenv("SETUP") == "1":
         setup()
     days = collect()
+    if RESTORE:
+        setup()
     fresh = recent_reports()
     for d in list(days):   # той самий звіт уже готували менше ніж 10 хв тому — показуємо його (12.11.2026)
         if str(d) in fresh:
