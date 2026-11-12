@@ -241,13 +241,31 @@ def send(text: str) -> None:
                  for u in upd.get("result", [])}
         log(f"ANALYTICS_CHAT_ID не задано. Чати, які бачить бот: {chats}")
         return
-    r = requests.post(f"https://api.telegram.org/bot{tok}/sendMessage",
-                      data={"chat_id": chat, "message_thread_id": os.getenv("THREAD_ANALYTICS", "5"),
-                            "text": text[:4000], "parse_mode": "HTML",
-                            "disable_web_page_preview": "true"}, timeout=40).json()
-    log("Звіт надіслано." if r.get("ok") else f"Не вдалося надіслати: {r}")
-    if r.get("ok"):
-        remember_report(DAYS, r["result"]["message_id"])
+    # Telegram приймає до 4096 символів; довгий звіт (30 днів, дві сторінки FB) ділимо на кілька повідомлень
+    # по межі розділів (порожній рядок), а не обрізаємо посеред посилання (виправлення 12.11.2026)
+    parts, cur = [], ""
+    for block in text.split("\n\n"):
+        if cur and len(cur) + 2 + len(block) > 3800:
+            parts.append(cur)
+            cur = block
+        else:
+            cur = f"{cur}\n\n{block}" if cur else block
+    if cur:
+        parts.append(cur)
+    first = None
+    for i, part in enumerate(parts):
+        r = requests.post(f"https://api.telegram.org/bot{tok}/sendMessage",
+                          data={"chat_id": chat, "message_thread_id": os.getenv("THREAD_ANALYTICS", "5"),
+                                "text": part, "parse_mode": "HTML", "disable_notification": "true" if i else "false",
+                                "disable_web_page_preview": "true"}, timeout=40).json()
+        if not r.get("ok"):
+            log(f"Не вдалося надіслати (частина {i + 1} з {len(parts)}): {r}")
+            break
+        first = first or r["result"]["message_id"]
+    else:
+        log(f"Звіт надіслано ({len(parts)} повід.)." if len(parts) > 1 else "Звіт надіслано.")
+    if first:
+        remember_report(DAYS, first)
 
 
 LAST_FILE = ".analytics_last.json"   # {днів: [час, id повідомлення]}; між запусками — у кеші GitHub Actions
