@@ -58,6 +58,13 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: python tracker.py
 
+      - name: Записати кількість підписників Telegram (для «+1 / −1» в аналітиці)
+        continue-on-error: true   # окремо від публікації: збій тут нічого не ламає
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python tg_count.py
+
       - name: Зберегти знімок карти в репозиторій
         if: always()
         run: |

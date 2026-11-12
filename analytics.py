@@ -174,6 +174,27 @@ def telegram():
     return js.get("result")
 
 
+def telegram_delta(now_count) -> str:
+    """« (+2)» — зміна підписників за період з власного запису data/tg_subscribers.csv (tg_count.py, з 13.11.2026).
+    Якщо запис коротший за період — порівнюємо з першим днем запису й пишемо його дату."""
+    import csv
+    from pathlib import Path
+    f = Path("data/tg_subscribers.csv")
+    if not isinstance(now_count, int) or not f.exists():
+        return ""
+    rows = [(r[0], int(r[1])) for r in list(csv.reader(f.open()))[1:] if len(r) > 1 and r[1].isdigit()]
+    if not rows:
+        return ""
+    start = SINCE.strftime("%Y-%m-%d")
+    before = [r for r in rows if r[0] <= start]
+    base_date, base = before[-1] if before else rows[0]
+    if base_date == NOW.strftime("%Y-%m-%d"):
+        return ""   # запис лише за сьогодні — порівнювати ні з чим
+    d = now_count - base
+    note = "" if before else f" з {base_date[8:10]}.{base_date[5:7]}"
+    return f" ({'+' if d > 0 else ''}{d}{note})" if d else f" (без змін{note})"
+
+
 # ============================ ЗВІТ ============================
 def section(title: str, d: dict | None, reach_word: str) -> list[str]:
     if not d:
@@ -215,7 +236,7 @@ def build() -> str:
     label = (f"{s_:%d.%m %H:%M} – {e_:%d.%m %H:%M}" if DAYS <= 3 else f"{s_:%d.%m}–{e_:%d.%m}")
     lines = [f"📊 <b>Аналітика АКМЦ: {label}</b>", ""]
     tg = telegram()
-    lines += [f"<b>Telegram @acmc_ua</b>", f"Підписники: {fmt(tg)}", ""]
+    lines += [f"<b>Telegram @acmc_ua</b>", f"Підписники: {fmt(tg)}{telegram_delta(tg)}", ""]
     # жовта — основна й більша, тож першою (рішення Юлі 12.11.2026)
     if YELLOW_PAGE_ID:
         lines += section("Facebook «АКМЦ» (жовта)", facebook(YELLOW_PAGE_ID), "Охоплення сторінки")
