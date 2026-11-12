@@ -246,7 +246,26 @@ def send(text: str) -> None:
                             "text": text[:4000], "parse_mode": "HTML",
                             "disable_web_page_preview": "true"}, timeout=40).json()
     log("Звіт надіслано." if r.get("ok") else f"Не вдалося надіслати: {r}")
+    if r.get("ok"):
+        remember_report(DAYS, r["result"]["message_id"])
 
+
+LAST_FILE = ".analytics_last.json"   # {днів: [час, id повідомлення]}; між запусками — у кеші GitHub Actions
+
+
+def remember_report(days: int, msg_id: int) -> None:
+    """Запам'ятати останній звіт (12.11.2026): якщо той самий звіт попросять ще раз протягом 10 хв,
+    бот відповість посиланням на готовий (див. ondemand.recent_reports). Збій тут звіт не ламає."""
+    import json, time
+    try:
+        try:
+            data = json.load(open(LAST_FILE))
+        except Exception:  # noqa: BLE001
+            data = {}
+        data[str(days)] = [int(time.time()), msg_id]
+        json.dump(data, open(LAST_FILE, "w"))
+    except Exception as e:  # noqa: BLE001
+        log(f"Не вдалося запам'ятати звіт: {e}")
 
 if __name__ == "__main__":
     report = build()
