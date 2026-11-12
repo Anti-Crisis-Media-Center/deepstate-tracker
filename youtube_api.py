@@ -72,7 +72,8 @@ def section(ref: str, since: datetime, log) -> list[str]:
     uploads = ch.get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
     vids = _videos(_playlist_ids(uploads)) if uploads else []
     new = [v for v in vids if v["snippet"]["publishedAt"] >= since.strftime("%Y-%m-%dT%H:%M:%SZ")]
-    lines.append(f"Нових відео за тиждень: {len(new)}"
+    _d = int(os.getenv("ANALYTICS_DAYS", "7"))
+    lines.append(f"Нових відео {'за тиждень' if _d == 7 else 'за добу' if _d == 1 else f'за {_d} дн.'}: {len(new)}"
                  + (f", переглядів у них: {_fmt(sum(_views(v) for v in new))}" if new else ""))
     for i, v in enumerate(sorted(new, key=_views, reverse=True)[:3], 1):
         s = v["statistics"]
@@ -80,9 +81,12 @@ def section(ref: str, since: datetime, log) -> list[str]:
                      f"{_fmt(_views(v))} перегл., {_fmt(s.get('likeCount'))} вподоб., {_fmt(s.get('commentCount'))} коментарів")
     # рубрика DeepState — окремо, якщо на каналі є такий плейлист
     pls = _get("playlists", part="snippet", channelId=ch["id"], maxResults=50).get("items", [])
-    ds = next((p for p in pls if "DeepState" in p["snippet"]["title"]), None)
+    log(f"YouTube «{name}»: публічні плейлисти — " + "; ".join(p["snippet"]["title"] for p in pls))
+    ds = next((p for p in pls if "deepstate" in p["snippet"]["title"].lower().replace(" ", "")), None)
     if ds:
         dv = sorted(_videos(_playlist_ids(ds["id"])), key=lambda v: v["snippet"]["publishedAt"], reverse=True)
+        if not dv:
+            lines.append("🗺 DeepState: плейлист є, відео в ньому ще немає")
         if dv:
             last4 = dv[:4]
             avg = sum(_views(v) for v in last4) / len(last4)

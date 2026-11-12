@@ -889,7 +889,6 @@ def fb_page_credentials() -> tuple[str, str]:
 
 
 FB_DAILY_POSTS = os.getenv("FB_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку білої сторінки
-IG_DAILY_POSTS = os.getenv("IG_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку Instagram вимкнено (9.11): лише сторіз; тиждень і місяць — Reels
 FB_POSTS = os.getenv("FB_POSTS", "1") == "1"   # 0 — на сторінці лише сторіз, без дописів у стрічку
 
 
@@ -961,6 +960,8 @@ def send_fb_teaser(text: str, image: Path) -> None:
 MONTHS_GEN = ["січня", "лютого", "березня", "квітня", "травня", "червня",
               "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"]
 STORY_LABELS = {"donetsk": "ДОНЕЧЧИНА", "luhansk": "ЛУГАНЩИНА"}
+IG_DAILY_POSTS = os.getenv("IG_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку Instagram вимкнено
+# (9.11.2026): щоб сітка профілю не складалася з однакових мап. Щодня — лише сторіз; у стрічку — тиждень і місяць.
 FB_STORIES = os.getenv("FB_STORIES", "1") != "0"  # сторіз у Facebook увімкнено (4.11.2026)
 
 
@@ -1113,9 +1114,7 @@ def _tiktok_tags(places: list[str], luhansk_changed: bool = False) -> str:
             cities.append(name)
     base = ["#Донеччина"] + (["#Луганщина"] if luhansk_changed else []) + ["#DeepState"]
     tags = base + ["#" + re.sub(r"[\s'’ʼ-]", "", c) for c in cities[:5 - len(base)]]
-    for extra in ("#Краматорськ", "#Слов'янськ", "#Костянтинівка", "#Дружківка"):
-        if len(tags) < 5 and extra.replace("'", "") not in [t.replace("'", "") for t in tags]:
-            tags.append(extra.replace("'", ""))
+    # лише справжні місця біля змін — без «доповнення» іншими містами (рішення 9.11.2026)
     return " ".join(tags[:5])
 
 
@@ -1949,7 +1948,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
             nets[k] = _net_period(rows, k)
         mp = make_change_map(s["kind"], [r["date"] for r in rows], nets, rows_places, f"map_{s['kind']}.jpg",
                              _change_areas(rows, max(OBLASTS, key=lambda k: abs(nets.get(k) or 0))))
-        publish(text, s["image"])   # у Telegram — завжди фірмова обкладинка (рішення Юлі 9.11): там читають текст
+        publish(text, s["image"], silent=True)   # без звуку (12.11); у Telegram — завжди фірмова обкладинка (рішення Юлі 9.11): там читають текст
         done[s["kind"]] = today          # підсумок у Telegram вийшов — повтору не буде
         if save:
             save()
@@ -1967,7 +1966,7 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
                                                  image_url=threads_url_for(mp) if mp else None, reply=True))
         ig_text = fb_text + "\n\n" + _tiktok_tags(_rows_places(rows), _rows_luhansk_changed(rows))
         step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(), ig_text, s["image"], log, alert,
-                                              DRY_RUN, extra_images=[mp] if mp else None))
+                                              DRY_RUN, extra_images=[ig_version(mp)] if mp else None))
         story_date = (s["label"][0].upper() + s["label"][1:]) if s["kind"] == "month" and s.get("label") \
             else _period_label(start, today)
         step("Сторіз", lambda: make_and_post_story(s["image"], story_date, story_blocks_summary(s["kind"], rows), s["kind"]))
@@ -2067,6 +2066,14 @@ def _release_image(img: Path) -> str:
     for a in sorted(assets, key=lambda a: a["name"])[:-10]:
         subprocess.run(["gh", "release", "delete-asset", "maps", a["name"], "-R", repo, "-y"], check=False)
     return f"https://github.com/{repo}/releases/download/maps/{name}"
+
+
+def ig_version(img: Path | None) -> Path | None:
+    """Для Instagram беремо 4:5-версію мапи, якщо вона є."""
+    if not img:
+        return img
+    p = img.with_name(img.stem + "_45.jpg")
+    return p if p.exists() else img
 
 
 def threads_url_for(img: Path) -> str | None:
@@ -2251,7 +2258,7 @@ def main() -> int:
     day_map = make_change_map("day", [today], {k: results[k]["newly_km2"] - results[k]["deocc_km2"] for k in OBLASTS},
                               {k: results[k]["newly_places"] + results[k]["deocc_places"] for k in OBLASTS}, "map_day.jpg",
                               totals={k: (results[k]["newly_km2"], results[k]["deocc_km2"]) for k in OBLASTS})
-    publish(text, COVER_IMAGE, silent=True)  # без звуку; завжди фірмова обкладинка (рішення Юлі 9.11)
+    publish(text, COVER_IMAGE, silent=True)  # без звуку (рішення Юлі 12.11: звук лише в «Хвилини мовчання» о 9:00); завжди фірмова обкладинка (9.11)
     # Позначаємо «опубліковано» одразу після Telegram: якщо далі щось впаде,
     # запасний запуск не повторить пост ще раз.
     new_state["published"] = True
@@ -2290,7 +2297,7 @@ def main() -> int:
         step("Instagram", lambda: ig_api.post(FB_GRAPH, *fb_page_credentials(),
                                               fb_text + "\n\n" + _tiktok_tags(day_places, lug),
                                               COVER_IMAGE, log, alert, DRY_RUN,
-                                              extra_images=[day_map] if day_map else None))
+                                              extra_images=[ig_version(day_map)] if day_map else None))
     step("Сторіз", lambda: make_and_post_story(COVER_IMAGE, _date_label(now.date()), story_blocks_daily(results,
                                                      {k: place_names([today], k) for k in OBLASTS})))
     if now.date().weekday() == WEEKLY_WEEKDAY and not DRY_RUN:

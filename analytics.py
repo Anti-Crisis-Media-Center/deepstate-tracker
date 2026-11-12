@@ -100,7 +100,9 @@ def facebook():
             if reach is not None:
                 break
         out["posts"].append({"text": p.get("message", ""), "url": p.get("permalink_url"),
-                             "reach": reach, "eng": eng})
+                             "reach": reach, "eng": eng,
+                             "react": (p.get("reactions") or {}).get("summary", {}).get("total_count", 0),
+                             "comm": (p.get("comments") or {}).get("summary", {}).get("total_count", 0)})
     return out
 
 
@@ -130,7 +132,8 @@ def instagram():
             continue
         reach = _metric(get(f"{G}/{m['id']}/insights", metric="reach", access_token=ptok))
         out["posts"].append({"text": m.get("caption", ""), "url": m.get("permalink"), "reach": reach,
-                             "eng": (m.get("like_count") or 0) + (m.get("comments_count") or 0)})
+                             "eng": (m.get("like_count") or 0) + (m.get("comments_count") or 0),
+                             "react": m.get("like_count") or 0, "comm": m.get("comments_count") or 0})
     return out
 
 
@@ -153,7 +156,8 @@ def threads():
         ins = get(f"{threads_api.GRAPH}/{p['id']}/insights", metric="views,likes,replies,reposts", access_token=tok)
         vals = {m["name"]: (m.get("values") or [{}])[0].get("value", 0) for m in ins.get("data", [])}
         out["posts"].append({"text": p.get("text", ""), "url": p.get("permalink"), "reach": vals.get("views"),
-                             "eng": vals.get("likes", 0) + vals.get("replies", 0) + vals.get("reposts", 0)})
+                             "eng": vals.get("likes", 0) + vals.get("replies", 0) + vals.get("reposts", 0),
+                             "react": vals.get("likes", 0), "comm": vals.get("replies", 0)})
     return out
 
 
@@ -176,11 +180,16 @@ def section(title: str, d: dict | None, reach_word: str) -> list[str]:
         lines.append(f"{reach_word}: {fmt(d['reach'])}{delta(d.get('reach'), d.get('reach_prev'))}")
     lines.append(f"Підписники: {fmt(d.get('followers'))}")
     posts = d["posts"]
-    lines.append(f"Дописів за тиждень: {len(posts)}")
+    lines.append(f"Дописів {'за тиждень' if DAYS == 7 else 'за добу' if DAYS == 1 else f'за {DAYS} дн.'}: {len(posts)}")
+    if any("comm" in p for p in posts):   # реакції й коментарі — щоб бачити, де реагують і що модерувати
+        lines.append(f"Реакції: {fmt(sum(p.get('react', 0) for p in posts))} · "
+                     f"коментарі: {fmt(sum(p.get('comm', 0) for p in posts))}")
     key = (lambda p: p["reach"] or 0) if any(p["reach"] for p in posts) else (lambda p: p["eng"])
     top = sorted(posts, key=key, reverse=True)[:3]
     for i, p in enumerate(top, 1):
         val = f"{fmt(p['reach'])} охопл." if p["reach"] is not None else f"{fmt(p['eng'])} взаємодій"
+        if p.get("comm"):
+            val += f", коментарі: {fmt(p['comm'])}"
         name = short(p["text"])
         lines.append(f"{i}. <a href=\"{p['url']}\">{name}</a> — {val}" if p.get("url") else f"{i}. {name} — {val}")
     ds = [p for p in posts if is_deepstate(p["text"])]
@@ -189,14 +198,19 @@ def section(title: str, d: dict | None, reach_word: str) -> list[str]:
         others = [p for p in posts if not is_deepstate(p["text"])]
         avg_o = sum((p["reach"] or 0) for p in others) / len(others) if others else 0
         lines.append(f"🗺 DeepState: {len(ds)} доп., середнє охоплення {fmt(avg)}"
-                     + (f" (інші дописи — {fmt(avg_o)})" if others else ""))
+                     + (f" (інші дописи — {fmt(avg_o)})" if others else "")
+                     + (f", коментарів: {fmt(sum(p.get('comm', 0) for p in ds))}" if any("comm" in p for p in ds) else ""))
     return lines + [""]
 
 
 def build() -> str:
-    end = (NOW + timedelta(hours=2)).date()
-    start = end - timedelta(days=DAYS - 1)
-    lines = [f"📊 <b>Аналітика АКМЦ: {start:%d.%m}–{end:%d.%m}</b>", ""]
+    # Період — ковзний: останні DAYS×24 год до моменту запуску. Тому для доби — 9.11 20:24 – 10.11 20:24,
+    # а не «10.11–10.11» (рішення 10.11.2026). Час — київський.
+    from zoneinfo import ZoneInfo
+    kyiv = ZoneInfo("Europe/Kyiv")
+    s_, e_ = SINCE.astimezone(kyiv), NOW.astimezone(kyiv)
+    label = (f"{s_:%d.%m %H:%M} – {e_:%d.%m %H:%M}" if DAYS <= 3 else f"{s_:%d.%m}–{e_:%d.%m}")
+    lines = [f"📊 <b>Аналітика АКМЦ: {label}</b>", ""]
     tg = telegram()
     lines += [f"<b>Telegram @acmc_ua</b>", f"Підписники: {fmt(tg)}", ""]
     lines += section("Facebook «У фокусі»", facebook(), "Охоплення сторінки")
@@ -205,7 +219,9 @@ def build() -> str:
     if os.getenv("TIKTOK_REFRESH_TOKEN", "").strip():
         lines += section("TikTok @acmc.ua", tiktok_api.stats(SINCE, log), "Перегляди нових відео")
     lines += youtube_api.sections(SINCE, log)
-    lines.append("<i>Охоплення — за останні 7 днів, у дужках — зміна до попереднього тижня.</i>")
+    per = "останню добу" if DAYS == 1 else f"останні {DAYS} дн."
+    prev = "попередньої доби" if DAYS == 1 else ("попереднього тижня" if DAYS == 7 else f"попередніх {DAYS} дн.")
+    lines.append(f"<i>Охоплення — за {per}, у дужках — зміна до {prev}.</i>")
     return "\n".join(lines)
 
 

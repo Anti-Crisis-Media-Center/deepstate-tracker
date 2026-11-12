@@ -8,6 +8,9 @@ on:
         description: "Лише показати звіт у журналі, не надсилати"
         type: boolean
         default: false
+      days:
+        description: "За скільки днів (типово 7)"
+        default: "7"
       script:
         description: "Скрипт"
         default: "analytics.py"
@@ -35,4 +38,5 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           YOUTUBE_CHANNELS: ${{ vars.YOUTUBE_CHANNELS }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          ANALYTICS_DAYS: ${{ inputs.days || '7' }}
         run: python ${{ inputs.script || 'analytics.py' }}
