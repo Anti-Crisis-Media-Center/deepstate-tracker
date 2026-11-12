@@ -1728,8 +1728,9 @@ def main() -> int:
     day_places = [p for k in OBLASTS for p in results[k]["newly_places"] + results[k]["deocc_places"]]
     day_places += [c for k in OBLASTS for c in ((grey or {}).get(k) or {}).get("cities") or []]
     lug = bool(results["luhansk"]["newly_km2"] or results["luhansk"]["deocc_km2"])
+    # «тихий» день для соцмереж — лише за змінами на мапі; повідомлення DeepState — тільки в Telegram (12.11.2026)
     quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] for k in OBLASTS)
-             and not messages and not any((grey.get(k) or {}).get("cities") for k in OBLASTS))
+             and not any((grey.get(k) or {}).get("cities") for k in OBLASTS))
     if quiet:  # день без змін: у стрічки соцмереж не публікуємо, лише сторіз
         log("Змін немає — дописи у Facebook, Instagram і Threads пропускаємо, лише сторіз.")
     else:
