@@ -659,10 +659,11 @@ SHORT_NOTE = (SOURCE_LINE + "\n\n<blockquote><i>Примітка: це авто�
 
 
 def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None,
-               names: dict | None = None) -> str:
+               names: dict | None = None, mentioned: dict | None = None) -> str:
     """Щоденне зведення для Telegram. Стиль як у Threads/Facebook: дата в заголовку, коротко,
     без канцеляриту; назви — ті самі, що на мапі; рядок про повідомлення DeepState — лише якщо вони є."""
     names = names or {}
+    mentioned = mentioned or {}
     head = f"<b>DeepState: зміни за добу, {period}</b>"
     quiet = (all(not results[k]["newly_km2"] and not results[k]["deocc_km2"] and not results[k]["grey_km2"]
                  for k in OBLASTS)
@@ -693,6 +694,9 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
             parts.append("без змін.")
         if gs:
             parts.append(gs)
+        ment = mentioned.get(key) or []
+        if ment:   # рішення 12.11.2026: окремий рядок лише в Telegram, щоб місцеві бачили своє село
+            parts.append(f"Також у повідомленнях DeepState: {', '.join(ment)}.")
         if r["newly_km2"] > 0 and r["deocc_km2"] > 0:   # обидва напрямки — кожен окремим рядком
             lines.append(f"<b>{cfg['short']}:</b>\n" + "\n".join("— " + p.rstrip(".") for p in parts[:2])
                          + ("\n" + " ".join(parts[2:]) if parts[2:] else ""))
@@ -1216,14 +1220,15 @@ def _nearest_settlement_geom(g) -> str | None:
 MENTION_KM = 5.0   # назва з повідомлення DeepState — лише якщо пункт не далі 5 км від змін
 
 
-def _mentioned_names(dates: list[str], parts: list) -> list[tuple[str, object]]:
+def _mentioned_names(dates: list[str], parts: list, text: str | None = None) -> list[tuple[str, object]]:
     """Населені пункти, які DeepState назвав у своїх повідомленнях за ці дні, — лише ті, що в межах
     MENTION_KM (5 км) від наших ділянок (щоб не зачепити тезку деінде). Порядок — як у повідомленнях.
-    Рішення 12.11.2026: якщо DeepState назвав пункт, він завжди є в нашому списку і стоїть першим."""
+    Рішення 12.11.2026: показуємо їх окремим рядком лише в Telegram, у графіку не додаємо."""
     global _ALL_POINTS
     try:
-        rows = [r for r in read_history() if r.get("date") in set(dates)]
-        text = " ".join(r.get("messages") or "" for r in rows)
+        if text is None:   # при публікації текст передаємо напряму — в історії доби ще немає
+            rows = [r for r in read_history() if r.get("date") in set(dates)]
+            text = " ".join(r.get("messages") or "" for r in rows)
         if not text.strip() or not parts:
             return []
         from shapely.geometry import shape
@@ -1256,6 +1261,29 @@ def _mentioned_names(dates: list[str], parts: list) -> list[tuple[str, object]]:
         return out
     except Exception as e:  # noqa: BLE001
         log(f"Назви з повідомлень DeepState: {e}")
+        return []
+
+
+def deepstate_mentioned(dates: list[str], key: str = "donetsk", skip: list | None = None,
+                        text: str | None = None) -> list[str]:
+    """Для окремого рядка в Telegram (рішення 12.11.2026): населені пункти, які DeepState назвав у
+    повідомленнях за добу і які не далі 5 км від наших змін у цій області. Без тих, що вже є в
+    головних назвах (skip). Далекі від змін назви сюди не потрапляють — вони й так є в самих
+    повідомленнях DeepState у кінці поста."""
+    try:
+        import change_map
+        from shapely.ops import unary_union
+        files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
+        red, blue, _ = change_map._timeline(change_map._load_steps(files, key))
+        geoms = [g for g in (red, blue) if g is not None]
+        if not geoms:
+            return []
+        u = unary_union(geoms)
+        parts = [p for p in getattr(u, "geoms", [u]) if not p.is_empty]
+        skip = set(skip or [])
+        return [nm for nm, _ in _mentioned_names(dates, parts, text) if nm not in skip]
+    except Exception as e:  # noqa: BLE001
+        log(f"Згадані DeepState пункти: {e}")
         return []
 
 
@@ -1318,26 +1346,10 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
                     side.setdefault(name, set()).add("deocc")
         top = sorted(score, key=score.get, reverse=True)[:n]       # ЯКІ назви — за площею змін
         ordered = sorted(top, key=lambda nm: west[nm])             # ПОРЯДОК — зліва направо (рішення 10.11)
-        # названі в повідомленнях DeepState — першими й обов'язково (рішення 12.11.2026)
-        # лише для доби: за тиждень/місяць повідомлень багато, і вони витіснили б найбільші ділянки
-        ment = _mentioned_names(dates, parts) if len(dates) == 1 else []
-        for nm, pt in ment:
-            near_part = min(parts, key=lambda g: g.distance(pt))
-            if red is not None and near_part.intersection(red).area > 0:
-                side.setdefault(nm, set()).add("occ")
-            if blue is not None and near_part.intersection(blue).area > 0:
-                side.setdefault(nm, set()).add("deocc")
-        mnames = [nm for nm, _ in ment]
-        # запобіжник 12.11: кожна ділянка зберігає свою назву — назви з повідомлень не витісняють
-        # назву місця, біля якого DeepState нічого не назвав (інакше пляма на мапі без назви в тексті)
-        def covered(nm: str) -> bool:
-            k_ = math.cos(math.radians(parts[0].centroid.y))
-            return any(g.distance(pt) * 111 * max(k_, 0.5) <= MENTION_KM
-                       for name_, g in part_name if name_ == nm for _, pt in ment)
-        required = [x for x in ordered if x not in mnames and not covered(x)]
-        room = max(n - len(required), 1 if mnames else 0)
-        rest = [x for x in ordered if x not in mnames and x not in required]
-        out = Names((mnames[:room] + required + rest)[:max(n, len(mnames[:room]) + len(required))])
+        # назви з повідомлень DeepState сюди НЕ додаємо (рішення 12.11.2026): сторіз, шортси й Threads
+        # не безрозмірні — тут лише головна назва кожної ділянки; згадані DeepState пункти йдуть
+        # окремим рядком тільки в Telegram (див. deepstate_mentioned і build_text)
+        out = Names(ordered)
         out.occ = [x for x in out if "occ" in side.get(x, ())]
         out.deocc = [x for x in out if "deocc" in side.get(x, ())]
         return out
@@ -2190,9 +2202,11 @@ def main() -> int:
     messages = get_messages(base_state.get("deepstate_id"), deepstate.get("id"), oblasts, places)
     log(f"Повідомлень DeepState про Донеччину/Луганщину за період: {len(messages)}")
 
-    text = build_text(period, results, grey, messages,
-                      {k: place_names([today], k) for k in OBLASTS
-                       if results[k]["newly_km2"] or results[k]["deocc_km2"]})
+    tg_names = {k: place_names([today], k) for k in OBLASTS
+                if results[k]["newly_km2"] or results[k]["deocc_km2"]}
+    msg_text = " ".join(m["text"] for m in messages)
+    tg_ment = {k: deepstate_mentioned([today], k, tg_names.get(k), msg_text) for k in tg_names} if msg_text else {}
+    text = build_text(period, results, grey, messages, tg_names, tg_ment)
 
     # Зберігаємо стан ДО публікації: якщо Telegram впаде, дані не загубляться
     if current_state and current_state["date"] < today:

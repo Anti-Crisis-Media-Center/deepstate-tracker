@@ -113,6 +113,12 @@ def test_near_phrase_same_names_as_map():
 
 
 def test_names_from_deepstate_messages_day():
-    """12.11.2026: пункти, названі в повідомленні DeepState за добу, — першими (у т.ч. «у Костянтинівці», «Русиного Яру»)."""
-    pn = tracker.place_names(["2026-11-05"])
-    assert list(pn)[:2] == ["Костянтинівка", "Русин Яр"]
+    """12.11.2026: пункти з повідомлень DeepState — окремим рядком лише в Telegram; у головні назви
+    (графіка) їх не додаємо. Відмінки розпізнаються («у Костянтинівці», «Русиного Яру»)."""
+    pn = list(tracker.place_names(["2026-11-05"]))
+    assert tracker.deepstate_mentioned(["2026-11-05"])[:2] == ["Костянтинівка", "Русин Яр"]
+    assert tracker.deepstate_mentioned(["2026-11-05"], skip=pn) == []   # без повторів головних назв
+    r = {k: {"newly_km2": 1.0, "deocc_km2": 0, "grey_km2": 0, "newly_places": [], "deocc_places": [],
+             "grey_places": []} for k in tracker.OBLASTS}
+    txt = tracker.build_text("05.11", r, mentioned={"donetsk": ["Русин Яр"]}, names={"donetsk": pn})
+    assert "Також у повідомленнях DeepState: Русин Яр." in txt and "(" not in txt.split("Повідомлення")[0]
