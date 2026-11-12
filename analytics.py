@@ -216,9 +216,10 @@ def build() -> str:
     lines = [f"📊 <b>Аналітика АКМЦ: {label}</b>", ""]
     tg = telegram()
     lines += [f"<b>Telegram @acmc_ua</b>", f"Підписники: {fmt(tg)}", ""]
-    lines += section("Facebook «У фокусі»", facebook(), "Охоплення сторінки")
+    # жовта — основна й більша, тож першою (рішення Юлі 12.11.2026)
     if YELLOW_PAGE_ID:
-        lines += section("Facebook «Антикризовий медіа-центр» (жовта)", facebook(YELLOW_PAGE_ID), "Охоплення сторінки")
+        lines += section("Facebook «АКМЦ» (жовта)", facebook(YELLOW_PAGE_ID), "Охоплення сторінки")
+    lines += section("Facebook «АКМЦ. У фокусі» (біла)", facebook(), "Охоплення сторінки")
     lines += section("Instagram acmc.ua", instagram(), "Охоплення")
     lines += section("Threads acmc.ua", threads(), "Перегляди")
     if os.getenv("TIKTOK_REFRESH_TOKEN", "").strip():
