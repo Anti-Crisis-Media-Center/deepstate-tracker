@@ -1212,9 +1212,12 @@ def _nearest_settlement_geom(g) -> str | None:
 
 
 
+MENTION_KM = 5.0   # назва з повідомлення DeepState — лише якщо пункт не далі 5 км від змін
+
+
 def _mentioned_names(dates: list[str], parts: list) -> list[tuple[str, object]]:
     """Населені пункти, які DeepState назвав у своїх повідомленнях за ці дні, — лише ті, що в межах
-    ~10 км від наших ділянок (щоб не зачепити тезку деінде). Порядок — як у повідомленнях.
+    MENTION_KM (5 км) від наших ділянок (щоб не зачепити тезку деінде). Порядок — як у повідомленнях.
     Рішення 12.11.2026: якщо DeepState назвав пункт, він завжди є в нашому списку і стоїть першим."""
     global _ALL_POINTS
     try:
@@ -1231,7 +1234,7 @@ def _mentioned_names(dates: list[str], parts: list) -> list[tuple[str, object]]:
         k = math.cos(math.radians(u.centroid.y))
         found = []
         for name, pt in _ALL_POINTS:
-            if u.distance(pt) * 111 * max(k, 0.5) > 10:
+            if u.distance(pt) * 111 * max(k, 0.5) > MENTION_KM:   # запобіжник 12.11: лише справді поруч
                 continue
             def word_rx(w: str) -> str:
                 # відмінки: Костянтинівк-и / Костянтинівц-і, Червон-ого, Русин-ого Яр-у
@@ -1300,10 +1303,12 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
         score: dict[str, float] = {}
         west: dict[str, float] = {}        # довгота — щоб перелічувати зліва направо, як читають мапу
         side: dict[str, set] = {}          # біля якої ділянки назва: окупованої, деокупованої чи обох
+        part_name: list[tuple[str, object]] = []
         for g in parts:
             # місто — лише якщо ближче 10 км; інакше найближчий населений пункт (рішення 9.11.2026)
             name = _nearest_city_geom(g, max_km=10.0) or _nearest_settlement_geom(g)
             if name:
+                part_name.append((name, g))
                 score[name] = score.get(name, 0) + g.area
                 west[name] = min(west.get(name, 999), g.centroid.x)
                 if red is not None and g.intersection(red).area > 0:
@@ -1322,7 +1327,16 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
             if blue is not None and near_part.intersection(blue).area > 0:
                 side.setdefault(nm, set()).add("deocc")
         mnames = [nm for nm, _ in ment]
-        out = Names((mnames + [x for x in ordered if x not in mnames])[:n])
+        # запобіжник 12.11: кожна ділянка зберігає свою назву — назви з повідомлень не витісняють
+        # назву місця, біля якого DeepState нічого не назвав (інакше пляма на мапі без назви в тексті)
+        def covered(nm: str) -> bool:
+            k_ = math.cos(math.radians(parts[0].centroid.y))
+            return any(g.distance(pt) * 111 * max(k_, 0.5) <= MENTION_KM
+                       for name_, g in part_name if name_ == nm for _, pt in ment)
+        required = [x for x in ordered if x not in mnames and not covered(x)]
+        room = max(n - len(required), 1 if mnames else 0)
+        rest = [x for x in ordered if x not in mnames and x not in required]
+        out = Names((mnames[:room] + required + rest)[:max(n, len(mnames[:room]) + len(required))])
         out.occ = [x for x in out if "occ" in side.get(x, ())]
         out.deocc = [x for x in out if "deocc" in side.get(x, ())]
         return out
