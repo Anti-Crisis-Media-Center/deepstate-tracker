@@ -18,9 +18,13 @@ POST https://api.github.com/repos/Anti-Crisis-Media-Center/deepstate-tracker/act
 Перший раз (і якщо закріплене повідомлення загубилось): Actions → «Аналітика на вимогу»
 → Run workflow → поставити галочку «Опублікувати кнопки».
 """
+import json
 import os
 import re
 import sys
+import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -96,6 +100,17 @@ def updates_from_env() -> list[dict] | None:
         return []
 
 
+def recent_reports(minutes: int = 10) -> dict:
+    """Звіти, надіслані менше ніж `minutes` тому: {днів: [час, id]} з файлу .analytics_last.json
+    (його пише analytics.remember_report, між запусками зберігає кеш GitHub Actions). Немає файлу — порожньо."""
+    try:
+        data = json.load(open(".analytics_last.json"))
+        now = time.time()
+        return {k: v for k, v in data.items() if now - v[0] < minutes * 60}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def collect() -> list[int]:
     """Забирає нові запити; повертає список днів (без повторів, до 3 звітів за раз)."""
     res = updates_from_env()
@@ -150,6 +165,16 @@ if __name__ == "__main__":
     if os.getenv("SETUP") == "1":
         setup()
     days = collect()
+    fresh = recent_reports()
+    for d in list(days):   # той самий звіт уже готували менше ніж 10 хв тому — показуємо його (12.11.2026)
+        if str(d) in fresh:
+            ts, mid = fresh[str(d)]
+            per = "добу" if d == 1 else f"{d} дн."
+            at = datetime.fromtimestamp(ts, ZoneInfo("Europe/Kyiv")).strftime("%H:%M")
+            tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), disable_notification=True,
+               text=f"👆 Звіт за {per} уже готували о {at} — ось він. Новий можна замовити через 10 хв.",
+               reply_parameters={"message_id": mid, "allow_sending_without_reply": True})
+            days.remove(d)
     prep: list[int] = []
     for d in days:
         per = "добу" if d == 1 else f"{d} дн."
