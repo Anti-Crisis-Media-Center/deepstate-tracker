@@ -12,4 +12,5 @@ jobs:
       - run: pip install requests
       - env:
           FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+          CHECK_PAGES: "111460408546782,414302258746592"
         run: python meta_check.py
