@@ -1213,6 +1213,10 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
 
 
 def tiktok_daily_flag(results: dict, grey: dict) -> None:
+    """Щоденна підказка «⚡ Варто опублікувати в TikTok» ВИМКНЕНА 12.11.2026 (рішення Юлі: плутає;
+    відео в TikTok/Shorts — лише щопонеділка і 1-го). Увімкнути знову — TIKTOK_DAILY_FLAG=1."""
+    if os.getenv("TIKTOK_DAILY_FLAG", "0") != "1":
+        return
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
     big = [cfg["short"] for k, cfg in OBLASTS.items() if results[k]["newly_km2"] >= TIKTOK_BIG_KM2]
