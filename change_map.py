@@ -43,7 +43,8 @@ def _geoms(gj):
 
 
 def render(change_files: list[Path], out: Path, title: str, subtitle: str, size: int = 1080,
-           oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None) -> Path | None:
+           oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None,
+           must_label: list | None = None) -> Path | None:
     """height=None — квадрат для дописів; height=1920 — вертикальна мапа для відео (TikTok/Shorts),
     з полями під інтерфейс платформ зверху і знизу."""
     H = height or size
@@ -136,7 +137,18 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             pts.append((is_city(nm, f["properties"].get("ADM2_UA")), -g.distance(new), nm, g))
     near = sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]   # 2 найближчі села
     cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
-    pts = near + cities
+    # назви із заголовка — першими (12.11.2026: на мапі не було села, назване в заголовку)
+    must = set(must_label or [])
+    must_pts, seen_m = [], set()
+    for p_ in sorted([p for p in pts if p[2] in must], key=lambda p: -p[1]):   # лише найближчий тезка
+        if p_[2] not in seen_m:
+            seen_m.add(p_[2])
+            must_pts.append(p_)
+    pts = [p for p in pts if p[2] not in must]   # далекі тезки (інша Миколаївка) не підписуємо
+    # є назви із заголовка — інших сіл не додаємо, щоб на мапі не з'являлися «зайві» назви
+    near = [] if must_pts else sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]
+    cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
+    pts = must_pts + near + cities
     shown, boxes, used = 0, [], set()
     for is_city, _, nm, g in pts:
         if nm in used:
@@ -148,10 +160,16 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             continue
         f = _font("800" if is_city else "500", 34 if is_city else 28)
         w = d.textlength(nm, font=f)
-        tx, ty = (x + 12, y - 18) if x + 12 + w < ox + mw else (x - 12 - w, y - 18)
-        bb = (tx - 4, ty - 2, tx + w + 4, ty + 40)
-        if any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes):
+        hit = lambda bb: any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes)
+        cand = [(x + 12, y - 18), (x - 12 - w, y - 18)]
+        if nm in must:   # назву із заголовка не пропускаємо: пробуємо також під і над точкою
+            cand += [(x + 12, y + 14), (x - 12 - w, y + 14), (x + 12, y - 52), (x - 12 - w, y - 52)]
+        cand = [c for c in cand if ox <= c[0] and c[0] + w <= ox + mw] or cand[:1]
+        pos = next(((a_, b_) for a_, b_ in cand if not hit((a_ - 4, b_ - 2, a_ + w + 4, b_ + 40))), None)
+        if pos is None:
             continue
+        tx, ty = pos
+        bb = (tx - 4, ty - 2, tx + w + 4, ty + 40)
         boxes.append(bb)
         used.add(nm)
         r = 7 if is_city else 5

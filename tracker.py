@@ -85,15 +85,17 @@ PLACES_RADIUS_KM = 5.0
 PLACES_PER_CHANGE = 2      # найближчих на кожну окрему ділянку
 PLACES_MAX_IN_TEXT = 6
 # Міста Донеччини й Луганщини: якщо місто в радіусі — воно завжди серед названих
+# Миколаївку прибрано з міст 12.11.2026: у Краматорському районі їх дві — місто біля Слов'янська
+# і село біля Костянтинівки (біля фронту). Розрізнити за назвою неможливо, тож бот помилково писав «місто».
 CITIES = {
     "Авдіївка", "Бахмут", "Білицьке", "Білозерське", "Волноваха", "Вугледар", "Гірник", "Добропілля",
     "Докучаєвськ", "Дружківка", "Залізне", "Костянтинівка", "Краматорськ", "Красногорівка", "Курахове",
-    "Лиман", "Мар'їнка", "Миколаївка", "Мирноград", "Новогродівка", "Покровськ", "Родинське", "Святогірськ",
+    "Лиман", "Мар'їнка", "Мирноград", "Новогродівка", "Покровськ", "Родинське", "Святогірськ",
     "Світлодарськ", "Селидове", "Сіверськ", "Слов'янськ", "Соледар", "Торецьк", "Українськ", "Часів Яр",
     "Сєвєродонецьк", "Лисичанськ", "Рубіжне", "Кремінна", "Попасна", "Привілля", "Гірське", "Золоте",
 }     # загалом у тексті на тип зміни в області
 # Назви, які мають і міста, і села: містом вважаємо лише в цьому районі
-CITY_DISTRICT = {"Лиман": "Краматорський", "Миколаївка": "Краматорський", "Залізне": "Бахмутський",
+CITY_DISTRICT = {"Лиман": "Краматорський", "Залізне": "Бахмутський",
                  "Гірник": "Покровський", "Українськ": "Покровський", "Білицьке": "Покровський",
                  "Родинське": "Покровський", "Білозерське": "Краматорський", "Золоте": "Сєвєродонецький",
                  "Гірське": "Сєвєродонецький", "Привілля": "Сєвєродонецький", "Світлодарськ": "Бахмутський",
@@ -1522,15 +1524,15 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         if kind != "day":   # вертикальні кадри для відео TikTok/Shorts: без нових ділянок і з ними
             for suffix, show in (("_base_v.jpg", False), ("_v.jpg", True)):
                 try:
-                    change_map.render(files, DATA / out_name.replace(".jpg", suffix), title, sub, oblast_key=key,
+                    change_map.render(files, DATA / out_name.replace(".jpg", suffix), title, sub, oblast_key=key, must_label=names[:2],
                                       show_new=show, height=1920)
                 except Exception as e:  # noqa: BLE001
                     log(f"Вертикальна мапа для відео: {e}")
         try:   # 4:5 для каруселі Instagram — мапа більша, без порожніх полів
-            change_map.render(files, DATA / out_name.replace(".jpg", "_45.jpg"), title, sub, oblast_key=key, height=1350)
+            change_map.render(files, DATA / out_name.replace(".jpg", "_45.jpg"), title, sub, oblast_key=key, must_label=names[:2], height=1350)
         except Exception as e:  # noqa: BLE001
             log(f"Мапа 4:5 для Instagram: {e}")
-        return change_map.render(files, DATA / out_name, title, sub, oblast_key=key)
+        return change_map.render(files, DATA / out_name, title, sub, oblast_key=key, must_label=names[:2])
     except Exception as e:  # noqa: BLE001
         log(f"Мапа змін: не вдалося — {e}")
         return None
