@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import os
+from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -27,6 +28,17 @@ DAYS = int(os.getenv("ANALYTICS_DAYS", "7"))
 NOW = datetime.now(timezone.utc)
 SINCE = NOW - timedelta(days=DAYS)
 PREV = SINCE - timedelta(days=DAYS)
+# Facebook і Instagram рахують охоплення цілими днями й дораховують із запізненням, тож остання доба завжди
+# неповна. Для їхнього охоплення беремо лише ЗАКРИТІ дні: DAYS днів до вчора включно проти DAYS днів перед
+# ними (рішення Юлі 13.11.2026; до того звіт за добу показував «−85%» через неповну сьогоднішню добу).
+_YDAY = (NOW.astimezone(ZoneInfo("Europe/Kyiv")) - timedelta(days=1)).date()
+CLOSED = [_YDAY - timedelta(days=i) for i in range(DAYS)]               # закриті дні звіту
+CLOSED_PREV = [_YDAY - timedelta(days=DAYS + i) for i in range(DAYS)]   # стільки ж днів перед ними
+
+
+def closed_label() -> str:
+    a, b = min(CLOSED), max(CLOSED)
+    return f"за {b:%d.%m}" if a == b else f"за {a:%d.%m}–{b:%d.%m}"
 
 
 def log(m):
@@ -70,6 +82,25 @@ def _metric(js) -> int | None:
     return None
 
 
+def _closed_reach(url: str, metric: str, tok: str) -> tuple[int | None, int | None]:
+    """Охоплення за закриті дні звіту й за стільки ж днів перед ними. Facebook/Instagram віддають значення
+    по днях з end_time — це кінець дня за тихоокеанським часом, тож день значення = end_time мінус доба."""
+    start = datetime.combine(min(CLOSED_PREV) - timedelta(days=2), datetime.min.time(), timezone.utc)
+    js = get(url, metric=metric, period="day", since=int(start.timestamp()), until=int(NOW.timestamp()),
+             access_token=tok)
+    days: dict = {}
+    for m in js.get("data", []):
+        for v in m.get("values") or []:
+            if isinstance(v.get("value"), (int, float)) and v.get("end_time"):
+                d = (datetime.fromisoformat(v["end_time"].replace("+0000", "+00:00")) - timedelta(days=1)).date()
+                days[d] = int(v["value"])
+    if not days:
+        return None, None
+    cur = sum(days.get(d, 0) for d in CLOSED) if any(d in days for d in CLOSED) else None
+    prev = sum(days.get(d, 0) for d in CLOSED_PREV) if any(d in days for d in CLOSED_PREV) else None
+    return cur, prev
+
+
 # ============================ FACEBOOK ============================
 def facebook(PAGE_ID: str = PAGE_ID):
     tok = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
@@ -83,12 +114,9 @@ def facebook(PAGE_ID: str = PAGE_ID):
     out = {"name": pg.get("name"), "followers": pg.get("followers_count"), "posts": []}
     # охоплення сторінки: пробуємо актуальні назви показників по черзі
     for metric in ("page_impressions_unique", "page_total_media_view_unique", "page_views_total"):
-        cur = _metric(get(f"{G}/{PAGE_ID}/insights", metric=metric, period="day",
-                          since=int(SINCE.timestamp()), until=int(NOW.timestamp()), access_token=ptok))
+        cur, prev = _closed_reach(f"{G}/{PAGE_ID}/insights", metric, ptok)
         if cur is not None:
-            prev = _metric(get(f"{G}/{PAGE_ID}/insights", metric=metric, period="day",
-                               since=int(PREV.timestamp()), until=int(SINCE.timestamp()), access_token=ptok))
-            out.update(reach=cur, reach_prev=prev, reach_metric=metric)
+            out.update(reach=cur, reach_prev=prev, reach_metric=metric, reach_label=closed_label())
             break
     posts = get(f"{G}/{PAGE_ID}/posts", fields="id,message,created_time,permalink_url,shares,"
                 "reactions.summary(true).limit(0),comments.summary(true).limit(0)",
@@ -122,11 +150,8 @@ def instagram():
         return None
     ptok, ig = pg.get("access_token", tok), acc["id"]
     out = {"name": acc.get("username"), "followers": acc.get("followers_count"), "posts": []}
-    cur = _metric(get(f"{G}/{ig}/insights", metric="reach", period="day",
-                      since=int(SINCE.timestamp()), until=int(NOW.timestamp()), access_token=ptok))
-    prev = _metric(get(f"{G}/{ig}/insights", metric="reach", period="day",
-                       since=int(PREV.timestamp()), until=int(SINCE.timestamp()), access_token=ptok))
-    out.update(reach=cur, reach_prev=prev)
+    cur, prev = _closed_reach(f"{G}/{ig}/insights", "reach", ptok)
+    out.update(reach=cur, reach_prev=prev, reach_label=closed_label())
     media = get(f"{G}/{ig}/media", fields="id,caption,timestamp,permalink,like_count,comments_count",
                 limit=50, access_token=ptok)
     for m in media.get("data", []):
@@ -185,7 +210,8 @@ def section(title: str, d: dict | None, reach_word: str, key: str | None = None)
         return [f"<b>{title}</b>: дані недоступні", ""]
     lines = [f"<b>{title}</b>"]
     if d.get("reach") is not None:
-        lines.append(f"{reach_word}: {fmt(d['reach'])}{delta(d.get('reach'), d.get('reach_prev'))}")
+        lbl = f" {d['reach_label']}" if d.get("reach_label") else ""   # «Охоплення сторінки за 12.11: …»
+        lines.append(f"{reach_word}{lbl}: {fmt(d['reach'])}{delta(d.get('reach'), d.get('reach_prev'))}")
     import followers   # «(+2)» — зміна за період з власного щоденного запису (рішення 13.11.2026)
     lines.append(f"Підписники: {fmt(d.get('followers'))}"
                  + (followers.delta(key, d.get("followers"), SINCE, NOW) if key else ""))
@@ -234,7 +260,8 @@ def build() -> str:
     lines += youtube_api.sections(SINCE, log)
     per = "останню добу" if DAYS == 1 else f"останні {DAYS} дн."
     prev = "попередньої доби" if DAYS == 1 else ("попереднього тижня" if DAYS == 7 else f"попередніх {DAYS} дн.")
-    lines.append(f"<i>Охоплення — за {per}, у дужках — зміна до {prev}.</i>")
+    lines.append(f"<i>Охоплення — за {per}, у дужках — зміна до {prev}. Facebook і Instagram — лише за "
+                 f"повні дні (до вчора), бо останню добу вони дораховують із запізненням.</i>")
     return "\n".join(lines)
 
 
