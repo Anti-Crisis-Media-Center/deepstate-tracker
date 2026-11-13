@@ -175,34 +175,20 @@ def telegram():
 
 
 def telegram_delta(now_count) -> str:
-    """« (+2)» — зміна підписників за період з власного запису data/tg_subscribers.csv (tg_count.py, з 13.11.2026).
-    Якщо запис коротший за період — порівнюємо з першим днем запису й пишемо його дату."""
-    import csv
-    from pathlib import Path
-    f = Path("data/tg_subscribers.csv")
-    if not isinstance(now_count, int) or not f.exists():
-        return ""
-    rows = [(r[0], int(r[1])) for r in list(csv.reader(f.open()))[1:] if len(r) > 1 and r[1].isdigit()]
-    if not rows:
-        return ""
-    start = SINCE.strftime("%Y-%m-%d")
-    before = [r for r in rows if r[0] <= start]
-    base_date, base = before[-1] if before else rows[0]
-    if base_date == NOW.strftime("%Y-%m-%d"):
-        return ""   # запис лише за сьогодні — порівнювати ні з чим
-    d = now_count - base
-    note = "" if before else f" з {base_date[8:10]}.{base_date[5:7]}"
-    return f" ({'+' if d > 0 else ''}{d}{note})" if d else f" (без змін{note})"
+    """Зміна підписників Telegram — див. followers.py (запис щодня з 13.11.2026)."""
+    import followers
+    return followers.delta("telegram", now_count, SINCE, NOW)
 
 
-# ============================ ЗВІТ ============================
-def section(title: str, d: dict | None, reach_word: str) -> list[str]:
+def section(title: str, d: dict | None, reach_word: str, key: str | None = None) -> list[str]:
     if not d:
         return [f"<b>{title}</b>: дані недоступні", ""]
     lines = [f"<b>{title}</b>"]
     if d.get("reach") is not None:
         lines.append(f"{reach_word}: {fmt(d['reach'])}{delta(d.get('reach'), d.get('reach_prev'))}")
-    lines.append(f"Підписники: {fmt(d.get('followers'))}")
+    import followers   # «(+2)» — зміна за період з власного щоденного запису (рішення 13.11.2026)
+    lines.append(f"Підписники: {fmt(d.get('followers'))}"
+                 + (followers.delta(key, d.get("followers"), SINCE, NOW) if key else ""))
     posts = d["posts"]
     lines.append(f"Дописів {'за тиждень' if DAYS == 7 else 'за добу' if DAYS == 1 else f'за {DAYS} дн.'}: {len(posts)}")
     if any("comm" in p for p in posts):   # реакції й коментарі — щоб бачити, де реагують і що модерувати
@@ -239,12 +225,12 @@ def build() -> str:
     lines += [f"<b>Telegram @acmc_ua</b>", f"Підписники: {fmt(tg)}{telegram_delta(tg)}", ""]
     # жовта — основна й більша, тож першою (рішення Юлі 12.11.2026)
     if YELLOW_PAGE_ID:
-        lines += section("Facebook «АКМЦ» (жовта)", facebook(YELLOW_PAGE_ID), "Охоплення сторінки")
-    lines += section("Facebook «АКМЦ. У фокусі» (біла)", facebook(), "Охоплення сторінки")
-    lines += section("Instagram acmc.ua", instagram(), "Охоплення")
-    lines += section("Threads acmc.ua", threads(), "Перегляди")
+        lines += section("Facebook «АКМЦ» (жовта)", facebook(YELLOW_PAGE_ID), "Охоплення сторінки", "fb_yellow")
+    lines += section("Facebook «АКМЦ. У фокусі» (біла)", facebook(), "Охоплення сторінки", "fb_white")
+    lines += section("Instagram acmc.ua", instagram(), "Охоплення", "instagram")
+    lines += section("Threads acmc.ua", threads(), "Перегляди", "threads")
     if os.getenv("TIKTOK_REFRESH_TOKEN", "").strip():
-        lines += section("TikTok @acmc.ua", tiktok_api.stats(SINCE, log), "Перегляди нових відео")
+        lines += section("TikTok @acmc.ua", tiktok_api.stats(SINCE, log), "Перегляди нових відео", "tiktok")
     lines += youtube_api.sections(SINCE, log)
     per = "останню добу" if DAYS == 1 else f"останні {DAYS} дн."
     prev = "попередньої доби" if DAYS == 1 else ("попереднього тижня" if DAYS == 7 else f"попередніх {DAYS} дн.")

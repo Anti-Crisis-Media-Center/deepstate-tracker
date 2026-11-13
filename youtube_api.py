@@ -61,6 +61,16 @@ def _views(v: dict) -> int:
     return int(v.get("statistics", {}).get("viewCount") or 0)
 
 
+def _followers_delta(ref, count, since) -> str:
+    """«(+100)» — зміна за період із запису followers.py. YouTube округлює число підписників
+    (14 800), тож зміна видна лише сотнями."""
+    try:
+        import followers
+        return followers.delta(f"youtube:{ref}", count, since)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def section(ref: str, since: datetime, log) -> list[str]:
     ch = _channel(ref, log)
     if not ch:
@@ -68,7 +78,8 @@ def section(ref: str, since: datetime, log) -> list[str]:
     name = ch["snippet"]["title"]
     st = ch.get("statistics", {})
     lines = [f"<b>YouTube «{html.escape(name)}»</b>",
-             "Підписники: " + ("приховано" if st.get("hiddenSubscriberCount") else _fmt(st.get("subscriberCount")))]
+             "Підписники: " + ("приховано" if st.get("hiddenSubscriberCount") else _fmt(st.get("subscriberCount")))
+             + ("" if st.get("hiddenSubscriberCount") else _followers_delta(ref, st.get("subscriberCount"), since))]
     uploads = ch.get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
     vids = _videos(_playlist_ids(uploads)) if uploads else []
     new = [v for v in vids if v["snippet"]["publishedAt"] >= since.strftime("%Y-%m-%dT%H:%M:%SZ")]
