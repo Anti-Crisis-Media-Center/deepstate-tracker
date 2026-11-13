@@ -13,10 +13,11 @@ jobs:
       - env:
           THREADS_LINK: ${{ secrets.THREADS_TELEGRAM_LINK }}
           FB_LINK: ${{ secrets.FB_TELEGRAM_LINK }}
+          YOUTUBE_LINK: ${{ secrets.YOUTUBE_TELEGRAM_LINK }}
           GIVEN: ${{ inputs.link }}
         run: |
           norm() { echo -n "$1" | tr -d ' \r\n' | sed 's#^https\?://##'; }
-          for n in THREADS_LINK FB_LINK; do
+          for n in THREADS_LINK FB_LINK YOUTUBE_LINK; do
             v="${!n}"
             if [ -z "$v" ]; then echo "$n: секрет порожній"; continue; fi
             if [ "$(norm "$v")" = "$(norm "$GIVEN")" ]; then r="ЗБІГАЄТЬСЯ"; else r="НЕ збігається"; fi
