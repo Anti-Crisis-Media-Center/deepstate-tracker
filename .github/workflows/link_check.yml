@@ -1,0 +1,24 @@
+name: Перевірка запрошувального посилання (тимчасово)
+# Порівнює секрет із введеним посиланням і пише лише «збігається / ні». Значення секрету не показує.
+on:
+  workflow_dispatch:
+    inputs:
+      link:
+        description: "Посилання для порівняння"
+        required: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          THREADS_LINK: ${{ secrets.THREADS_TELEGRAM_LINK }}
+          FB_LINK: ${{ secrets.FB_TELEGRAM_LINK }}
+          GIVEN: ${{ inputs.link }}
+        run: |
+          norm() { echo -n "$1" | tr -d ' \r\n' | sed 's#^https\?://##'; }
+          for n in THREADS_LINK FB_LINK; do
+            v="${!n}"
+            if [ -z "$v" ]; then echo "$n: секрет порожній"; continue; fi
+            if [ "$(norm "$v")" = "$(norm "$GIVEN")" ]; then r="ЗБІГАЄТЬСЯ"; else r="НЕ збігається"; fi
+            echo "$n: $r (довжина секрету ${#v}, пробілів/переносів: $(echo -n "$v" | tr -cd ' \r\n' | wc -c))"
+          done
