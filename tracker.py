@@ -730,6 +730,15 @@ def tg(method: str, token: str, data: dict, files: dict | None = None) -> dict:
     return js
 
 
+def _tg_image(mp) -> Path | None:
+    """Мапа для Telegram (з 16.11.2026): версія 4:5 (як у Threads — на телефоні вища), інакше квадратна; немає — None."""
+    if not mp:
+        return None
+    mp = Path(mp)
+    v45 = mp.with_name(mp.stem + "_45.jpg")
+    return v45 if v45.exists() else (mp if mp.exists() else None)
+
+
 def publish(text: str, image: Path = COVER_IMAGE, silent: bool = True) -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -1955,7 +1964,9 @@ def run_summaries(now: datetime, state: dict, save=None) -> None:
             nets[k] = _net_period(rows, k)
         mp = make_change_map(s["kind"], [r["date"] for r in rows], nets, rows_places, f"map_{s['kind']}.jpg",
                              _change_areas(rows, max(OBLASTS, key=lambda k: abs(nets.get(k) or 0))))
-        publish(text, s["image"], silent=True)   # без звуку (12.11); у Telegram — завжди фірмова обкладинка (рішення Юлі 9.11): там читають текст
+        # без звуку (12.11); у Telegram — мапа періоду, якщо вона є, інакше обкладинка (рішення Юлі 14.11.2026;
+        # до того — завжди обкладинка): мапу з датою охочіше пересилають, а пересилання — головне джерело нових читачів
+        publish(text, _tg_image(mp) or s["image"], silent=True)
         done[s["kind"]] = today          # підсумок у Telegram вийшов — повтору не буде
         if save:
             save()
@@ -2268,7 +2279,9 @@ def main() -> int:
     day_map = make_change_map("day", [today], {k: results[k]["newly_km2"] - results[k]["deocc_km2"] for k in OBLASTS},
                               {k: results[k]["newly_places"] + results[k]["deocc_places"] for k in OBLASTS}, "map_day.jpg",
                               totals={k: (results[k]["newly_km2"], results[k]["deocc_km2"]) for k in OBLASTS})
-    publish(text, COVER_IMAGE, silent=True)  # без звуку (рішення Юлі 12.11: звук лише в «Хвилини мовчання» о 9:00); завжди фірмова обкладинка (9.11)
+    # без звуку (рішення Юлі 12.11: звук лише в «Хвилини мовчання» о 9:00). Картинка (рішення 14.11.2026): у день змін —
+    # мапа (як у Threads, сторіз і FB), у тихий день — фірмова обкладинка
+    publish(text, _tg_image(day_map) or COVER_IMAGE, silent=True)
     # Позначаємо «опубліковано» одразу після Telegram: якщо далі щось впаде,
     # запасний запуск не повторить пост ще раз.
     new_state["published"] = True

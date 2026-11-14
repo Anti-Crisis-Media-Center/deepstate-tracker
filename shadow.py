@@ -95,6 +95,9 @@ def run_day(hist: list[dict]) -> None:
     except Exception as e:  # noqa: BLE001
         text = f"(текст не зібрався: {e})"
     threads_preview(T.COVER_IMAGE, mp, text, f"Тінь v9 · Threads за добу ({day})")
+    tgimg = T._tg_image(mp) if mp else None   # з 16.11 у Telegram у день змін — мапа замість обкладинки
+    photo(tgimg or T.COVER_IMAGE, f"🧪 Тінь v9 · Telegram за добу ({day}): {'мапа' if tgimg else 'обкладинка (змін немає)'} "
+                                  f"над повним текстом поста")
 
 
 def release_upload(video: Path) -> str | None:
