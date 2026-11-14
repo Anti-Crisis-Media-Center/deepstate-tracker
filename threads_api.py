@@ -86,7 +86,8 @@ CTA = "Поширте, якщо стежите за Донеччиною."
 
 
 def adapt_text(fb_text: str) -> str:
-    """Threads: першим рядком — сама новина, назва рубрики й джерело — наприкінці (рішення Юлі 9.11)."""
+    """Threads: першим рядком — «DeepState: зміни за добу, 14.11», далі новина, джерело — наприкінці
+    (рішення Юлі 14.11.2026, повернення до формату з найкращим охопленням; 9.11 заголовок був у кінці)."""
     paras = [p for p in fb_text.split("\n\n") if "Telegram" not in p and "коментар" not in p]
     if len(paras) < 2:
         return _old_adapt(fb_text)
@@ -98,7 +99,9 @@ def adapt_text(fb_text: str) -> str:
         lead = [f"За {word} на мапі DeepState Донеччина й Луганщина без змін."]
     else:
         lead = sorted(body, key=lambda l: l.rstrip(".").endswith("без змін"))   # спершу області зі змінами
-    text = "\n\n".join(["\n".join(lead), *rest, f"{head} · за даними DeepStateMap.live"])
+    # 14.11.2026: заголовок «DeepState: зміни за добу, 14.11» знову першим рядком — так, як дописи з
+    # найбільшим охопленням (1 000–1 400); джерело — наприкінці
+    text = "\n\n".join([head, "\n".join(lead), *rest, "За даними DeepStateMap.live"])
     if len(text) > MAX_LEN:
         text = text[: MAX_LEN - 1].rstrip() + "…"
     return text
@@ -129,7 +132,8 @@ def _carousel(uid: str, urls: list[str], text: str) -> str:
 def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url: str | None = None,
          reply: bool = False) -> bool:
     """Допис + відповідь із посиланням на Telegram. Помилка не зупиняє бота.
-    Є мапа змін (image_url) → карусель «обкладинка + мапа»; немає → лише обкладинка."""
+    Є мапа змін (image_url) → одна картинка — мапа (з 14.11.2026; карусель «обкладинка + мапа» вимкнено);
+    немає → лише обкладинка."""
     if not enabled():
         return False
     text = adapt_text(fb_text)
@@ -144,7 +148,8 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url
         uid = _user_id()
         c45 = image.with_name(image.stem + "_45.jpg")   # обкладинка 4:5 — під мапу 4:5 у каруселі
         cover = globals()["image_url"](c45 if (image_url and c45.exists()) else image) if image.exists() else None
-        if image_url and cover:
+        if False and image_url and cover:   # карусель «обкладинка + мапа» вимкнено 14.11.2026: у стрічці першою
+            # видно обкладинку, а дописи з мапою першою мали втричі більше охоплення — тепер лише мапа
             try:
                 post_id = _carousel(uid, [cover, image_url], text)
             except Exception as e:  # noqa: BLE001 — карусель не вийшла: публікуємо хоча б мапу

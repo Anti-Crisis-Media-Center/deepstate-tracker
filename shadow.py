@@ -47,9 +47,9 @@ def threads_preview(cover: Path, mp: Path | None, text: str, title: str) -> None
     import json as _json
     c45 = cover.with_name(cover.stem + "_45.jpg")
     imgs = [c45 if c45.exists() else cover]
-    if mp:
+    if mp:   # з 14.11.2026 у Threads лише мапа, без обкладинки попереду (як у бойовому threads_api.post)
         m45 = mp.with_name(mp.stem + "_45.jpg")
-        imgs.append(m45 if m45.exists() else mp)
+        imgs = [m45 if m45.exists() else mp]
     cap = f"🧪 {title}\n\n{text}"[:1000]
     if len(imgs) == 1:
         photo(imgs[0], cap)
@@ -94,7 +94,7 @@ def run_day(hist: list[dict]) -> None:
         text = threads_api.adapt_text(T.build_fb_teaser(prev, res, names))
     except Exception as e:  # noqa: BLE001
         text = f"(текст не зібрався: {e})"
-    threads_preview(T.COVER_IMAGE, mp, text, f"Тінь v9 · Threads за добу ({day}) — гортайте")
+    threads_preview(T.COVER_IMAGE, mp, text, f"Тінь v9 · Threads за добу ({day})")
 
 
 def release_upload(video: Path) -> str | None:
@@ -167,7 +167,7 @@ def run_week(hist: list[dict]) -> None:
         text = threads_api.adapt_text(T.build_fb_summary_teaser("week", rows))
     except Exception as e:  # noqa: BLE001
         text = f"(текст не зібрався: {e})"
-    threads_preview(T.COVER_WEEK, mp, text, f"Тінь v9 · Threads, тиждень ({label}) — гортайте")
+    threads_preview(T.COVER_WEEK, mp, text, f"Тінь v9 · Threads, тиждень ({label})")
     if not v:
         send("sendMessage", {"text": "🧪 Тінь v9: відео не зібралося (немає ffmpeg або помилка) — Reels не перевірено"})
     if v:

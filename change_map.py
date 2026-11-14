@@ -27,7 +27,9 @@ FLIP = (235, 235, 245)      # «позначили й зняли» — світ�
 GREY = (128, 128, 142)       # район проникнення (сіра зона) — світліша, як у DeepState
 GREY_NEW = (190, 190, 205)   # з окупованих стали сірими — світло-сірі (це не деокупація)
 NEW = (255, 204, 51)         # фірмовий жовтий — лише для акцентів (заголовок)
-NEW_OCC = (196, 18, 32)      # нові окуповані ділянки — темно-червоні, «кров'яні»
+NEW_OCC = (255, 45, 60)      # нові окуповані ділянки — яскраво-червоні зі світінням (14.11.2026: темно-червоні
+                             # губилися на темно-червоному тлі окупованого; у Threads охоплення тягне саме ділянка)
+NEW_OCC_GLOW = (255, 95, 95) # світіння навколо нових окупованих
 BORDER = (150, 165, 200)
 WHITE, MUTED = (250, 250, 250), (175, 185, 205)
 
@@ -292,8 +294,8 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         for h in (hl_free, hl_grey):   # поточний крок: зняте — блакитним (чи сірим), навіть якщо було червоним
             if h is not None and c_red is not None:
                 c_red = c_red.difference(h)
-        layers = [(c_red, NEW_OCC, (232, 80, 80)), (c_blue, DEOCC, (200, 240, 255)),
-                  (hl_occ, NEW_OCC, (232, 80, 80)), (hl_free, DEOCC, (200, 240, 255))]
+        layers = [(c_red, NEW_OCC, NEW_OCC_GLOW), (c_blue, DEOCC, (200, 240, 255)),
+                  (hl_occ, NEW_OCC, NEW_OCC_GLOW), (hl_free, DEOCC, (200, 240, 255))]
         if hl_occ is not None:
             layers[3] = (hl_free.difference(hl_occ) if hl_free is not None else None, DEOCC, (200, 240, 255))
         for g in (c_grey, hl_grey):   # з окупованих у сіру зону — просто сіре, як решта сірої зони, без підсвітки
@@ -313,9 +315,11 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
                 if max(max(xs) - min(xs), max(ys) - min(ys)) < 24 * S:   # крихітна ділянка (під точкою міста) —
                     cx_, cy_ = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2   # ширше світіння, щоб її було видно
                     gld.ellipse([cx_ - 16 * S, cy_ - 16 * S, cx_ + 16 * S, cy_ + 16 * S], fill=255)
-            gl = gl.filter(ImageFilter.MaxFilter(31)).filter(ImageFilter.GaussianBlur(14))
+            wide = col == NEW_OCC   # червоне — ширше й щільніше світіння, як було в жовтого (14.11.2026)
+            gl = gl.filter(ImageFilter.MaxFilter(45 if wide else 31)).filter(ImageFilter.GaussianBlur(22 if wide else 14))
             gcol = edge if col == NEW_OCC else col   # темно-червоне світіння на темному фоні губиться — світліше
-            big.paste(Image.new("RGB", big.size, gcol), (0, 0), gl.point(lambda v: int(v * 0.5)))
+            k_ = 1.0 if col == NEW_OCC else 0.5   # червоне світіння — яскравіше (14.11.2026)
+            big.paste(Image.new("RGB", big.size, gcol), (0, 0), gl.point(lambda v, k_=k_: int(v * k_)))
             d = ImageDraw.Draw(big)
             poly(geom, fill=col, outline=edge, width=1)
     img = big.resize((size, H), Image.LANCZOS)
