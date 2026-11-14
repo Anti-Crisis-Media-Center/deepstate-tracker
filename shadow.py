@@ -89,7 +89,7 @@ def run_day(hist: list[dict]) -> None:
                                 totals={k: (res[k]["newly_km2"], res[k]["deocc_km2"]) for k in T.OBLASTS}) if any(abs(v) > 0 for v in nets.values()) else None
     try:
         import threads_api
-        prev = (datetime.strptime(day, "%Y-%m-%d").date() - timedelta(days=1)).strftime("%d.%m.%Y")
+        prev = datetime.strptime(day, "%Y-%m-%d").strftime("%d.%m.%Y")   # як у бойовому пості — дата публікації
         names = {k: T.place_names([day], k) for k in T.OBLASTS if res[k]["newly_km2"] or res[k]["deocc_km2"]}
         text = threads_api.adapt_text(T.build_fb_teaser(prev, res, names))
     except Exception as e:  # noqa: BLE001

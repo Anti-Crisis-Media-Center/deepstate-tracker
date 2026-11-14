@@ -794,15 +794,15 @@ def _teaser_line(title: str, newly: float, deocc: float, newly_pl: list, deocc_p
         s = f"{fmt_km2(newly)} км² позначено окупованими"
         on = pick(names, "occ")
         if on or newly_pl:
-            s += " " + near_phrase(on, newly_pl) if on else f" — поблизу: {join_places(newly_pl[:3])}"
+            s += " — " + near_phrase(on, newly_pl) if on else f" — поблизу: {join_places(newly_pl[:3])}"
         parts.append(s)
     if deocc > 0:
         s = f"{fmt_km2(deocc)} км² — деокупованими"
         dn = pick(names, "deocc")
         if split:
-            s += " " + near_phrase(dn, deocc_pl)
+            s += " — " + near_phrase(dn, deocc_pl)
         elif deocc_pl and not (names and newly > 0):
-            s += " " + near_phrase(dn, deocc_pl) if dn else f" — поблизу: {join_places(deocc_pl[:3])}"
+            s += " — " + near_phrase(dn, deocc_pl) if dn else f" — поблизу: {join_places(deocc_pl[:3])}"
         parts.append(s)
     if newly > 0 and deocc > 0:   # обидва напрямки — кожен окремим рядком (рішення 10.11)
         def ln(v, w, nm_, pl):
