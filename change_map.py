@@ -20,7 +20,7 @@ FONTS = ROOT / "assets" / "fonts"
 
 BG = (13, 20, 40)
 LAND = (34, 46, 78)
-OCC = (80, 38, 48)           # окуповано раніше (темний, щоб нові червоні ділянки вирізнялися)
+OCC = (66, 32, 41)           # окуповано раніше — темніше (14.11.2026: середнє між (80,38,48) і (52,26,34)), щоб нова червона ділянка «вистрибувала»
 DEOCC = (88, 196, 255)   # деокуповані ділянки — блакитні
 TITLE_RED = (255, 110, 110)   # назви біля окупованих у заголовку, коли є обидва напрямки
 FLIP = (235, 235, 245)      # «позначили й зняли» — світлий контур
@@ -353,11 +353,35 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             seen_m.add(p_[2])
             must_pts.append(p_)
     pts = [p for p in pts if p[2] not in must]   # далекі тезки (інша Миколаївка) не підписуємо
-    # є назви із заголовка — інших сіл не додаємо, щоб на мапі не з'являлися «зайві» назви
-    near = [] if must_pts else sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]
+    # біля кожної ділянки змін — найближче село дрібним шрифтом (рішення Юлі 14.11.2026): заголовок дає орієнтир
+    # (місто), а підпис біля плями — точне місце для місцевих. Одне село на ділянку, не далі ~4 км, до 3 підписів;
+    # якщо найближче — місто із заголовка, другий підпис не ставимо. (До 14.11 сіл біля назв із заголовка не було.)
+    near, seen_v = [], set(must)
+    parts_ = sorted([g_ for g_ in getattr(new, "geoms", [new]) if not g_.is_empty], key=lambda g_: -g_.area)
+    for part in parts_:
+        cand_v = sorted([p for p in pts if not p[0] and p[3].distance(part) < 0.045], key=lambda p: p[3].distance(part))
+        allp = sorted([p for p in pts + must_pts], key=lambda p: p[3].distance(part))
+        if allp and allp[0][2] in must:   # найближчий населений пункт — уже в заголовку
+            continue
+        v = next((p for p in cand_v if p[2] not in seen_v), None)
+        if v:
+            near.append(v)
+            seen_v.add(v[2])
+        if len(near) >= 3:
+            break
     cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
     pts = must_pts + near + [p for p in cities if p[2] not in must]
     shown, boxes, used = 0, [], set()
+    # підписи не кладемо на саму ділянку змін (як «Русин Яр» на старій мапі) — перевіряємо за формою ділянки
+    from shapely.geometry import Polygon as _Poly, box as _box
+    patch_px = []
+    for part in getattr(new, "geoms", [new]):
+        if part.is_empty or part.geom_type != "Polygon":
+            continue
+        try:
+            patch_px.append(_Poly([px(x_, y_) for x_, y_ in part.exterior.coords]).buffer(8))
+        except Exception:  # noqa: BLE001
+            pass
     for is_city, _, nm, g in pts:
         if nm in used:
             continue
@@ -368,10 +392,13 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             continue
         f = _font("800" if is_city else "500", 34 if is_city else 28)
         w = d.textlength(nm, font=f)
-        hit = lambda bb: any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes)
+        hit = lambda bb: (any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes)
+                          or any(pp.intersects(_box(*bb)) for pp in patch_px))
         cand = [(x + 12, y - 18), (x - 12 - w, y - 18)]
-        if nm in must:   # назву із заголовка не пропускаємо: пробуємо також під і над точкою
-            cand += [(x + 12, y + 14), (x - 12 - w, y + 14), (x + 12, y - 52), (x - 12 - w, y - 52)]
+        if nm in must or not is_city:   # назву із заголовка й село біля ділянки не пропускаємо: пробуємо також під і над точкою
+            cand += [(x + 12, y + 14), (x - 12 - w, y + 14), (x + 12, y - 52), (x - 12 - w, y - 52),
+                     (x - w / 2, y + 14), (x - w / 2, y - 52), (x + 12, y + 48), (x - 12 - w, y + 48),
+                     (x - w / 2, y + 48), (x - w / 2, y - 86)]
         cand = [c for c in cand if ox <= c[0] and c[0] + w <= ox + mw] or cand[:1]
         pos = next(((tx_, ty_) for tx_, ty_ in cand if not hit((tx_ - 4, ty_ - 2, tx_ + w + 4, ty_ + 40))), None)
         if pos is None:
