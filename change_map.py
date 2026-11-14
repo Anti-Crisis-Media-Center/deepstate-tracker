@@ -450,7 +450,8 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         ssz -= 2
     if d.textlength(subtitle, font=_font("500", ssz)) > mw:   # не влазить — коротший варіант
         import re as _re
-        subtitle = _re.sub(r" за (добу|тиждень|місяць)$", "", subtitle).replace(" — ", " ")
+        # прибираємо «за добу», але дату лишаємо (з 14.11.2026 підзаголовок закінчується датою)
+        subtitle = _re.sub(r" за (добу|тиждень|місяць)(?=(,? [\d.–]+)?$)", "", subtitle).replace(" — ", " ")
         while ssz > 26 and d.textlength(subtitle, font=_font("500", ssz)) > mw:
             ssz -= 2
     d.text((ox, ty0 + 85), subtitle, font=_font("500", ssz), fill=WHITE)

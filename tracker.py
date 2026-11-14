@@ -2011,6 +2011,9 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         else:
             title = OBLASTS[key]["short"]
         word = {"day": "за добу", "week": "за тиждень", "month": "за місяць"}[kind]
+        # дата на самій мапі (рішення Юлі 14.11.2026): мапу пересилають і скріншотять без тексту допису
+        _dd = lambda d_: f"{d_[8:10]}.{d_[5:7]}"
+        word += f", {_dd(dates[-1])}" if kind == "day" else f" {_dd(dates[0])}–{_dd(dates[-1])}"
         sub = f"{fmt_km2(abs(km))} км² позначено {'окупованими' if km > 0 else 'деокупованими'} {word}"
         files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
         bd = change_map.breakdown(files, key)
