@@ -149,7 +149,7 @@ SOURCE_LINE = 'За даними <a href="https://deepstatemap.live">DeepStateMa
 # Заклик підписатися на сам майданчик (рішення Юлі 15.11.2026; у Telegram не додаємо — там уже підписники, пост довгий): мета — і інформувати, і нарощувати
 # аудиторію АКМЦ; підписуємо на АКМЦ, а не «на DeepState». Щоденні дописи — «підпишіться тут»,
 # тижневі/місячні — як і раніше, посилання на Telegram (там повний перелік населених пунктів).
-SUB_CTA = "Підписуйтеся на нашу сторінку, щоб не пропустити щоденні зведення."
+SUB_CTA = "Підписуйтеся, щоб не пропустити наступні зведення."
 EDITOR_NOTE = (
     SOURCE_LINE + "\n\n"
     "<blockquote expandable><i>Примітка редакції: це автоматизований аналіз змін на мапі "
@@ -1628,7 +1628,7 @@ def youtube_text(kind: str, body: list[str], date_label: str, places: list[str],
     desc = [*[b for b in body if b.strip()], "",
             f"Підсумки змін на мапі DeepState для Донеччини та Луганщини за {period}. "
             + ("Нові підсумки щопонеділка." if kind == "week" else "Нові підсумки щомісяця."),
-            "Підписуйтеся на наш YouTube-канал, щоб не пропустити нові підсумки.",
+            SUB_CTA,
             "Зміни за кожну добу — щоранку о 8:00 у нашому Telegram: " + YOUTUBE_TELEGRAM_LINK, "",
             "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
             "#Донеччина #DeepState #Shorts"]
@@ -1659,7 +1659,7 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         title = "DeepState: підсумки тижня 🗺" if kind == "week" else f"DeepState: підсумки місяця 🗺 {date_label}"
         word = "щопонеділка" if kind == "week" else "щомісяця"
         caption = "\n".join([title, *body, "",
-                              f"Підписуйтеся, щоб {word} бачити, як змінюється мапа Донеччини.",
+                              SUB_CTA,   # 15.11: без «змінюється мапа Донеччини» — Донеччина лишається Україною
                               "Збережіть, щоб не загубити.",
                               "За даними DeepStateMap.live", "",
                               _tiktok_tags(places, any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows))])
