@@ -20,9 +20,16 @@ FONTS = ROOT / "assets" / "fonts"
 
 BG = (13, 20, 40)
 LAND = (34, 46, 78)
-OCC = (120, 52, 60)          # окуповано (приглушений червоний)
-GREY = (92, 92, 104)         # район проникнення
-NEW = (255, 204, 51)         # нові ділянки — фірмовий жовтий
+OCC = (66, 32, 41)           # окуповано раніше — темніше (14.11.2026: середнє між (80,38,48) і (52,26,34)), щоб нова червона ділянка «вистрибувала»
+DEOCC = (88, 196, 255)   # деокуповані ділянки — блакитні
+TITLE_RED = (255, 110, 110)   # назви біля окупованих у заголовку, коли є обидва напрямки
+FLIP = (235, 235, 245)      # «позначили й зняли» — світлий контур
+GREY = (128, 128, 142)       # район проникнення (сіра зона) — світліша, як у DeepState
+GREY_NEW = (190, 190, 205)   # з окупованих стали сірими — світло-сірі (це не деокупація)
+NEW = (255, 204, 51)         # фірмовий жовтий — лише для акцентів (заголовок)
+NEW_OCC = (255, 45, 60)      # нові окуповані ділянки — яскраво-червоні зі світінням (14.11.2026: темно-червоні
+                             # губилися на темно-червоному тлі окупованого; у Threads охоплення тягне саме ділянка)
+NEW_OCC_GLOW = (255, 95, 95) # світіння навколо нових окупованих
 BORDER = (150, 165, 200)
 WHITE, MUTED = (250, 250, 250), (175, 185, 205)
 
@@ -42,41 +49,187 @@ def _geoms(gj):
     return [shape(gj)]
 
 
-def render(change_files: list[Path], out: Path, title: str, subtitle: str, size: int = 1080,
-           oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None,
-           must_label: list | None = None) -> Path | None:
-    """height=None — квадрат для дописів; height=1920 — вертикальна мапа для відео (TikTok/Shorts),
-    з полями під інтерфейс платформ зверху і знизу."""
-    H = height or size
-    vertical = H >= 1600          # TikTok/Shorts 9:16; 1350 — допис Instagram 4:5 (як квадрат, лише вища мапа)
-    changes = []
+def _net(occ_u, free_u):
+    """Підсумок за період: те, що позначили окупованим і не зняли (червоне); те, з чого позначку зняли
+    і не повернули (блакитне); ділянки, де за період позначку і поставили, і зняли (штрихування)."""
+    def ok(g):
+        return g if g is not None and not g.is_empty and g.area > 1e-9 else None
+    if occ_u is None or free_u is None:
+        return ok(occ_u), ok(free_u), None
+    return ok(occ_u.difference(free_u)), ok(free_u.difference(occ_u)), ok(occ_u.intersection(free_u))
+
+
+def _load_steps(change_files: list[Path], oblast_key: str) -> list[tuple[list, list]]:
+    """Зміни по днях у хронологічному порядку: [(окуповані, зняті), ...]. «Зняті» — і деокуповані,
+    і ті, що з окупованих стали сірою зоною (to_grey); їх розрізняє _grey_changes."""
+    out = []
+    for p in sorted(change_files, key=lambda x: x.name):
+        occ, free = [], []
+        if p.exists():
+            for f in json.loads(p.read_text())["features"]:
+                if f["properties"].get("oblast") == oblast_key:
+                    (free if f["properties"].get("change") in ("deoccupied", "to_grey") else occ).append(
+                        shape(f["geometry"]))
+        if occ or free:
+            out.append((occ, free))
+    return out
+
+
+def _timeline(steps: list[tuple[list, list]]):
+    """Проходимо зміни по черзі. red — позначено окупованим (і ще не знято), blue — знято (і ще не повернуто),
+    back — ділянки, що повернулися до стану на початок періоду («позначили й зняли»)."""
+    from shapely.geometry import Polygon
+    red = blue = back = Polygon()
+    for occ, free in steps:
+        for g in occ:   # повернули позначку на щойно зняте — ділянка знову як на початку
+            back = back.union(g.intersection(blue))
+            red = red.union(g.difference(blue))
+            blue = blue.difference(g)
+        for g in free:  # зняли щойно поставлену позначку — теж як на початку
+            back = back.union(g.intersection(red))
+            blue = blue.union(g.difference(red))
+            red = red.difference(g)
+    back = back.difference(red).difference(blue)
+    ok = lambda g: g if g is not None and not g.is_empty and g.area > 1e-9 else None  # noqa: E731
+    return ok(red), ok(blue), ok(back)
+
+
+def step_groups(change_files: list[Path], oblast_key: str = "donetsk", max_steps: int = 4) -> list[int]:
+    """Кроки для відео: межі (кількість днів зі змінами) після кожного кроку. Сусідні дні з однаковим
+    напрямком (лише окупація / лише деокупація) — один крок. Порожньо — якщо був лише один напрямок."""
+    steps = _load_steps(change_files, oblast_key)
+    kinds = ["occ" if o and not f else "free" if f and not o else "mix" for o, f in steps]
+    if len(set(kinds)) == 1 and kinds[0] != "mix":
+        return []
+    ends = [i + 1 for i in range(len(kinds)) if i + 1 == len(kinds) or kinds[i + 1] != kinds[i]]
+    while len(ends) > max_steps:   # забагато кроків (місяць) — зливаємо найкоротші сусідні
+        gaps = [ends[0]] + [ends[i] - ends[i - 1] for i in range(1, len(ends))]
+        i = min(range(len(ends) - 1), key=lambda j: gaps[j] + gaps[j + 1])
+        del ends[i]
+    return ends
+
+
+def step_info(change_files: list[Path], oblast_key: str = "donetsk") -> list[tuple[str, str]]:
+    """Для кожного дня зі змінами: (дата, напрямок «occ» / «free» / «mix»)."""
+    days = [p.stem for p in sorted(change_files, key=lambda x: x.name)
+            if p.exists() and any(f["properties"].get("oblast") == oblast_key
+                                  for f in json.loads(p.read_text())["features"])]
+    return [(d, "occ" if o and not f else "free" if f and not o else "mix")
+            for d, (o, f) in zip(days, _load_steps(change_files, oblast_key))]
+
+
+def _grey_changes(change_files: list[Path], oblast_key: str):
+    gs = []
     for p in change_files:
         if p.exists():
-            gj = json.loads(p.read_text())
-            changes += [shape(f["geometry"]) for f in gj["features"]
-                        if f["properties"].get("oblast") == oblast_key]
-    if not changes:
+            gs += [shape(f["geometry"]) for f in json.loads(p.read_text())["features"]
+                   if f["properties"].get("oblast") == oblast_key and f["properties"].get("change") == "to_grey"]
+    return unary_union(gs) if gs else None
+
+
+def _split(g, grey):
+    """Ділянку «знято» ділимо на деокуповану і ту, що стала сірою."""
+    if g is None or grey is None:
+        return g, None
+    ok = lambda x: x if not x.is_empty and x.area > 1e-9 else None  # noqa: E731
+    return ok(g.difference(grey)), ok(g.intersection(grey))
+
+
+def _km2(g) -> float:
+    if g is None:
+        return 0.0
+    return round(g.area * 111.32 ** 2 * math.cos(math.radians(g.centroid.y)), 2)
+
+
+def breakdown(change_files: list[Path], oblast_key: str = "donetsk") -> dict:
+    """Площі за підсумком періоду (км²): окуповано, деокуповано, з окупованих — у сіру зону,
+    «позначили й зняли» (не входять ні в окуповане, ні в деокуповане)."""
+    red, blue, back = _timeline(_load_steps(change_files, oblast_key))
+    free, grey = _split(blue, _grey_changes(change_files, oblast_key))
+    return {"occupied": _km2(red), "deoccupied": _km2(free), "to_grey": _km2(grey), "flip": _km2(back)}
+
+
+def velvet(cover: Path, w: int, h: int):
+    """Підкладка «як обкладинка»: та сама оксамитова текстура без тексту й мапи.
+    Беремо колір країв обкладинки, додаємо м'які плями, дрібне зерно й темніші краї."""
+    import numpy as np
+    from PIL import ImageFilter
+    cv = np.asarray(Image.open(cover).convert("RGB").resize((200, 200)), dtype=np.float32)
+    base = np.median(cv[60:150, 130:190].reshape(-1, 3), axis=0) * 1.1   # колір текстури праворуч від мапи (як на обкладинці)
+    rng = np.random.default_rng(7)
+    big = Image.fromarray((rng.random((h // 40 + 2, w // 40 + 2)) * 255).astype("uint8")).resize(
+        (w, h), Image.BICUBIC).filter(ImageFilter.GaussianBlur(60))
+    lum = 0.75 + 0.5 * (np.asarray(big, dtype=np.float32) / 255.0)
+    grain = 1 + (rng.random((h, w)) - 0.5) * 0.16
+    yy, xx = np.mgrid[0:h, 0:w]
+    vig = 1 - 0.25 * (((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2) / 2
+    arr = base[None, None, :] * (lum * grain * vig)[..., None]
+    return Image.fromarray(np.clip(arr, 0, 255).astype("uint8"))
+
+
+def render(change_files: list[Path], out: Path, title: str, subtitle: str, size: int = 1080,
+           oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None,
+           upto: int | None = None, since: int = 0, caption: str | None = None,
+           hide_step: bool = False, backdrop: Path | None = None,
+           must_label: list | None = None, blue_label: list | None = None,
+           red_label: list | None = None) -> Path | None:
+    """upto — для кадрів відео: показати стан після перших upto днів зі змінами, причому зміни днів
+    since..upto (поточний крок) — їхнім кольором (червоним чи блакитним), навіть якщо потім їх знімуть.
+    upto=None — підсумок періоду: червоне, блакитне й контур ділянок «позначили й зняли».
+    height=None — квадрат для дописів; height=1920 — вертикальна мапа для відео (TikTok/Shorts),
+    з полями під інтерфейс платформ зверху і знизу."""
+    H = height or size
+    vertical = H >= 1600          # TikTok/Shorts 9:16
+    portrait = H != size and not vertical   # 4:5 (1080×1350) — Threads/Instagram: як квадрат, лише вища мапа
+    steps = _load_steps(change_files, oblast_key)
+    if not steps:
         return None
-    new = unary_union(changes)
+    allg = [g for o, f in steps for g in o + f]
+    new = unary_union(allg)   # для кадру й підписів
+    new_occ, new_free, flip = _timeline(steps)            # підсумок періоду
+    grey_ch = _grey_changes(change_files, oblast_key)      # з окупованих — у сіру зону
+    final_free, final_grey = _split(new_free, grey_ch)
+    cur = _timeline(steps[:upto]) if upto is not None else (new_occ, new_free, flip)
+    hl_occ = hl_free = None
+    if upto is not None:
+        ho = [g for o, _ in steps[since:upto] for g in o]
+        hf = [g for _, f in steps[since:upto] for g in f]
+        hl_occ = unary_union(ho) if ho else None
+        hl_free = unary_union(hf) if hf else None
     st = json.loads((DATA / "state" / "current.json").read_text())
     occ = unary_union(_geoms(st["occupied"][oblast_key]))
+    # фон — окупація на початок періоду, щоб «до змін» і повернуті ділянки виглядали так, як були
+    if new_free is not None:
+        occ = occ.union(new_free)
+    if new_occ is not None:
+        occ = occ.difference(new_occ)
     unk = unary_union(_geoms(st["unknown"][oblast_key])) if st.get("unknown", {}).get(oblast_key) else None
     obl = json.loads((DATA / "reference" / "oblasts.geojson").read_text())
     region = unary_union([shape(f["geometry"]) for f in obl["features"]])  # обидві області
 
     # кадр: нова ділянка + ~18 км навколо, квадрат з урахуванням широти
-    cx, cy = new.centroid.x, new.centroid.y
+    frame = new
+    if must_label:   # назви із заголовка мають потрапити в кадр — розширюємо його до цих міст
+        try:
+            from shapely.geometry import MultiPoint
+            st_all = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
+            pts_m = [shape(f["geometry"]).centroid for f in st_all if f["properties"]["ADM4_UA"] in set(must_label)]
+            pts_m = [p for p in pts_m if p.distance(new) < 0.25]       # не далі ~25 км — інакше це інший тезка
+            if pts_m:
+                frame = unary_union([new.envelope, MultiPoint(pts_m).envelope.buffer(0.03)])
+        except Exception:  # noqa: BLE001
+            frame = new
+    cx, cy = frame.centroid.x, frame.centroid.y
     kx = math.cos(math.radians(cy))
-    minx, miny, maxx, maxy = new.bounds
+    minx, miny, maxx, maxy = frame.bounds
     half = max((maxx - minx) * kx, maxy - miny) / 2 + 0.16  # у «градусах широти»
     if vertical:
-        top, bottom = 400, 480                               # TikTok/Shorts: інтерфейс зверху й знизу
+        top, bottom = 500, 480                               # TikTok/Shorts: інтерфейс зверху й знизу; заголовок — у зоні, яку видно в стрічці FB/IG (обріз до 4:5)
         mw = size - 80
         mh = H - top - bottom
-    elif H != size:                                          # Instagram 4:5: мапа майже на всю ширину
-        top, bottom = 230, 170
-        mw = size - 80
-        mh = H - top - bottom
+    elif portrait:
+        top, bottom = 280, 170                               # місце під заголовок у два рядки (3–4 назви)
+        mw, mh = size - 80, H - top - bottom
     else:
         top, bottom = 230, 170                               # місце під заголовок і підпис
         mh = mw = size - top - bottom
@@ -104,8 +257,17 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
 
     poly(region, fill=LAND)
     poly(occ, fill=OCC)
-    if unk is not None and not unk.is_empty:
-        poly(unk, fill=GREY)
+    grey_bg = unk
+    if upto is not None or not show_new:
+        # кадри «до» і проміжні: там, де за період з'явилася окупація, до неї зазвичай була сіра зона —
+        # малюємо її сірою, а не підконтрольною (знімків сірої зони на початок періоду ми не зберігаємо)
+        occ_ch = [g for o, _ in steps for g in o]
+        if occ_ch:
+            add = unary_union(occ_ch).difference(occ)
+            grey_bg = add if unk is None else unk.union(add)
+    if grey_bg is not None and not grey_bg.is_empty:
+        poly(grey_bg, fill=GREY)
+    layers = []
     if not show_new:
         new_draw = False
     else:
@@ -118,13 +280,57 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         gd.polygon(pts, fill=255)
     glow = glow.filter(ImageFilter.MaxFilter(31)).filter(ImageFilter.GaussianBlur(14))
     if new_draw:
-        big.paste(Image.new("RGB", big.size, NEW), (0, 0), glow.point(lambda v: int(v * 0.45)))
-        d = ImageDraw.Draw(big)
-        poly(new, fill=NEW, outline=(255, 235, 150), width=1)
+        c_red, c_blue, c_back = cur
+        c_blue, c_grey = _split(c_blue, grey_ch)
+        hl_free, hl_grey = _split(hl_free, grey_ch)
+        if hide_step:   # «вимкнений» кадр для блимання: ділянки поточного кроку — без кольору, як до них
+            hs = [g for g in (hl_occ, hl_free) if g is not None]   # сіре не блимає — воно просто сіріє
+            hu = unary_union(hs) if hs else None
+            if hu is not None:
+                c_red = c_red.difference(hu) if c_red is not None else None
+                c_blue = c_blue.difference(hu) if c_blue is not None else None
+                c_back = c_back.difference(hu) if c_back is not None else None
+            hl_occ = hl_free = None
+        for h in (hl_free, hl_grey):   # поточний крок: зняте — блакитним (чи сірим), навіть якщо було червоним
+            if h is not None and c_red is not None:
+                c_red = c_red.difference(h)
+        layers = [(c_red, NEW_OCC, NEW_OCC_GLOW), (c_blue, DEOCC, (200, 240, 255)),
+                  (hl_occ, NEW_OCC, NEW_OCC_GLOW), (hl_free, DEOCC, (200, 240, 255))]
+        if hl_occ is not None:
+            layers[3] = (hl_free.difference(hl_occ) if hl_free is not None else None, DEOCC, (200, 240, 255))
+        for g in (c_grey, hl_grey):   # з окупованих у сіру зону — просто сіре, як решта сірої зони, без підсвітки
+            if g is not None:
+                poly(g, fill=GREY)
+        for geom, col, edge in layers:
+            if geom is None:
+                continue
+            gl = Image.new("L", big.size, 0)
+            gld = ImageDraw.Draw(gl)
+            for p in getattr(geom, "geoms", [geom]):
+                if p.geom_type != "Polygon" or p.is_empty:
+                    continue
+                pts = [(a * S, b * S) for a, b in (px(x, y) for x, y in p.exterior.coords)]
+                gld.polygon(pts, fill=255)
+                xs, ys = zip(*pts)
+                if max(max(xs) - min(xs), max(ys) - min(ys)) < 24 * S:   # крихітна ділянка (під точкою міста) —
+                    cx_, cy_ = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2   # ширше світіння, щоб її було видно
+                    gld.ellipse([cx_ - 16 * S, cy_ - 16 * S, cx_ + 16 * S, cy_ + 16 * S], fill=255)
+            wide = col == NEW_OCC   # червоне — ширше й щільніше світіння, як було в жовтого (14.11.2026)
+            gl = gl.filter(ImageFilter.MaxFilter(45 if wide else 31)).filter(ImageFilter.GaussianBlur(22 if wide else 14))
+            gcol = edge if col == NEW_OCC else col   # темно-червоне світіння на темному фоні губиться — світліше
+            k_ = 1.0 if col == NEW_OCC else 0.5   # червоне світіння — яскравіше (14.11.2026)
+            big.paste(Image.new("RGB", big.size, gcol), (0, 0), gl.point(lambda v, k_=k_: int(v * k_)))
+            d = ImageDraw.Draw(big)
+            poly(geom, fill=col, outline=edge, width=1)
     img = big.resize((size, H), Image.LANCZOS)
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, size, top - 10], fill=BG)
     d.rectangle([0, top + mh + 10, size, H], fill=BG)
+    if backdrop is not None and Path(backdrop).exists():   # оксамитова підкладка, як у обкладинки
+        bd = velvet(Path(backdrop), size, H)
+        bd.paste(img.crop((ox, top, ox + mw, top + mh)), (ox, top))
+        img = bd
+        d = ImageDraw.Draw(img)
 
     # населені пункти в кадрі: міста + найближчі села до змін
     st_feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
@@ -137,35 +343,64 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             pts.append((is_city(nm, f["properties"].get("ADM2_UA")), -g.distance(new), nm, g))
     near = sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]   # 2 найближчі села
     cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
-    # назви із заголовка — першими (12.11.2026: на мапі не було села, назване в заголовку)
     must = set(must_label or [])
+    # міста з заголовка («Поблизу: …») підписуємо першими й обов'язково — щоб назви збігалися
+    # усі назви із заголовка (і міста, і села) — першими й обов'язково; для тезок береться найближчий до змін
+    # (виправлення 12.11.2026: села із заголовка, що не входили в 2 найближчі, не потрапляли на мапу)
     must_pts, seen_m = [], set()
     for p_ in sorted([p for p in pts if p[2] in must], key=lambda p: -p[1]):   # лише найближчий тезка
         if p_[2] not in seen_m:
             seen_m.add(p_[2])
             must_pts.append(p_)
     pts = [p for p in pts if p[2] not in must]   # далекі тезки (інша Миколаївка) не підписуємо
-    # є назви із заголовка — інших сіл не додаємо, щоб на мапі не з'являлися «зайві» назви
-    near = [] if must_pts else sorted([p for p in pts if not p[0]], key=lambda p: -p[1])[:2]
+    # біля кожної ділянки змін — найближче село дрібним шрифтом (рішення Юлі 14.11.2026): заголовок дає орієнтир
+    # (місто), а підпис біля плями — точне місце для місцевих. Одне село на ділянку, не далі ~4 км, до 3 підписів;
+    # якщо найближче — місто із заголовка, другий підпис не ставимо. (До 14.11 сіл біля назв із заголовка не було.)
+    near, seen_v = [], set(must)
+    parts_ = sorted([g_ for g_ in getattr(new, "geoms", [new]) if not g_.is_empty], key=lambda g_: -g_.area)
+    for part in parts_:
+        cand_v = sorted([p for p in pts if not p[0] and p[3].distance(part) < 0.045], key=lambda p: p[3].distance(part))
+        allp = sorted([p for p in pts + must_pts], key=lambda p: p[3].distance(part))
+        if allp and allp[0][2] in must:   # найближчий населений пункт — уже в заголовку
+            continue
+        v = next((p for p in cand_v if p[2] not in seen_v), None)
+        if v:
+            near.append(v)
+            seen_v.add(v[2])
+        if len(near) >= 3:
+            break
     cities = sorted([p for p in pts if p[0]], key=lambda p: -p[1])
-    pts = must_pts + near + cities
+    pts = must_pts + near + [p for p in cities if p[2] not in must]
     shown, boxes, used = 0, [], set()
+    # підписи не кладемо на саму ділянку змін (як «Русин Яр» на старій мапі) — перевіряємо за формою ділянки
+    from shapely.geometry import Polygon as _Poly, box as _box
+    patch_px = []
+    for part in getattr(new, "geoms", [new]):
+        if part.is_empty or part.geom_type != "Polygon":
+            continue
+        try:
+            patch_px.append(_Poly([px(x_, y_) for x_, y_ in part.exterior.coords]).buffer(8))
+        except Exception:  # noqa: BLE001
+            pass
     for is_city, _, nm, g in pts:
         if nm in used:
             continue
-        if shown >= 7:
+        if shown >= 7 and nm not in must:
             continue
         x, y = px(g.x, g.y)
         if not (ox + 20 < x < ox + mw - 20 and top + 20 < y < top + mh - 20):
             continue
         f = _font("800" if is_city else "500", 34 if is_city else 28)
         w = d.textlength(nm, font=f)
-        hit = lambda bb: any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes)
+        hit = lambda bb: (any(not (bb[2] < b[0] or bb[0] > b[2] or bb[3] < b[1] or bb[1] > b[3]) for b in boxes)
+                          or any(pp.intersects(_box(*bb)) for pp in patch_px))
         cand = [(x + 12, y - 18), (x - 12 - w, y - 18)]
-        if nm in must:   # назву із заголовка не пропускаємо: пробуємо також під і над точкою
-            cand += [(x + 12, y + 14), (x - 12 - w, y + 14), (x + 12, y - 52), (x - 12 - w, y - 52)]
+        if nm in must or not is_city:   # назву із заголовка й село біля ділянки не пропускаємо: пробуємо також під і над точкою
+            cand += [(x + 12, y + 14), (x - 12 - w, y + 14), (x + 12, y - 52), (x - 12 - w, y - 52),
+                     (x - w / 2, y + 14), (x - w / 2, y - 52), (x + 12, y + 48), (x - 12 - w, y + 48),
+                     (x - w / 2, y + 48), (x - w / 2, y - 86)]
         cand = [c for c in cand if ox <= c[0] and c[0] + w <= ox + mw] or cand[:1]
-        pos = next(((a_, b_) for a_, b_ in cand if not hit((a_ - 4, b_ - 2, a_ + w + 4, b_ + 40))), None)
+        pos = next(((tx_, ty_) for tx_, ty_ in cand if not hit((tx_ - 4, ty_ - 2, tx_ + w + 4, ty_ + 40))), None)
         if pos is None:
             continue
         tx, ty = pos
@@ -175,18 +410,76 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         r = 7 if is_city else 5
         d.ellipse([x - r, y - r, x + r, y + r], fill=WHITE)
         d.text((tx + 2, ty + 2), nm, font=f, fill=(0, 0, 0))
-        d.text((tx, ty), nm, font=f, fill=WHITE)
+        d.text((tx, ty), nm, font=f, fill=WHITE)   # на самій мапі — білим: блакитний на мапі погано читається (рішення 10.11)
         shown += 1
 
     km_px = sc / 111.0
 
-    ty0 = top - 200 if vertical else 60
-    d.text((60, ty0), title, font=_font("800", 66 if vertical else 58), fill=NEW)
-    d.text((60, ty0 + 85), subtitle, font=_font("500", 40), fill=WHITE)
-    lx, ly = 60, top + mh + 40
+    ty0 = top - 200 if vertical else 60   # vertical: 300 — нижче верхніх ~285 px, що їх стрічка ховає
+    tsz = 66 if vertical else 58
+    lines = [title]
+    # Заголовок, підзаголовок, легенда й підпис — рівно по лівому й правому краю мапи (рішення 11.11)
+    if d.textlength(title, font=_font("800", 60 if vertical else 56)) > mw and " · " in title:
+        # довгий список назв — на два рядки, а не дрібним шрифтом
+        head, rest = title.split(": ", 1) if ": " in title else ("", title)
+        parts = rest.split(" · ")
+        lines = [(head + ": " if head else "") + " · ".join(parts[:-1]), parts[-1]] if len(parts) == 2 else \
+                [(head + ": " if head else "") + " · ".join(parts[:2]), " · ".join(parts[2:])]
+        tsz = 60 if vertical else 52
+    while tsz > 34 and max(d.textlength(ln, font=_font("800", tsz)) for ln in lines) > mw:
+        tsz -= 2
+    for li, ln in enumerate(lines):
+        yy = ty0 + (66 if vertical else 58) - tsz + li * (tsz + 10)
+        xx = ox
+        two_way = bool(blue_label) or bool(red_label)   # обидва напрямки: кольорові лише назви, решта — біла
+        if li == 0 and ln.startswith("Поблизу: "):   # «Поблизу:» — нежирним, назви — жирним
+            d.text((xx, yy), "Поблизу: ", font=_font("500", tsz), fill=WHITE if two_way else NEW)
+            xx += d.textlength("Поблизу: ", font=_font("500", tsz))
+            ln = ln[len("Поблизу: "):]
+        blue_set, red_set = set(blue_label or []), set(red_label or [])
+        for ni, nm_ in enumerate(ln.split(" · ")):   # назви біля деокупованих ділянок — блакитним
+            if ni:
+                d.text((xx, yy), " · ", font=_font("800", tsz), fill=WHITE if two_way else NEW)
+                xx += d.textlength(" · ", font=_font("800", tsz))
+            d.text((xx, yy), nm_, font=_font("800", tsz), fill=DEOCC if nm_ in blue_set else TITLE_RED if nm_ in red_set else NEW)
+            xx += d.textlength(nm_, font=_font("800", tsz))
+    if len(lines) > 1:
+        ty0 += 62 if vertical else 50   # підзаголовок — нижче, над мапою
+    ssz = 40
+    while ssz > 30 and d.textlength(subtitle, font=_font("500", ssz)) > mw:
+        ssz -= 2
+    if d.textlength(subtitle, font=_font("500", ssz)) > mw:   # не влазить — коротший варіант
+        import re as _re
+        # прибираємо «за добу», але дату лишаємо (з 14.11.2026 підзаголовок закінчується датою)
+        subtitle = _re.sub(r" за (добу|тиждень|місяць)(?=(,? [\d.–]+)?$)", "", subtitle).replace(" — ", " ")
+        while ssz > 26 and d.textlength(subtitle, font=_font("500", ssz)) > mw:
+            ssz -= 2
+    d.text((ox, ty0 + 85), subtitle, font=_font("500", ssz), fill=WHITE)
+    if caption:   # для кадрів відео: коли це сталося («3–5 листопада · позначено окупованими»)
+        cf = _font("800", 34)
+        cw = d.textlength(caption, font=cf)
+        cx0, cy0 = ox + 20, top + 20
+        d.rounded_rectangle([cx0, cy0, cx0 + cw + 40, cy0 + 60], radius=14, fill=(8, 12, 26))
+        d.text((cx0 + 20, cy0 + 10), caption, font=cf, fill=WHITE)
+    lx, ly = ox, top + mh + 40
     lf = _font("500", 26)
-    for col, label in ((NEW, "зміни"), (OCC, "окуповано"), (GREY, "район проникнення")):
-        d.rectangle([lx, ly + 4, lx + 26, ly + 30], fill=col)
+    legend = ([(NEW_OCC, "позначені окупованими")] if new_occ is not None else []) + \
+             ([(DEOCC, "позначені деокупованими")] if final_free is not None else []) + \
+             [(OCC, "окуповано"), (GREY, "район проникнення")]
+    if new_occ is None and flip is not None:   # окупація була лише тимчасова — у кадрах відео вона блимає
+        legend.insert(0, (NEW_OCC, "позначені окупованими"))
+    if new_free is None and flip is not None:
+        legend.insert(len(legend) - 2, (DEOCC, "позначені деокупованими"))
+    if new_free is None and flip is None and final_grey is None:   # звичний випадок — як і раніше
+        legend = [(NEW_OCC, "позначені окупованими"), (OCC, "окуповано раніше"), (GREY, "район проникнення")]
+    legend.append((LAND, "підконтрольна Україні"))
+    lf_size = 26 if len(legend) <= 3 else 22
+    lf = _font("500", lf_size)
+    for col, label in legend:
+        if lx + 36 + d.textlength(label, font=lf) > ox + mw:   # не вміщається — новий рядок
+            lx, ly = ox, ly + 40
+        d.rectangle([lx, ly + 4, lx + 26, ly + 30], fill=LAND if col == FLIP else col,
+                    outline=col if col == FLIP else None, width=2)
         d.text((lx + 36, ly), label, font=lf, fill=MUTED)
         lx += 36 + d.textlength(label, font=lf) + 36
     # масштаб — у рядку легенди, довжина відрізка підбирається, щоб його було видно
@@ -197,15 +490,27 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     t2 = f"{km} км"
     w2 = d.textlength(t2, font=lf)
     total = w1 + 14 + bar + 14 + w2
-    sx = size - 60 - total
-    sy2 = ly + 70
+    sx = ox + mw - total
+    sy2 = min(ly + 70, H - 45)
+    foot = "За даними DeepStateMap.live · АКМЦ"
+    ff = _font("500", 26)
+    fw = d.textlength(foot, font=ff)
+    if ox + fw + 24 > sx:   # не вміщається в один рядок з підписом джерела — без слова «масштаб» (12.11.2026)
+        t1, w1 = "", -14
+        total = bar + 14 + w2
+        sx = ox + mw - total
+    fy = sy2
+    if ox + fw + 24 > sx:   # і так тісно — дрібніший шрифт підпису джерела
+        ff = _font("500", 22)
+        fw = d.textlength(foot, font=ff)
+        fy = sy2 + 3
     d.text((sx, sy2), t1, font=lf, fill=MUTED)
     bx0, bx1, by = sx + w1 + 14, sx + w1 + 14 + bar, sy2 + 17
     d.line([bx0, by, bx1, by], fill=MUTED, width=4)
     d.line([bx0, by - 9, bx0, by + 9], fill=MUTED, width=3)
     d.line([bx1, by - 9, bx1, by + 9], fill=MUTED, width=3)
     d.text((bx1 + 14, sy2), t2, font=lf, fill=MUTED)
-    d.text((60, sy2), "За даними DeepStateMap.live · АКМЦ", font=_font("500", 26), fill=MUTED)
+    d.text((ox, fy), foot, font=ff, fill=MUTED)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "JPEG", quality=92)
     return out

@@ -48,56 +48,32 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_w: int) -> list[str]:
 
 def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
                  footer: str = "Деталі — щоранку о 8:00", handle: str = "Telegram: @acmc_ua") -> Path:
-    """blocks: [{"label": "ДОНЕЧЧИНА", "big": "+4,92 км²", "text": "позначено окупованими",
-                 "note": "поблизу: …"}]. Якщо big порожній — показується лише text."""
-    img = Image.new("RGB", (W, H), NAVY_BOTTOM)
-    # вертикальний градієнт
-    grad = ImageDraw.Draw(img)
-    for y in range(H):
-        t = y / H
-        c = tuple(int(NAVY_TOP[i] * (1 - t) + NAVY_BOTTOM[i] * t) for i in range(3))
-        grad.line([(0, y), (W, y)], fill=c)
-
+    """Синє тло; обкладинка — прямокутник на тому ж місці й тієї ж ширини, що мапа у відео
+    (x 40–1040, верх 400). Висота: повна обкладинка, якщо текст уміщається, інакше — компактна
+    (заголовок + нижня смуга з регіоном, «7 днів» і лого). Період — жовтим над обкладинкою."""
+    BG = (13, 19, 38)
+    OX, TOP, MW = 40, 400, 1000
+    img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
+    max_w = W - 2 * MARGIN
+    footer_top = H - 200 - SAFE_BOTTOM - 40
 
-    def paste_cover(compact: bool) -> int:
-        """Обкладинка зверху з плавним переходом у фон; повертає її нижній край.
-        compact — без середини з мапою: лише заголовок і нижня смуга (регіон, «24 години» / «7 днів», лого),
-        щоб для довгого змісту зберегти однаковий вигляд з усіма позначками."""
-        if not cover.exists():
-            return SAFE_TOP
-        cv = Image.open(cover).convert("RGB").resize((W, W))
+    def cover_img(compact: bool):
+        cv = Image.open(cover).convert("RGB").resize((1080, 1080))
         if compact:
-            top, bot, blend = cv.crop((0, 0, W, 300)), cv.crop((0, 660, W, 1050)), 60
-            c2 = Image.new("RGB", (W, 300 + 390 - blend))
-            c2.paste(top, (0, 0))
-            m = Image.new("L", (W, 390), 255)
-            mdd = ImageDraw.Draw(m)
+            top, bot, blend = cv.crop((0, 0, 1080, 300)), cv.crop((0, 660, 1080, 1050)), 60
+            c2 = Image.new("RGB", (1080, 300 + 390 - blend)); c2.paste(top, (0, 0))
+            m = Image.new("L", (1080, 390), 255); mdd = ImageDraw.Draw(m)
             for i in range(blend):
-                mdd.line([(0, i), (W, i)], fill=int(255 * i / blend))
+                mdd.line([(0, i), (1080, i)], fill=int(255 * i / blend))
             c2.paste(bot, (0, 300 - blend), m)
             cv = c2
-        h = cv.height
-        mask = Image.new("L", (W, h), 255)
-        md = ImageDraw.Draw(mask)
-        fade = 120 if compact else 220
-        for i in range(fade):
-            md.line([(0, h - fade + i), (W, h - fade + i)], fill=int(255 * (1 - i / fade)))
-        for i in range(90):  # м'який перехід і зверху
-            md.line([(0, i), (W, i)], fill=int(255 * i / 90))
-        img.paste(cv, (0, SAFE_TOP), mask)
-        return SAFE_TOP + h
-    max_w = W - 2 * MARGIN
-    footer_top = H - 200 - SAFE_BOTTOM - 60          # нижня межа для змісту (над лінією підвалу)
+        return cv.resize((MW, int(cv.height * MW / 1080)), Image.LANCZOS)
 
     def layout(k: float, draw: bool, y0: int, notes: bool = True) -> int:
-        """Малює (або лише міряє) зміст із масштабом шрифтів k; повертає кінцеву y."""
-        f_date, f_label = _font("800", int(62 * k)), _font("800", int(38 * k))
+        f_label = _font("800", int(38 * k))
         f_big, f_text, f_note = _font("800", int(104 * k)), _font("500", int(44 * k)), _font("500", int(40 * k))
         y = y0
-        if draw:
-            d.text((MARGIN, y), date_label, font=f_date, fill=YELLOW)
-        y += int(105 * k)
         for b in blocks:
             if b.get("label"):
                 if draw:
@@ -107,9 +83,15 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
                 if draw:
                     d.text((MARGIN, y), b["big"], font=f_big, fill=YELLOW)
                 y += int(122 * k)
+            f_bold = _font("800", int(44 * k))
             for line in _wrap(d, b.get("text", ""), f_text, max_w):
-                if draw:
-                    d.text((MARGIN, y), line, font=f_text, fill=WHITE)
+                if draw:   # «окупованими» / «деокупованими» — жирним, як на першому кадрі відео (рішення 10.11)
+                    x = MARGIN
+                    for wi, w in enumerate(line.split(" ")):
+                        fnt = f_bold if w.strip(".,:;·") in ("окупованими", "деокупованими") else f_text
+                        tok = (" " if wi else "") + w
+                        d.text((x, y), tok, font=fnt, fill=WHITE)
+                        x += d.textlength(tok, font=fnt)
                 y += int(58 * k)
             if notes and b.get("note"):
                 for line in _wrap(d, b["note"], f_note, max_w):
@@ -119,32 +101,30 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
             y += int(30 * k)
         return y
 
-    # Повна обкладинка, якщо зміст уміщається (шрифт можна зменшити до 85%); інакше — компактна обкладинка
-    # (заголовок + смуга з регіоном, «24 години» / «7 днів» і лого), а не обрізана знизу.
-    def fits(y0, notes, k_min):
-        k = 1.0
-        while k > k_min and layout(k, False, y0, notes) > footer_top:
-            k -= 0.05
-        return k if layout(k, False, y0, notes) <= footer_top else None
-
-    full_y0 = W - 40 + SAFE_TOP
-    compact_y0 = SAFE_TOP + 300 + 390 - 60 + 10
     choice = None
-    for compact, y0_try, notes_try, k_min in ((False, full_y0, True, 0.85), (False, full_y0, False, 0.85),
-                                              (True, compact_y0, True, 0.8), (True, compact_y0, False, 0.8),
-                                              (True, compact_y0, False, 0.5)):
-        k_try = fits(y0_try, notes_try, k_min)
-        if k_try is not None:
-            choice = (compact, y0_try, notes_try, k_try)
+    opts = [(False, True, 0.85), (False, False, 0.85), (True, True, 0.8), (True, False, 0.8), (True, False, 0.55)]
+    if sum(1 for b in blocks if b.get("big") and b.get("note")) >= 2:
+        # кілька цифр, кожна зі своїми назвами (напр. окупація й деокупація) — назви важливіші
+        # за повну обкладинку: спершу пробуємо зменшену обкладинку, але з назвами (рішення 10.11)
+        opts = [(False, True, 0.85), (True, True, 0.8), (True, True, 0.6), (False, False, 0.85),
+                (True, False, 0.8), (True, False, 0.55)]
+    for compact, notes, kmin in opts:
+        cv = cover_img(compact)
+        y0 = TOP + cv.height + 40
+        k = 1.0
+        while k > kmin and layout(k, False, y0, notes) > footer_top:
+            k -= 0.05
+        if layout(k, False, y0, notes) <= footer_top:
+            choice = (cv, y0, notes, k)
             break
     if choice is None:
-        choice = (True, compact_y0, False, 0.5)
-    compact, y0, notes, k = choice
-    paste_cover(compact)
+        cv = cover_img(True); choice = (cv, TOP + cv.height + 40, False, 0.55)
+    cv, y0, notes, k = choice
+    img.paste(cv, (OX, TOP))
     d = ImageDraw.Draw(img)
+    d.text((MARGIN, TOP - 160), date_label, font=_font("800", 62), fill=YELLOW)   # період — над обкладинкою
     layout(k, True, y0, notes)
 
-    # підвал: заклик
     f_foot = _font("500", 40)
     f_handle = _font("800", 56)
     fy = H - 200 - SAFE_BOTTOM
@@ -152,7 +132,6 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
     d.text((MARGIN, fy), footer, font=f_foot, fill=WHITE)
     d.text((MARGIN, fy + 58), handle, font=f_handle, fill=YELLOW)
     d.text((MARGIN, fy + 140), "За даними DeepStateMap.live", font=_font("500", 30), fill=GREY)
-
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "JPEG", quality=92)
     return out
