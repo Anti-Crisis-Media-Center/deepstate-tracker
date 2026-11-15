@@ -146,11 +146,10 @@ MONTHS_UA = ["січень", "лютий", "березень", "квітень",
              "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"]
 
 SOURCE_LINE = 'За даними <a href="https://deepstatemap.live">DeepStateMap.live</a>'
-# Заклик підписатися на сам майданчик (рішення Юлі 15.11.2026): мета — і інформувати, і нарощувати
+# Заклик підписатися на сам майданчик (рішення Юлі 15.11.2026; у Telegram не додаємо — там уже підписники, пост довгий): мета — і інформувати, і нарощувати
 # аудиторію АКМЦ; підписуємо на АКМЦ, а не «на DeepState». Щоденні дописи — «підпишіться тут»,
 # тижневі/місячні — як і раніше, посилання на Telegram (там повний перелік населених пунктів).
-SUB_CTA = "Підписуйтеся на АКМЦ, щоб не пропустити щоденні зведення змін на мапі Донеччини й Луганщини."
-TG_SUB = "🔔 Підписатися на АКМЦ, щоб не пропустити щоденні зведення: @acmc_ua"
+SUB_CTA = "Підписуйтеся на нашу сторінку, щоб не пропустити щоденні зведення."
 EDITOR_NOTE = (
     SOURCE_LINE + "\n\n"
     "<blockquote expandable><i>Примітка редакції: це автоматизований аналіз змін на мапі "
@@ -674,7 +673,7 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
                  for k in OBLASTS)
              and not messages and not any(((grey or {}).get(k) or {}).get("cities") for k in OBLASTS))
     if quiet:  # день без змін — коротка версія
-        return "\n".join([head, "", "Донеччина й Луганщина: за добу на мапі DeepState без змін.", "", SHORT_NOTE, "", TG_SUB])
+        return "\n".join([head, "", "Донеччина й Луганщина: за добу на мапі DeepState без змін.", "", SHORT_NOTE])
     lines = [head, ""]
     for key, cfg in OBLASTS.items():
         r = results[key]
@@ -715,7 +714,7 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
         if len(messages) > MAX_MESSAGES_IN_POST:
             lines.append(f"…та ще {len(messages) - MAX_MESSAGES_IN_POST}.")
         lines.append("")
-    lines += [SHORT_NOTE, "", TG_SUB]
+    lines.append(SHORT_NOTE)
     return "\n".join(lines)
 
 
@@ -1629,7 +1628,7 @@ def youtube_text(kind: str, body: list[str], date_label: str, places: list[str],
     desc = [*[b for b in body if b.strip()], "",
             f"Підсумки змін на мапі DeepState для Донеччини та Луганщини за {period}. "
             + ("Нові підсумки щопонеділка." if kind == "week" else "Нові підсумки щомісяця."),
-            "Підписуйтеся на канал АКМЦ, щоб не пропустити нові підсумки.",
+            "Підписуйтеся на наш YouTube-канал, щоб не пропустити нові підсумки.",
             "Зміни за кожну добу — щоранку о 8:00 у нашому Telegram: " + YOUTUBE_TELEGRAM_LINK, "",
             "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
             "#Донеччина #DeepState #Shorts"]
@@ -1920,7 +1919,7 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             if len(msgs) > MAX_MESSAGES_IN_POST:
                 lines.append(f"…та ще {len(msgs) - MAX_MESSAGES_IN_POST}.")
             lines.append("")
-    lines += [EDITOR_NOTE, "", TG_SUB]
+    lines.append(EDITOR_NOTE)
     return "\n".join(lines)
 
 
