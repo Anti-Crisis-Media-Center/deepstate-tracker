@@ -1657,7 +1657,6 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
                 places += [x.strip() for x in (r.get(f"{k}_newly_places") or "").split(";") if x.strip()]
                 places += [x.strip() for x in (r.get(f"{k}_penetration_cities") or "").split(";") if x.strip()]
         title = "DeepState: підсумки тижня 🗺" if kind == "week" else f"DeepState: підсумки місяця 🗺 {date_label}"
-        word = "щопонеділка" if kind == "week" else "щомісяця"
         caption = "\n".join([title, *body, "",
                               SUB_CTA,   # 15.11: без «змінюється мапа Донеччини» — Донеччина лишається Україною
                               "Збережіть, щоб не загубити.",
