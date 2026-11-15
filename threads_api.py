@@ -147,7 +147,7 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url
     try:
         uid = _user_id()
         c45 = image.with_name(image.stem + "_45.jpg")   # обкладинка 4:5 — під мапу 4:5 у каруселі
-        cover = globals()["image_url"](c45 if (image_url and c45.exists()) else image) if image.exists() else None
+        cover = globals()["image_url"](c45 if c45.exists() else image) if image.exists() else None   # 4:5 завжди, і в тихі дні
         if False and image_url and cover:   # карусель «обкладинка + мапа» вимкнено 14.11.2026: у стрічці першою
             # видно обкладинку, а дописи з мапою першою мали втричі більше охоплення — тепер лише мапа
             try:
