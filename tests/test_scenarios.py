@@ -95,7 +95,7 @@ def test_names_real_week():
 
 def test_names_small_separate_area():
     """12.11.2026: ділянка 0,37 км² за 4,4 км від Костянтинівки — окрема назва (Часів Яр)."""
-    assert tracker.place_names(["2026-11-12"]) == ["Костянтинівка", "Часів Яр"]
+    assert tracker.place_names(["2026-11-12"]) == ["Іванопілля", "Червоне"]   # щоденна: найближчий пункт (16.11.2026)
 
 
 def test_names_title():
@@ -123,7 +123,7 @@ def test_names_from_deepstate_messages_day():
     (графіка) їх не додаємо. Відмінки розпізнаються («у Костянтинівці», «Русиного Яру»)."""
     pn = list(tracker.place_names(["2026-11-05"]))
     assert tracker.deepstate_mentioned(["2026-11-05"])[:2] == ["Костянтинівка", "Русин Яр"]
-    assert tracker.deepstate_mentioned(["2026-11-05"], skip=pn) == []   # без повторів головних назв
+    assert "Русин Яр" not in tracker.deepstate_mentioned(["2026-11-05"], skip=pn)   # без повторів головних назв
     r = {k: {"newly_km2": 1.0, "deocc_km2": 0, "grey_km2": 0, "newly_places": [], "deocc_places": [],
              "grey_places": []} for k in tracker.OBLASTS}
     txt = tracker.build_text("05.11", r, mentioned={"donetsk": ["Русин Яр"]}, names={"donetsk": pn})

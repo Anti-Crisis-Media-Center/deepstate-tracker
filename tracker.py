@@ -737,12 +737,12 @@ def tg(method: str, token: str, data: dict, files: dict | None = None) -> dict:
 
 
 def _tg_image(mp) -> Path | None:
-    """Мапа для Telegram (з 16.11.2026): версія 4:5 (як у Threads — на телефоні вища), інакше квадратна; немає — None."""
+    """Мапа для Telegram: КВАДРАТНА (16.11.2026 — 4:5 Telegram обрізав у стрічці: заголовок і легенда
+    зникали). 4:5 лишається для Threads/Instagram. Немає мапи — None."""
     if not mp:
         return None
     mp = Path(mp)
-    v45 = mp.with_name(mp.stem + "_45.jpg")
-    return v45 if v45.exists() else (mp if mp.exists() else None)
+    return mp if mp.exists() else None
 
 
 def publish(text: str, image: Path = COVER_IMAGE, silent: bool = True) -> None:
@@ -1356,8 +1356,14 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
         side: dict[str, set] = {}          # біля якої ділянки назва: окупованої, деокупованої чи обох
         part_name: list[tuple[str, object]] = []
         for g in parts:
-            # місто — лише якщо ближче 10 км; інакше найближчий населений пункт (рішення 9.11.2026)
-            name = _nearest_city_geom(g, max_km=10.0) or _nearest_settlement_geom(g)
+            # ЩОДЕННА мапа/текст (одна дата): найближчий населений пункт — той, що видно біля ділянки
+            # (рішення Юлі 16.11.2026: текст «поблизу: Білицьке», а пляма біля «Вільне» — розбіжність;
+            # міста лишаються на мапі як орієнтир). Тижневі/місячні — як було: місто в межах 10 км,
+            # інакше найближчий пункт (рішення 9.11.2026)
+            if len(dates) == 1:
+                name = _nearest_settlement_geom(g)
+            else:
+                name = _nearest_city_geom(g, max_km=10.0) or _nearest_settlement_geom(g)
             if name:
                 part_name.append((name, g))
                 score[name] = score.get(name, 0) + g.area
