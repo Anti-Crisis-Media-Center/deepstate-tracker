@@ -1359,6 +1359,77 @@ class Names(list):
         return bool(self.occ) and bool(self.deocc)
 
 
+
+_MSG_STOP = {"Ворог", "ЗСУ", "Сили", "Оборони", "Росія", "Російські", "Окупанти", "Також", "Українські",
+             "Україна", "України", "DeepState", "Донеччина", "Донеччині", "Донеччини", "Луганщина", "Луганщині",
+             "Луганщини", "Донецька", "Донецькій", "Луганська", "Луганській", "Мапу", "Мапа", "Оновлено"}
+
+
+def _name_rx(name: str) -> str:
+    def word_rx(w: str) -> str:
+        stem = w[:-1] if len(w) > 3 and w[-1] in "аяеоиіїуюь" else w
+        alts = [re.escape(stem)]
+        if w.endswith("ка") and len(w) > 4:
+            alts.append(re.escape(w[:-2] + "ц"))
+        return "(?:" + "|".join(alts) + r")\w{0,3}"
+    return r"(?<![\w'’ʼ])" + r"\s+".join(word_rx(w) for w in name.split()) + r"(?![\w'’ʼ])"
+
+
+def localize_messages(messages: list[dict], date: str, results: dict) -> list[dict]:
+    """Рішення Юлі 16.11.2026 (випадок «Вільне та Петропавлівка»):
+    • повідомлення DeepState беремо, лише якщо назва з нього — це пункт поруч (≤5 км) із ділянкою, позначеною
+      на нашій мапі за цю добу (назва + місце, а не лише назва: тезок по Україні багато);
+    • якщо в повідомленні лише наші пункти — цитуємо дослівно;
+    • якщо там є й інші назви (інша область, тезка далеко) — НЕ цитуємо, а переказуємо власним рядком лише
+      з нашими пунктами: «DeepState повідомив про просування ворога поблизу: Вільне.» — щоб жителі
+      донецької Петропавлівки не вирішили, що це про них;
+    • у дні без змін на мапі (нема з чим звірити) — лише повідомлення, де прямо названо Донеччину/Луганщину."""
+    out = []
+    try:
+        import change_map
+        from shapely.ops import unary_union
+        zones = {}
+        for key in OBLASTS:
+            red, blue, _ = change_map._timeline(change_map._load_steps([CHANGES_DIR / f"{date}.geojson"], key))
+            geoms = [g for g in (red, blue) if g is not None]
+            if geoms:
+                u = unary_union(geoms)
+                zones[key] = [p for p in getattr(u, "geoms", [u]) if not p.is_empty]
+    except Exception as e:  # noqa: BLE001
+        log(f"Повідомлення DeepState: не вдалося звірити з мапою — {e}")
+        zones = {}
+    for m in messages:
+        text = m["text"]
+        near = []   # (ключ області, назва)
+        for key, parts in zones.items():
+            near += [(key, nm) for nm, _ in _mentioned_names([date], parts, text)]
+        if not near:
+            if not zones and re.search(r"Донеччин|Луганщин|Донецьк\w* обл|Луганськ\w* обл", text):
+                out.append(m)   # змін на мапі нема — лишаємо лише явно «наші» повідомлення
+            else:
+                log(f"Повідомлення {m['time']:%d.%m %H:%M} пропущено: назви не біля наших змін на мапі")
+            continue
+        covered = [(mt.start(), mt.end()) for _, nm in near for mt in re.finditer(_name_rx(nm), text)]
+        foreign = []
+        for mt in re.finditer(r"(?<![\w'’ʼ])[А-ЯІЇЄҐ][а-яіїєґ'’ʼ-]{2,}", text):
+            w = mt.group(0)
+            if w in _MSG_STOP or any(a <= mt.start() < b for a, b in covered):
+                continue
+            if mt.start() == 0 or text[max(0, mt.start() - 2):mt.start()].strip() in (".", "!", "?", ":"):
+                continue   # перше слово речення
+            foreign.append(w)
+        if not foreign:
+            out.append(m)
+            continue
+        keys = {k for k, _ in near}
+        occ = any(results.get(k, {}).get("newly_km2", 0) > 0 for k in keys)
+        de = any(results.get(k, {}).get("deocc_km2", 0) > 0 for k in keys)
+        what = ("про просування ворога" if occ and not de else "про деокупацію" if de and not occ else "про зміни")
+        names = list(dict.fromkeys(nm for _, nm in near))
+        log(f"Повідомлення {m['time']:%d.%m %H:%M}: є назви не з наших змін ({', '.join(foreign)}) — переказуємо")
+        out.append({**m, "text": f"DeepState повідомив {what} поблизу: {', '.join(names)}.", "retold": True})
+    return out
+
 def pick(nm, which: str) -> list:
     """Назви для рядка про окупацію (which="occ") чи деокупацію ("deocc"). Якщо за період був лише
     один напрямок — повний список, як і раніше."""
@@ -2303,7 +2374,21 @@ def main() -> int:
     else:
         log("У попередньому знімку немає сірої зони — її зміну покажемо з наступного дня.")
 
+    # Геометрія змін — для мап і звірки повідомлень (16.11.2026: зберігаємо ДО тексту — раніше назви
+    # й повідомлення для Telegram рахувалися ще без файлу доби)
+    feats = []
+    for key, r in results.items():
+        for kind in ("newly", "deocc", "grey"):
+            for p in r[f"{kind}_polys"]:
+                feats.append({"type": "Feature", "geometry": mapping(p),
+                              "properties": {"oblast": key, "change": {"newly": "occupied", "deocc": "deoccupied",
+                                                                       "grey": "to_grey"}[kind],
+                                             "km2": round(area_km2(p), 3)}})
+    if feats:
+        save_json(CHANGES_DIR / f"{today}.geojson", {"type": "FeatureCollection", "features": feats})
+
     messages = get_messages(base_state.get("deepstate_id"), deepstate.get("id"), oblasts, places)
+    messages = localize_messages(messages, today, results)
     log(f"Повідомлень DeepState про Донеччину/Луганщину за період: {len(messages)}")
 
     tg_names = {k: place_names([today], k) for k in OBLASTS
@@ -2318,17 +2403,6 @@ def main() -> int:
     save_json(current_path, new_state)
     save_grey_snapshot(today, unknown)
 
-    # Геометрія змін — для майбутніх карт
-    feats = []
-    for key, r in results.items():
-        for kind in ("newly", "deocc", "grey"):
-            for p in r[f"{kind}_polys"]:
-                feats.append({"type": "Feature", "geometry": mapping(p),
-                              "properties": {"oblast": key, "change": {"newly": "occupied", "deocc": "deoccupied",
-                                                                       "grey": "to_grey"}[kind],
-                                             "km2": round(area_km2(p), 3)}})
-    if feats:
-        save_json(CHANGES_DIR / f"{today}.geojson", {"type": "FeatureCollection", "features": feats})
 
     upsert_history({
         "date": today,
