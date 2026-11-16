@@ -792,6 +792,12 @@ def near_phrase(names: list[str], villages: list[str]) -> str:
     return "поблизу: " + ", ".join(names)
 
 
+def tg_near_summary(names: list[str], villages: list[str]) -> str:
+    """Підсумки в Telegram: назви як на мапі, без громад (16.11.2026: громади лише в добових)."""
+    base = near_phrase(names, [])
+    return base or tg_near([], villages)
+
+
 def tg_near(names: list[str], villages: list[str]) -> str:
     """Для Telegram: ті самі назви, що на мапі й у Threads, а села — з районом (Telegram читають уважно):
     «поблизу: Добропілля, Білицьке». Дужки з селами прибрано 12.11.2026."""
@@ -1537,7 +1543,8 @@ def _period_flip(rows: list[dict], key: str = "donetsk") -> float:
 
 def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     """Головна цифра й місце для першого кадру TikTok (по Донеччині)."""
-    net = _net_period(rows, "donetsk")
+    _o, _fr = _period_totals(rows, "donetsk")
+    net = round(_o - _fr, 2)   # 16.11.2026: та сама цифра, що в тексті й на мапі (було 19,25 проти 19,23)
     places: dict[str, int] = {}
     city_names: set[str] = set()
     for r in rows:
@@ -2002,13 +2009,13 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
         if newly == 0 and deocc == 0 and not grey_p:
             body = f"{word} без змін."
         else:
-            near = tg_near(place_names([r["date"] for r in rows], key),
+            near = tg_near_summary(place_names([r["date"] for r in rows], key),
                            _places(rows, f"{key}_newly_places") + _places(rows, f"{key}_deoccupied_places"))
             near = f" — {near}" if near else ""
             nmp = place_names([r["date"] for r in rows], key)
             if newly > 0 and deocc > 0 and isinstance(nmp, Names) and nmp.both:   # назви окремо за напрямком
-                no = tg_near(pick(nmp, "occ"), _places(rows, f"{key}_newly_places"))
-                nd = tg_near(pick(nmp, "deocc"), _places(rows, f"{key}_deoccupied_places"))
+                no = tg_near_summary(pick(nmp, "occ"), _places(rows, f"{key}_newly_places"))
+                nd = tg_near_summary(pick(nmp, "deocc"), _places(rows, f"{key}_deoccupied_places"))
                 o_, f_ = _period_totals(rows, key)   # ті самі цифри, що на мапі, у відео й сторіз
                 net = round(o_ - f_, 2)              # щоб підсумок точно дорівнював різниці двох цифр
                 body = (f"— {fmt_km2(o_)} км² позначено окупованими" + (f" — {no}" if no else "")
