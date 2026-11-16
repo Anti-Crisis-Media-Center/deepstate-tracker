@@ -1813,7 +1813,7 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         title = "DeepState: підсумки тижня 🗺" if kind == "week" else f"DeepState: підсумки місяця 🗺 {date_label}"
         caption = "\n".join([title, *body, "",
                               SUB_CTA_TT,   # 15.11: без «змінюється мапа Донеччини» — Донеччина лишається Україною
-                              "Збережіть, щоб не загубити.",
+                              # «Збережіть» прибрано 16.11.2026: один допис — один заклик
                               "За даними DeepStateMap.live.", "",   # з крапкою: у TikTok це не посилання (Юля 16.11)
                               _tiktok_tags(places, any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows))])
         if DRY_RUN and not os.getenv("TIKTOK_PREVIEW"):
