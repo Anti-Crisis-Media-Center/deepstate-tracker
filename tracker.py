@@ -844,7 +844,7 @@ def build_fb_teaser(day: str, results: dict, names: dict | None = None) -> str:
                           names.get(k))
              or f"{cfg['short']}: без змін." for k, cfg in OBLASTS.items()]
     lines += found
-    lines += ["", SUB_CTA, "", "За даними DeepStateMap.live"]
+    lines += ["", SUB_CTA, "", "За даними DeepStateMap.live."]
     return "\n".join(lines)
 
 
@@ -878,7 +878,7 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
     # 16.11.2026 (Юля): один заклик — у Telegram (два заклики поспіль заважають один одному;
     # особливо для жовтої сторінки з великою аудиторією — мета привести людей у Telegram)
     lines += ["", "Повний перелік населених пунктів — у нашому Telegram. Посилання в першому коментарі 👇",
-              "", "За даними DeepStateMap.live"]
+              "", "За даними DeepStateMap.live."]
     return "\n".join(lines)
 
 
