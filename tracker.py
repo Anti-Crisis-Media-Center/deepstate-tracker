@@ -769,7 +769,11 @@ def publish(text: str, image: Path = COVER_IMAGE, silent: bool = True) -> None:
 # чат (TELEGRAM_ALERT_CHAT_ID): Юля копіює текст і обкладинку у Facebook,
 # а друге повідомлення — у перший коментар. Повна версія лишається в Telegram.
 
-FB_TELEGRAM_LINK = os.getenv("FB_TELEGRAM_LINK", "https://t.me/acmc_ua").strip() or "https://t.me/acmc_ua"
+# посилання для білої сторінки: нова назва секрету FB_WHITE_TELEGRAM_LINK (16.11.2026), стара FB_TELEGRAM_LINK — запасна,
+# поки Юля не перейменує; для жовтої — FB_YELLOW_TELEGRAM_LINK («FB DeepState жовта»)
+FB_TELEGRAM_LINK = (os.getenv("FB_WHITE_TELEGRAM_LINK", "").strip() or os.getenv("FB_TELEGRAM_LINK", "").strip()
+                    or "https://t.me/acmc_ua")
+FB_YELLOW_TELEGRAM_LINK = os.getenv("FB_YELLOW_TELEGRAM_LINK", "").strip() or FB_TELEGRAM_LINK
 # окреме посилання-запрошення для YouTube (створене з «АКМЦ Робочий»), щоб рахувати переходи з YouTube (11.11)
 YOUTUBE_TELEGRAM_LINK = os.getenv("YOUTUBE_TELEGRAM_LINK", "https://t.me/acmc_ua").strip() or "https://t.me/acmc_ua"
 FB_CTA = ("Повідомлення DeepState, щодобові, щотижневі та щомісячні підсумки змін на мапі — "

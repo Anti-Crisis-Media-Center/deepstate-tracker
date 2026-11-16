@@ -140,7 +140,7 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url
         return False
     text = adapt_text(fb_text)
     link = (os.getenv("THREADS_TELEGRAM_LINK", "").strip()
-            or os.getenv("FB_TELEGRAM_LINK", "").strip() or "https://t.me/acmc_ua")
+            or os.getenv("FB_WHITE_TELEGRAM_LINK", "").strip() or os.getenv("FB_TELEGRAM_LINK", "").strip() or "https://t.me/acmc_ua")
     reply_text = f"Ці зведення щоранку о 8:00 виходять і в нашому Telegram-каналі: {link}"
     if dry_run:
         log(("DRY_RUN — у Threads не публікується (карусель: обкладинка + мапа). Текст:\n" if image_url
