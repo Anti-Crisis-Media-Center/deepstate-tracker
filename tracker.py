@@ -1000,14 +1000,13 @@ def story_blocks_daily(results: dict, names: dict | None = None) -> list[dict]:
         if r["newly_km2"] > 0:
             blocks.append({"label": STORY_LABELS[k], "big": f"{fmt_km2(r['newly_km2'])} км²",
                            "text": "позначено окупованими",
-                           "note": (near_phrase(pick(nm, "occ"), [] if r["deocc_km2"] > 0 else r["newly_places"]) if nm else
+                           "note": (story_near(pick(nm, "occ")) if nm else
                                     f"поблизу: {_short_places(r['newly_places'])}" if r["newly_places"] else "")})
         if r["deocc_km2"] > 0:
             blocks.append({"label": "" if r["newly_km2"] > 0 else STORY_LABELS[k],
                            "big": f"{fmt_km2(r['deocc_km2'])} км²", "text": "позначено деокупованими",
-                           "note": (near_phrase(pick(nm, "deocc") if (isinstance(nm, Names) and nm.both)
-                                                or r["newly_km2"] <= 0 else [],
-                                                [] if r["newly_km2"] > 0 else r["deocc_places"]) if nm else
+                           "note": (story_near(pick(nm, "deocc") if (isinstance(nm, Names) and nm.both)
+                                               or r["newly_km2"] <= 0 else []) if nm else
                                     f"поблизу: {_short_places(r['deocc_places'])}" if r["deocc_places"] else "")})
         if r.get("grey_km2", 0) > 0:
             blocks.append({"label": "" if (r["newly_km2"] > 0 or r["deocc_km2"] > 0) else STORY_LABELS[k],
@@ -1226,11 +1225,48 @@ def _nearest_settlement_geom(g) -> str | None:
     from shapely.geometry import shape
     if _ALL_POINTS is None:
         feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
-        _ALL_POINTS = [(x["properties"]["ADM4_UA"], shape(x["geometry"]).centroid) for x in feats]
+        _ALL_POINTS = [(x["properties"]["ADM4_UA"], shape(x["geometry"]).centroid, x["properties"]["ADM4_PCODE"])
+                       for x in feats]
     k = math.cos(math.radians(g.centroid.y))
     c = g.centroid
     best = min(_ALL_POINTS, key=lambda t: (g.distance(t[1]), math.hypot((c.x - t[1].x) * k, c.y - t[1].y)))
+    _NAME_PCODE[best[0]] = best[2]   # щоб знати громаду саме цього пункту (однакових назв багато)
     return best[0]
+
+
+_NAME_PCODE: dict[str, str] = {}
+_HROMADAS: dict[str, str] | None = None
+
+
+def hromada_of(name: str) -> str | None:
+    """Громада населеного пункту, обраного як найближчий (за кодом КАТОТТГ; дані — KSE Loc Data Hub, MIT)."""
+    global _HROMADAS
+    pc = _NAME_PCODE.get(name)
+    if not pc:
+        return None
+    if _HROMADAS is None:
+        try:
+            _HROMADAS = json.loads((DATA / "reference" / "hromadas.json").read_text())
+        except Exception:  # noqa: BLE001
+            _HROMADAS = {}
+    h = _HROMADAS.get(pc[:9])
+    return f"{h} громада" if h else None
+
+
+def story_near(names: list[str]) -> str:
+    """Для сторіз (Юля 16.11.2026): у сторіз немає мапи, а однакових назв сіл багато (два Вільне лише
+    на Донеччині) — до села додаємо громаду: «поблизу: Вільне, Нове Шахове — Шахівська громада».
+    Міста — без громади. Без дужок (рішення 12.11.2026) — через тире, як у Telegram."""
+    if not names:
+        return ""
+    groups: list[tuple[str | None, list[str]]] = []
+    for n in names:
+        h = None if is_city(n) else hromada_of(n)
+        if groups and groups[-1][0] == h and h:
+            groups[-1][1].append(n)
+        else:
+            groups.append((h, [n]))
+    return "поблизу: " + "; ".join(", ".join(ns) + (f" — {h}" if h else "") for h, ns in groups)
 
 
 
@@ -1253,11 +1289,12 @@ def _mentioned_names(dates: list[str], parts: list, text: str | None = None) -> 
         from shapely.ops import unary_union
         if _ALL_POINTS is None:
             feats = json.loads((DATA / "reference" / "settlements.geojson").read_text())["features"]
-            _ALL_POINTS = [(x["properties"]["ADM4_UA"], shape(x["geometry"]).centroid) for x in feats]
+            _ALL_POINTS = [(x["properties"]["ADM4_UA"], shape(x["geometry"]).centroid, x["properties"]["ADM4_PCODE"])
+                           for x in feats]
         u = unary_union(parts)
         k = math.cos(math.radians(u.centroid.y))
         found = []
-        for name, pt in _ALL_POINTS:
+        for name, pt, *_ in _ALL_POINTS:
             if u.distance(pt) * 111 * max(k, 0.5) > MENTION_KM:   # запобіжник 12.11: лише справді поруч
                 continue
             def word_rx(w: str) -> str:
