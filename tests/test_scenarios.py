@@ -1,3 +1,4 @@
+import re
 """Автотести: «контрольні зразки» з відомою відповіддю.
 
 Запускаються самі на GitHub при кожній зміні коду (вкладка Actions → «Автотести»).
@@ -129,4 +130,4 @@ def test_names_from_deepstate_messages_day():
     r = {k: {"newly_km2": 1.0, "deocc_km2": 0, "grey_km2": 0, "newly_places": [], "deocc_places": [],
              "grey_places": []} for k in tracker.OBLASTS}
     txt = tracker.build_text("05.11", r, mentioned={"donetsk": ["Русин Яр"]}, names={"donetsk": pn})
-    assert "Також у повідомленнях DeepState: Русин Яр." in txt and "(" not in txt.split("Повідомлення")[0]
+    assert "Також у повідомленнях DeepState: Русин Яр." in txt and "(" not in re.sub(r"\([^()]* громада\)", "", txt.split("Повідомлення")[0])   # дужки лише для громад (16.11)
