@@ -1449,7 +1449,7 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     return big, what, f"поблизу: {top}"
 
 
-COVER_GAMMA, COVER_SHADE = 0.75, 45   # 16.11.2026: світліша обкладинка TikTok, варіант А (було 1.0 і 75)
+COVER_GAMMA, COVER_SHADE = 1.0, 0   # 16.11.2026: обкладинка TikTok/Reels — без затемнення, ті самі пікселі, що в Instagram і Facebook (фірмова скрізь однакова)
 
 
 def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path,
