@@ -1764,7 +1764,7 @@ def youtube_text(kind: str, body: list[str], date_label: str, places: list[str],
             "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
             "#Донеччина #DeepState #Shorts"]
     return "\n".join(["▶️ YouTube Shorts", "", "Назва:", title, "", "Опис:", *desc, "",
-                      "Плейлист: DeepState · Не для дітей · Категорія: Новини та політика"])
+                      "Плейлист: «DeepState: зміни на мапі Донеччини та Луганщини» · Не для дітей · Категорія: Новини та політика"])
 
 
 def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, start: str,
