@@ -2051,6 +2051,11 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         bd = change_map.breakdown(files, key)
         if totals and key in totals:   # доба: ті самі цифри, що в тексті й сторіз (а не перерахунок площі)
             bd = {**bd, "occupied": totals[key][0], "deoccupied": totals[key][1]}
+        elif kind != "day" and (bd["occupied"] >= 0.01 or bd["deoccupied"] >= 0.01):
+            # 16.11.2026: підсумки — та сама цифра, що в тексті, на обкладинці й у відео (було 19,25 на мапі
+            # і 19,23 на обкладинці: сума добових проти чистого результату за тиждень)
+            _net = round(bd["occupied"] - bd["deoccupied"], 2)
+            sub = f"{fmt_km2(abs(_net))} км² позначено {'окупованими' if _net > 0 else 'деокупованими'} {word}"
         if bd["occupied"] >= 0.01 and bd["deoccupied"] >= 0.01:   # обидва напрямки — дві цифри
             sub = (f"позначено окупованими {fmt_km2(bd['occupied'])} км², "
                    f"деокупованими — {fmt_km2(bd['deoccupied'])} км² {word}")
