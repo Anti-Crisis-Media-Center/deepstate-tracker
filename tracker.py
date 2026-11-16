@@ -795,9 +795,8 @@ def near_phrase(names: list[str], villages: list[str]) -> str:
 def tg_near(names: list[str], villages: list[str]) -> str:
     """Для Telegram: ті самі назви, що на мапі й у Threads, а села — з районом (Telegram читають уважно):
     «поблизу: Добропілля, Білицьке». Дужки з селами прибрано 12.11.2026."""
-    base = near_phrase(names, [])
-    if base:
-        return base   # без дужок із селами (рішення 12.11.2026) — як на мапі й в інших мережах
+    if names:   # 16.11.2026: як у сторіз — села з громадою («Вільне — Шахівська громада»), міста без
+        return story_near(list(names))
     vs = list(dict.fromkeys(villages))[:4]
     if not vs:
         return ""
@@ -1427,7 +1426,7 @@ def localize_messages(messages: list[dict], date: str, results: dict) -> list[di
         what = ("про просування ворога" if occ and not de else "про деокупацію" if de and not occ else "про зміни")
         names = list(dict.fromkeys(nm for _, nm in near))
         log(f"Повідомлення {m['time']:%d.%m %H:%M}: є назви не з наших змін ({', '.join(foreign)}) — переказуємо")
-        out.append({**m, "text": f"DeepState повідомив {what} поблизу: {', '.join(names)}.", "retold": True})
+        out.append({**m, "text": f"Повідомлено {what} поблизу: {', '.join(names)}.", "retold": True})
     return out
 
 def pick(nm, which: str) -> list:
