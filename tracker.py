@@ -1898,9 +1898,10 @@ def _places(rows: list[dict], col: str, limit: int = PLACES_MAX_IN_TEXT) -> list
 
 def build_summary(kind: str, rows: list[dict], period_start: str, period_end: str, label: str | None = None) -> str:
     """Підсумок для Telegram. Одна цифра на область — чистий підсумок за період (як у Threads/Facebook);
-    період — календарні дні, за які зміни (дата рядка мінус день)."""
+    період — від стану мапи на початок до стану на кінець (16.11.2026, Юля: «09.11–16.11», як «15.11–16.11»
+    у добовому заголовку, на обкладинці й на мапі; було «09.11–15.11» — календарні дні)."""
     d0 = (datetime.fromisoformat(rows[0]["date"]) - timedelta(days=1)).strftime("%d.%m")
-    d1 = (datetime.fromisoformat(rows[-1]["date"]) - timedelta(days=1)).strftime("%d.%m.%Y")
+    d1 = datetime.fromisoformat(rows[-1]["date"]).strftime("%d.%m.%Y")
     title = (f"DeepState: підсумки тижня, {d0}–{d1}" if kind == "week"
              else f"DeepState: підсумки місяця — {label}")
     word = "за тиждень" if kind == "week" else "за місяць"
