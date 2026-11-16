@@ -2045,7 +2045,10 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
         word = {"day": "за добу", "week": "за тиждень", "month": "за місяць"}[kind]
         # дата на самій мапі (рішення Юлі 14.11.2026): мапу пересилають і скріншотять без тексту допису
         _dd = lambda d_: f"{d_[8:10]}.{d_[5:7]}"
-        word += f", {_dd(dates[-1])}" if kind == "day" else f" {_dd(dates[0])}–{_dd(dates[-1])}"
+        # підсумки: від стану мапи на початок періоду до стану на кінець — як «15.11–16.11» у добовому
+        # заголовку Telegram і «9–16 листопада» на обкладинці (Юля 16.11.2026: на мапі було «10.11–16.11»)
+        _start = (datetime.strptime(dates[0], "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        word += f", {_dd(dates[-1])}" if kind == "day" else f" {_dd(_start)}–{_dd(dates[-1])}"
         sub = f"{fmt_km2(abs(km))} км² позначено {'окупованими' if km > 0 else 'деокупованими'} {word}"
         files = [CHANGES_DIR / f"{d}.geojson" for d in dates]
         bd = change_map.breakdown(files, key)
