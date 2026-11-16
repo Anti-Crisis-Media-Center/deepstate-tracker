@@ -774,7 +774,7 @@ FB_TELEGRAM_LINK = os.getenv("FB_TELEGRAM_LINK", "https://t.me/acmc_ua").strip()
 YOUTUBE_TELEGRAM_LINK = os.getenv("YOUTUBE_TELEGRAM_LINK", "https://t.me/acmc_ua").strip() or "https://t.me/acmc_ua"
 FB_CTA = ("Повідомлення DeepState, щодобові, щотижневі та щомісячні підсумки змін на мапі — "
           "щоранку о 8:00 у нашому Telegram-каналі. Посилання в першому коментарі 👇")
-FB_COMMENT = f"Підписуйтеся на наш Telegram, щоб щоранку бачити зміни на мапі DeepState по Донеччині й Луганщині: {FB_TELEGRAM_LINK}"
+FB_COMMENT = f"Telegram-канал Антикризового медіа-центру: {FB_TELEGRAM_LINK}"   # коротко: картка з логотипом з’являється сама (16.11.2026)
 
 
 def near_phrase(names: list[str], villages: list[str]) -> str:
@@ -872,9 +872,10 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
             lines.append(f"{cfg['short']}: за {word} {fmt_km2(-net)} км² позначено деокупованими{near}.")
         else:
             lines.append(f"{cfg['short']}: за {word} без змін.")
-    lines += ["", "Збережіть, щоб стежити за змінами, та поділіться з тими, хто слідкує за Донеччиною.",
-              "", "Повний підсумок із населеними пунктами — у Telegram-каналі Антикризового медіа-центру. "
-              "Посилання в першому коментарі 👇", "", "За даними DeepStateMap.live"]
+    # 16.11.2026 (Юля): один заклик — у Telegram (два заклики поспіль заважають один одному;
+    # особливо для жовтої сторінки з великою аудиторією — мета привести людей у Telegram)
+    lines += ["", "Повний перелік населених пунктів — у нашому Telegram. Посилання в першому коментарі 👇",
+              "", "За даними DeepStateMap.live"]
     return "\n".join(lines)
 
 

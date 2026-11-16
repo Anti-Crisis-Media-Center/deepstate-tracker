@@ -95,6 +95,8 @@ def adapt_text(fb_text: str) -> str:
     rest = [p for p in paras[2:] if "DeepStateMap" not in p]
     rest = [CTA if "Збережіть" in p else p for p in rest]
     word = "добу" if "за добу" in head else ("тиждень" if "тижня" in head else "місяць")
+    if word != "добу" and CTA not in rest:   # 16.11.2026: у FB-тизері підсумків лишився лише заклик у Telegram
+        rest.append(CTA)
     if all(l.rstrip(".").endswith("без змін") for l in body):
         lead = [f"За {word} на мапі DeepState Донеччина й Луганщина без змін."]
     else:
