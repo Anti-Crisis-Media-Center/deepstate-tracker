@@ -1749,10 +1749,13 @@ def _vertical_cover(cover: Path, out: Path) -> Path:
 def youtube_text(kind: str, body: list[str], date_label: str, places: list[str], rows: list[dict]) -> str:
     """Назва й опис для YouTube Shorts (основний канал АКМЦ, плейлист DeepState)."""
     period = "тиждень" if kind == "week" else f"місяць ({date_label})"
-    first = (body[0] if body else "").strip().rstrip(".")
-    title = f"{first} · DeepState" if first else f"Мапа Донеччини та Луганщини: підсумки за {period} · DeepState"
-    if len(title) > 95:
-        title = title[:94].rstrip() + "…"
+    # 16.11.2026 (Юля): коротка назва без обрізання посередині слова, з тією ж цифрою й періодом, що у відео
+    occ, free = _period_totals(rows, "donetsk")
+    net = round(occ - free, 2)
+    what = (f"{fmt_km2(abs(net))} км² позначено {'окупованими' if net > 0 else 'деокупованими'}"
+            if abs(net) >= 0.01 else "без змін")
+    span = re.sub(r"\s*20\d\d", "", date_label) if kind == "week" else date_label
+    title = f"DeepState: Донеччина за {'тиждень, ' + span if kind == 'week' else span} — {what}"
     desc = [*[b for b in body if b.strip()], "",
             f"Підсумки змін на мапі DeepState для Донеччини та Луганщини за {period}. "
             + ("Нові підсумки щопонеділка." if kind == "week" else "Нові підсумки щомісяця."),
