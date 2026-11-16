@@ -850,9 +850,11 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
     word = "тиждень" if kind == "week" else "місяць"
     lines = [title, ""]
     for key, cfg in OBLASTS.items():
-        net = _net_period(rows, key)
         near = ""
         occ, free = _period_totals(rows, key)
+        # 16.11.2026: текст має збігатися з відео/обкладинкою (було 19,25 у тексті й 19,23 у відео) —
+        # беремо ту саму цифру, що на мапі й у відео
+        net = round(occ - free, 2)
         if occ >= 0.01 and free >= 0.01:   # обидва напрямки — дві цифри, кожна зі своїми назвами
             nm = place_names([r["date"] for r in rows], key)
             no, nd = near_phrase(pick(nm, "occ"), []), near_phrase(pick(nm, "deocc"), [])
@@ -863,7 +865,7 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
         if abs(net) >= 0.01:
             vil = [x for r in rows for x in (r.get(f"{key}_newly_places") or "").split("; ") if x]
             near = near_phrase(place_names([r["date"] for r in rows], key), vil)
-            near = (" " + near) if near else ""
+            near = (" — " + near) if near else ""   # тире перед «поблизу:», як у щоденних (16.11.2026)
         if net >= 0.01:
             lines.append(f"{cfg['short']}: за {word} {fmt_km2(net)} км² позначено окупованими{near}.")
         elif net <= -0.01:
@@ -1447,6 +1449,9 @@ def _tiktok_headline(kind: str, rows: list[dict]) -> tuple[str, str, str]:
     return big, what, f"поблизу: {top}"
 
 
+COVER_GAMMA, COVER_SHADE = 0.6, 35   # 16.11.2026: світліша обкладинка TikTok (було 1.0 і 75)
+
+
 def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: str, out: Path,
                         bg: Path | None = None) -> Path:
     """Перший кадр відео: фірмове синє тло, оксамитова обкладинка — точно там і такого ж розміру,
@@ -1460,9 +1465,12 @@ def _tiktok_first_frame(kind: str, rows: list[dict], cover: Path, date_label: st
     OX, TOP, MW, MH = 40, 500, 1000, 1040            # верх — як у change_map для висоти 1920 (дата й заголовок у зоні, видимій у стрічці)
     img = Image.new("RGB", (1080, 1920), change_map.BG)
     sq = Image.open(cover).convert("RGB").resize((MH, MH), Image.LANCZOS)
+    # 16.11.2026 (Юля): обкладинка в стрічці TikTok надто темна, оксамиту не видно — висвітлюємо фактуру
+    if COVER_GAMMA != 1.0:   # гамма піднімає темну фактуру, а світлий текст обкладинки майже не чіпає
+        sq = sq.point([round(255 * ((i / 255) ** COVER_GAMMA)) for i in range(256)] * 3)
     img.paste(sq.crop(((MH - MW) // 2, 0, (MH - MW) // 2 + MW, MH)), (OX, TOP))
     sh = Image.new("L", img.size, 0)
-    ImageDraw.Draw(sh).rectangle([OX, TOP + 290, OX + MW, TOP + 730], fill=75)   # легке затемнення під текстом
+    ImageDraw.Draw(sh).rectangle([OX, TOP + 290, OX + MW, TOP + 730], fill=COVER_SHADE)   # легке затемнення під текстом
     box = Image.new("L", img.size, 0)
     ImageDraw.Draw(box).rectangle([OX, TOP, OX + MW, TOP + MH], fill=255)
     img.paste(Image.new("RGB", img.size, (8, 10, 18)), (0, 0), ImageChops.multiply(sh.filter(ImageFilter.GaussianBlur(70)), box))
@@ -1860,7 +1868,8 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
         deocc = round(sum(_f(r[f"{key}_deoccupied_km2"]) for r in rows), 2)
         grey_p = round(sum(_f(r.get(f"{key}_to_grey_km2")) for r in rows), 2)
         days = sum(1 for r in rows if _f(r[f"{key}_newly_occupied_km2"]) > 0 or _f(r[f"{key}_deoccupied_km2"]) > 0)
-        net = _net_period(rows, key)
+        _o, _fr = _period_totals(rows, key)
+        net = round(_o - _fr, 2)   # 16.11.2026: та сама цифра, що на мапі й у відео
         if newly == 0 and deocc == 0 and not grey_p:
             body = f"{word} без змін."
         else:
