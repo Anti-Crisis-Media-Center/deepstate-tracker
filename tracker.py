@@ -1764,18 +1764,19 @@ def youtube_text(kind: str, body: list[str], date_label: str, places: list[str],
             "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
             "#Донеччина #DeepState #Shorts"]
     # 16.11.2026 (Юля): готовий рядок тегів — постійні DeepState + міста цього періоду (ті ж, що на мапі)
-    tags = ["DeepState", "ДіпСтейт", "мапа DeepState", "DeepState map", "Донеччина", "Донецька область",
-            "Луганщина", "Луганська область", "зміни на мапі", "лінія фронту", "мапа бойових дій",
-            "Антикризовий медіа-центр"]
+    # загальні теги (Донеччина, Донбас, АКМЦ, міста…) стоять у стандартних тегах каналу (Юля 16.11.2026),
+    # тут — лише DeepState-специфічні + міста періоду; разом із загальними — у межах 500 знаків
+    tags = ["DeepState", "ДіпСтейт", "мапа DeepState", "DeepState map", "зміни на мапі", "лінія фронту",
+            "мапа бойових дій", "Луганська область"]
     try:
         tags += [n for n in place_names([r["date"] for r in rows]) if n not in tags]
     except Exception:  # noqa: BLE001
         pass
     tags_line = ", ".join(tags)
-    while len(tags_line) > 480 and len(tags) > 12:
+    while len(tags_line) > 260 and len(tags) > 8:
         tags.pop(); tags_line = ", ".join(tags)
     return "\n".join(["▶️ YouTube Shorts", "", "Назва:", title, "", "Опис:", *desc, "",
-                      "Теги (стерти теги каналу хрестиком ✕ праворуч і вставити цей рядок):", tags_line, "",
+                      "Теги (додати в кінець до тегів каналу, нічого не стирати):", tags_line, "",
                       "Плейлист: «DeepState: зміни на мапі Донеччини та Луганщини» · Не для дітей · Категорія: Новини та політика"])
 
 
