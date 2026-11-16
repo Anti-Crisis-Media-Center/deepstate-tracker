@@ -2074,7 +2074,10 @@ def make_change_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places
             starts = [info[(ends[i - 1] if i else 0)][0] for i in range(len(ends))]
             bounds = [dates.index(d) if d in dates else 0 for d in starts] + [len(dates)]
             total = 9.0 if kind == "week" else 12.0
-            secs = [max(2.5, total * (bounds[i + 1] - bounds[i]) / max(1, len(dates))) for i in range(len(ends))]
+            # 16.11.2026 (Юля): загальний час не збільшуємо — ділимо його пропорційно до днів; кожен крок
+            # щонайменше 1,2 с (щоб встигнути побачити блимання), а тоді приводимо суму назад до total
+            raw = [max(1.2, total * (bounds[i + 1] - bounds[i]) / max(1, len(dates))) for i in range(len(ends))]
+            secs = [round(x * total / sum(raw), 2) for x in raw]
             (DATA / out_name.replace(".jpg", "_steps.json")).write_text(json.dumps(
                 [[out_name.replace(".jpg", f"_step{i + 1}_v.jpg"), sec, out_name.replace(".jpg", f"_step{i + 1}_off_v.jpg")]
                  for i, sec in enumerate(secs)]))

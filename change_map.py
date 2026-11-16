@@ -94,15 +94,16 @@ def _timeline(steps: list[tuple[list, list]]):
     return ok(red), ok(blue), ok(back)
 
 
-def step_groups(change_files: list[Path], oblast_key: str = "donetsk", max_steps: int = 4) -> list[int]:
-    """Кроки для відео: межі (кількість днів зі змінами) після кожного кроку. Сусідні дні з однаковим
-    напрямком (лише окупація / лише деокупація) — один крок. Порожньо — якщо був лише один напрямок."""
+def step_groups(change_files: list[Path], oblast_key: str = "donetsk", max_steps: int = 5) -> list[int]:
+    """Кроки для відео: межі (кількість днів зі змінами) після кожного кроку.
+    16.11.2026 (Юля): показуємо динаміку за період — КОЖЕН день зі змінами окремим кроком (блимнуло й
+    світиться, далі наступне), навіть якщо була лише окупація; не більше max_steps — найближчі (сусідні
+    короткі) дні зливаємо. Порожньо — якщо день зі змінами лише один."""
     steps = _load_steps(change_files, oblast_key)
-    kinds = ["occ" if o and not f else "free" if f and not o else "mix" for o, f in steps]
-    if len(set(kinds)) == 1 and kinds[0] != "mix":
+    if len(steps) <= 1:
         return []
-    ends = [i + 1 for i in range(len(kinds)) if i + 1 == len(kinds) or kinds[i + 1] != kinds[i]]
-    while len(ends) > max_steps:   # забагато кроків (місяць) — зливаємо найкоротші сусідні
+    ends = list(range(1, len(steps) + 1))
+    while len(ends) > max_steps:   # забагато кроків — зливаємо пару сусідніх із найменшою сумарною кількістю днів
         gaps = [ends[0]] + [ends[i] - ends[i - 1] for i in range(1, len(ends))]
         i = min(range(len(ends) - 1), key=lambda j: gaps[j] + gaps[j + 1])
         del ends[i]

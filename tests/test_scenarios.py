@@ -74,13 +74,15 @@ def test_steps_follow_dates(tmp_path):
     f = [write_day(tmp_path, "2026-01-01", [(A, "occupied")]),
          write_day(tmp_path, "2026-01-02", [(B, "occupied")]),
          write_day(tmp_path, "2026-01-03", [(A, "deoccupied")])]
-    assert change_map.step_groups(f) == [2, 3]
+    assert change_map.step_groups(f) == [1, 2, 3]   # кожен день — окремий крок (16.11.2026)
 
 
 def test_one_direction_no_steps(tmp_path):
+    # 16.11.2026: і за самої окупації кожен день — окремий крок (динаміка); один день — без кроків
     f = [write_day(tmp_path, "2026-01-01", [(A, "occupied")]),
          write_day(tmp_path, "2026-01-02", [(B, "occupied")])]
-    assert change_map.step_groups(f) == []
+    assert change_map.step_groups(f) == [1, 2]
+    assert change_map.step_groups(f[:1]) == []
 
 
 REAL_WEEK = [f"2026-11-0{i}" for i in range(3, 10)]
