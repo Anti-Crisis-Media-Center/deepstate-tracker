@@ -169,7 +169,7 @@ def run_month_demo(hist: list[dict]) -> None:
     """ДЕМО 17.11: місяць 1–17.11, етапи по тижнях — накопичена площа росте, одне блимання на етап."""
     rows = [r for r in hist if "2026-11-01" <= r["date"] <= "2026-11-17"]
     dates = [r["date"] for r in rows]
-    bounds = ["2026-11-07", "2026-11-14", "2026-11-17"]
+    bounds = ["2026-11-04", "2026-11-08", "2026-11-12", "2026-11-17"]
     os.environ["WEEKLY_STEPS"] = ",".join(bounds)
     nets = {k: T._net_period(rows, k) for k in T.OBLASTS}
     places = {k: T._rows_places(rows) if k == "donetsk" else [] for k in T.OBLASTS}
@@ -183,15 +183,13 @@ def run_month_demo(hist: list[dict]) -> None:
         o = sum(float(r.get("donetsk_newly_occupied_km2") or 0) for r in rows if r["date"] <= upto)
         f = sum(float(r.get("donetsk_deoccupied_km2") or 0) for r in rows if r["date"] <= upto)
         return o - f
-    lab = {"2026-11-07": "1–7 листопада", "2026-11-14": "1–14 листопада", "2026-11-17": "1–17 листопада"}
-    sh = [(f"{T.fmt_km2(cum(b))} км²", f"позначено окупованими · {lab[b]}", "") for b in bounds]
-    sh = sh[:len(steps or [])]
+    sh = None   # 17.11 (Юля): цифра зверху не змінюється — підсумок за весь період
     from video import make_video
     base, full = D / "shadow_map_month_base_v.jpg", D / "shadow_map_month_v.jpg"
     v = make_video(OUT / "first.jpg", base, full, end, OUT / "demo_month.mp4", steps=steps, intro=False,
                    headline=(f"{T.fmt_km2(cum(bounds[-1]))} км²", "позначено окупованими · 1–17 листопада", ""),
-                   step_headlines=sh, blinks_per_step=1)
-    print("DEMO MONTH:", v, [x[0] for x in sh])
+                   step_headlines=sh, blinks_per_step=1, start_full=False)
+    print("DEMO MONTH:", v, steps)
 
 
 def run_week(hist: list[dict]) -> None:
