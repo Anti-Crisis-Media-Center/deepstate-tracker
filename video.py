@@ -68,8 +68,8 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
             hold(prev, 0.3)
             for p, sec, off in steps:
                 st = H_(_vert(Image.open(p)))
-                fade(prev, st, 0.5)
-                hold(st, 0.5)
+                fade(prev, st, 1.0)   # 18.11 (Юля): удвічі повільніше
+                hold(st, 1.0)
                 prev = st
             hold(prev, 4)
             fade(prev, c, 0.5)

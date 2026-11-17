@@ -53,4 +53,4 @@ jobs:
       - name: Демо-відео в Releases
         env:
           GH_TOKEN: ${{ github.token }}
-        run: cp data/shadow/demo_month.mp4 demo_month3_1811.mp4 && gh release upload reels demo_month3_1811.mp4 --clobber
+        run: cp data/shadow/demo_month.mp4 demo_month4_1811.mp4 && gh release upload reels demo_month4_1811.mp4 --clobber
