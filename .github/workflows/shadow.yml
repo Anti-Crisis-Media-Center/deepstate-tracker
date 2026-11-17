@@ -48,9 +48,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHADOW_KIND: ${{ inputs.kind || (github.event.schedule == '0 18 * * 0' && 'week' || 'day') }}
           DRY_RUN: "1"
-          DEMO: "1"
+          DEMO: "month"
         run: python shadow.py
       - name: Демо-відео в Releases
         env:
           GH_TOKEN: ${{ github.token }}
-        run: cp data/shadow/demo_reel.mp4 demo_reel_1711.mp4 && gh release upload reels demo_reel_1711.mp4 --clobber
+        run: cp data/shadow/demo_month.mp4 demo_month_1711.mp4 && gh release upload reels demo_month_1711.mp4 --clobber

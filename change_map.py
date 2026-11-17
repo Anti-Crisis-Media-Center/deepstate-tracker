@@ -100,6 +100,17 @@ def step_groups(change_files: list[Path], oblast_key: str = "donetsk", max_steps
     світиться, далі наступне), навіть якщо була лише окупація; не більше max_steps — найближчі (сусідні
     короткі) дні зливаємо. Порожньо — якщо день зі змінами лише один."""
     steps = _load_steps(change_files, oblast_key)
+    import os
+    if os.getenv("WEEKLY_STEPS"):   # ДЕМО 17.11: етапи по тижнях — накопичена площа («пляма росте»)
+        days = [p.stem for p in sorted(change_files, key=lambda x: x.name)
+                if p.exists() and any(f["properties"].get("oblast") == oblast_key
+                                      for f in json.loads(p.read_text())["features"])]
+        ends = []
+        for b in os.environ["WEEKLY_STEPS"].split(","):
+            n = sum(1 for d in days if d <= b)
+            if n and (not ends or n > ends[-1]):
+                ends.append(n)
+        return ends
     if len(steps) <= 1:
         return []
     ends = list(range(1, len(steps) + 1))

@@ -39,7 +39,8 @@ def _headline(img: Image.Image, headline) -> Image.Image:
 
 
 def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: Path, out: Path,
-               steps: list[tuple[Path, float, Path]] | None = None, intro: bool = True, headline=None) -> Path | None:
+               steps: list[tuple[Path, float, Path]] | None = None, intro: bool = True, headline=None,
+               step_headlines=None, blinks_per_step: int | None = None) -> Path | None:
     """steps — проміжні кадри мапи по черзі (окупація червоним, деокупація блакитним…) з тривалістю в секундах,
     пропорційною тому, скільки днів тривав цей етап; кожен блимає, далі — кінцевий стан map_full."""
     if not shutil.which("ffmpeg"):
@@ -61,10 +62,11 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         fade(mf, mb, 0.4)
         hold(mb, 0.4)
         prev = mb
-        for p, sec, off in (steps or []):
-            st, of = H_(_vert(Image.open(p))), H_(_vert(Image.open(off)))
+        for k, (p, sec, off) in enumerate(steps or []):
+            hk = (lambda im: _headline(im, step_headlines[k])) if step_headlines else H_
+            st, of = hk(_vert(Image.open(p))), hk(_vert(Image.open(off)))
             fade(prev, of, 0.5)
-            blinks = max(2, int(sec / 1.0) - 1)
+            blinks = blinks_per_step or max(2, int(sec / 1.0) - 1)
             for _ in range(blinks):
                 fade(of, st, 0.4)
                 hold(st, 0.3)
