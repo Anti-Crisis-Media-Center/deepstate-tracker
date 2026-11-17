@@ -63,6 +63,18 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
             fade(mf, mb, 0.4)
             hold(mb, 0.4)
             prev = mb
+        elif blinks_per_step == 0:   # ДЕМО 18.11 (Юля): без блимання — ділянки «розповзаються» по черзі
+            prev = H_(_vert(Image.open(steps[0][2])))   # мапа до першої ділянки
+            hold(prev, 0.3)
+            for p, sec, off in steps:
+                st = H_(_vert(Image.open(p)))
+                fade(prev, st, 0.5)
+                hold(st, 0.5)
+                prev = st
+            hold(prev, 4)
+            fade(prev, c, 0.5)
+            hold(c, 5)
+            return _encode(seq, out)
         else:   # ДЕМО 17.11 (Юля): починаємо з першого, найменшого етапу — він уже світиться з першого кадру
             prev = H_(_vert(Image.open(steps[0][0])))
             hold(prev, 0.5)

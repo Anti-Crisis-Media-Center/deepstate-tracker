@@ -188,7 +188,7 @@ def run_month_demo(hist: list[dict]) -> None:
     base, full = D / "shadow_map_month_base_v.jpg", D / "shadow_map_month_v.jpg"
     v = make_video(OUT / "first.jpg", base, full, end, OUT / "demo_month.mp4", steps=steps, intro=False,
                    headline=(f"{T.fmt_km2(cum(bounds[-1]))} км²", "позначено окупованими · 1–17 листопада", ""),
-                   step_headlines=sh, blinks_per_step=1, start_full=False)
+                   step_headlines=sh, blinks_per_step=0, start_full=False)
     print("DEMO MONTH:", v, steps)
 
 
