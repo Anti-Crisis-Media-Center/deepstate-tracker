@@ -169,7 +169,19 @@ def run_month_demo(hist: list[dict]) -> None:
     """ДЕМО 17.11: місяць 1–17.11, етапи по тижнях — накопичена площа росте, одне блимання на етап."""
     rows = [r for r in hist if "2026-11-01" <= r["date"] <= "2026-11-17"]
     dates = [r["date"] for r in rows]
-    bounds = ["2026-11-04", "2026-11-08", "2026-11-12", "2026-11-17"]
+    bounds = ["2026-11-04", "2026-11-08", "2026-11-12", "2026-11-16", "2026-11-17"]
+    # ДЕМО 18.11: ВИГАДАНА деокупація 17.11 — частина ділянки 03.11 (лише для показу, ніде не зберігається)
+    from shapely.geometry import shape, mapping, box
+    src = json.loads((T.CHANGES_DIR / "2026-11-03.geojson").read_text())["features"][0]
+    g = shape(src["geometry"])
+    cx, cy = g.centroid.x, g.centroid.y
+    w = (g.bounds[2] - g.bounds[0]) * 0.35
+    part = g.intersection(box(cx - w, g.bounds[1], cx + w, g.bounds[3]))
+    import math
+    fake_km2 = round(part.area * 111.32 * math.cos(math.radians(cy)) * 110.57, 2)
+    (T.CHANGES_DIR / "2026-11-17.geojson").write_text(json.dumps({"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {"oblast": "donetsk", "change": "deoccupied", "km2": fake_km2},
+         "geometry": mapping(part)}]}))
     os.environ["WEEKLY_STEPS"] = ",".join(bounds)
     nets = {k: T._net_period(rows, k) for k in T.OBLASTS}
     places = {k: T._rows_places(rows) if k == "donetsk" else [] for k in T.OBLASTS}
@@ -187,7 +199,8 @@ def run_month_demo(hist: list[dict]) -> None:
     from video import make_video
     base, full = D / "shadow_map_month_base_v.jpg", D / "shadow_map_month_v.jpg"
     v = make_video(OUT / "first.jpg", base, full, end, OUT / "demo_month.mp4", steps=steps, intro=False,
-                   headline=(f"{T.fmt_km2(cum(bounds[-1]))} км²", "позначено окупованими · 1–17 листопада", ""),
+                   headline=(f"{T.fmt_km2(cum(bounds[-1]))} км²",
+                             "окупованими · деокупованими · 1–17 листопада", f"{T.fmt_km2(fake_km2)} км²"),
                    step_headlines=sh, blinks_per_step=0, start_full=False)
     print("DEMO MONTH:", v, steps)
 

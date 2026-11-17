@@ -28,11 +28,17 @@ def _headline(img: Image.Image, headline) -> Image.Image:
         return img
     from PIL import ImageDraw, ImageFont
     fonts = Path(__file__).parent / "assets" / "fonts"
-    big, what, _ = headline
+    big, what, extra = (list(headline) + [""])[:3]
     im = img.copy()
     d = ImageDraw.Draw(im)
-    f1 = ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), 128)
     f2 = ImageFont.truetype(str(fonts / "Montserrat-500.ttf"), 46)
+    if extra:   # обидва напрямки: червона й блакитна цифри поруч
+        f1 = ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), 104)
+        d.text((W // 2 - 30, 175), big, font=f1, fill=(255, 92, 92), anchor="rm")
+        d.text((W // 2 + 30, 175), extra, font=f1, fill=(96, 165, 250), anchor="lm")
+        d.text((W // 2, 268), what, font=f2, fill=(250, 250, 250), anchor="mm")
+        return im
+    f1 = ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), 128)
     d.text((W // 2, 175), big, font=f1, fill=(247, 197, 49), anchor="mm")
     d.text((W // 2, 268), what, font=f2, fill=(250, 250, 250), anchor="mm")
     return im
@@ -68,7 +74,7 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
             hold(prev, 0.3)
             for p, sec, off in steps:
                 st = H_(_vert(Image.open(p)))
-                fade(prev, st, 1.0)   # 18.11 (Юля): удвічі повільніше
+                fade(prev, st, 1.5)   # 18.11 (Юля): проявлення — 1,5 с
                 hold(st, 1.0)
                 prev = st
             hold(prev, 4)
