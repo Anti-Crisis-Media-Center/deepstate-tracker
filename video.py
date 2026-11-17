@@ -33,10 +33,13 @@ def _headline(img: Image.Image, headline) -> Image.Image:
     d = ImageDraw.Draw(im)
     f2 = ImageFont.truetype(str(fonts / "Montserrat-500.ttf"), 46)
     if extra:   # обидва напрямки: червона й блакитна цифри поруч
-        f1 = ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), 104)
-        d.text((W // 2 - 30, 175), big, font=f1, fill=(255, 92, 92), anchor="rm")
-        d.text((W // 2 + 30, 175), extra, font=f1, fill=(96, 165, 250), anchor="lm")
-        d.text((W // 2, 268), what, font=f2, fill=(250, 250, 250), anchor="mm")
+        f1 = ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), 84)
+        f3 = ImageFont.truetype(str(fonts / "Montserrat-500.ttf"), 38)
+        d.text((W // 2 - 40, 165), big, font=f1, fill=(255, 92, 92), anchor="rm")
+        d.text((W // 2 + 40, 165), extra, font=f1, fill=(96, 165, 250), anchor="lm")
+        d.text((W // 2 - 40, 232), "окупованими", font=f3, fill=(250, 250, 250), anchor="rm")
+        d.text((W // 2 + 40, 232), "деокупованими", font=f3, fill=(250, 250, 250), anchor="lm")
+        d.text((W // 2, 282), what, font=f3, fill=(200, 205, 215), anchor="mm")
         return im
     f1 = ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), 128)
     d.text((W // 2, 175), big, font=f1, fill=(247, 197, 49), anchor="mm")

@@ -175,7 +175,7 @@ def run_month_demo(hist: list[dict]) -> None:
     src = json.loads((T.CHANGES_DIR / "2026-11-03.geojson").read_text())["features"][0]
     g = shape(src["geometry"])
     cx, cy = g.centroid.x, g.centroid.y
-    w = (g.bounds[2] - g.bounds[0]) * 0.35
+    w = (g.bounds[2] - g.bounds[0]) * 0.12
     part = g.intersection(box(cx - w, g.bounds[1], cx + w, g.bounds[3]))
     import math
     fake_km2 = round(part.area * 111.32 * math.cos(math.radians(cy)) * 110.57, 2)
@@ -200,7 +200,7 @@ def run_month_demo(hist: list[dict]) -> None:
     base, full = D / "shadow_map_month_base_v.jpg", D / "shadow_map_month_v.jpg"
     v = make_video(OUT / "first.jpg", base, full, end, OUT / "demo_month.mp4", steps=steps, intro=False,
                    headline=(f"{T.fmt_km2(cum(bounds[-1]))} км²",
-                             "окупованими · деокупованими · 1–17 листопада", f"{T.fmt_km2(fake_km2)} км²"),
+                             "позначено за 1–17 листопада", f"{T.fmt_km2(fake_km2)} км²"),
                    step_headlines=sh, blinks_per_step=0, start_full=False)
     print("DEMO MONTH:", v, steps)
 
