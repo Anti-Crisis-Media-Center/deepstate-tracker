@@ -144,6 +144,27 @@ def ig_container_test(url: str) -> str:
         return f"помилка: {e}"
 
 
+def run_demo(hist: list[dict]) -> None:
+    """ДЕМО 17.11: тиждень 9–16.11 без титульного кадру — порівняти з опублікованим відео."""
+    rows = [r for r in hist if r["date"] <= "2026-11-16"][-7:]
+    dates = [r["date"] for r in rows]
+    nets = {k: T._net_period(rows, k) for k in T.OBLASTS}
+    places = {k: T._rows_places(rows) if k == "donetsk" else [] for k in T.OBLASTS}
+    d0 = datetime.strptime(dates[0], "%Y-%m-%d").date() - timedelta(days=1)
+    label = T._period_label(d0.isoformat(), dates[-1])
+    mp = T.make_change_map("week", dates, nets, places, "shadow_map_week.jpg")
+    first = T._tiktok_first_frame("week", rows, T.COVER_WEEK, label, OUT / "first.jpg")
+    end = T._tiktok_end_card("week", rows, T.COVER_WEEK, label, OUT / "end.jpg")
+    D = T.DATA
+    sj = D / "shadow_map_week_steps.json"
+    steps = [(D / n, s, D / o) for n, s, o in json.loads(sj.read_text())] if sj.exists() else None
+    from video import make_video
+    base, full = D / "shadow_map_week_base_v.jpg", D / "shadow_map_week_v.jpg"
+    v = make_video(first, base, full, end, OUT / "demo_reel.mp4", steps=steps, intro=False,
+                   headline=T._tiktok_headline("week", rows))
+    print("DEMO VIDEO:", v)
+
+
 def run_week(hist: list[dict]) -> None:
     rows = hist[-7:]
     dates = [r["date"] for r in rows]
@@ -193,6 +214,8 @@ def run_week(hist: list[dict]) -> None:
 def main() -> None:
     hist = T.read_history()
     kind = os.getenv("SHADOW_KIND", "day")
+    if os.getenv("DEMO") == "1":
+        return run_demo(hist)
     run_day(hist) if kind == "day" else run_week(hist)
 
 

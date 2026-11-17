@@ -22,8 +22,24 @@ def _vert(img: Image.Image) -> Image.Image:
     return c
 
 
+def _headline(img: Image.Image, headline) -> Image.Image:
+    """ДЕМО 17.11: велика цифра над мапою — щоб із першого кадру було видно, про що відео."""
+    if not headline:
+        return img
+    from PIL import ImageDraw, ImageFont
+    fonts = Path(__file__).parent / "assets" / "fonts"
+    big, what, _ = headline
+    im = img.copy()
+    d = ImageDraw.Draw(im)
+    f1 = ImageFont.truetype(str(fonts / "Montserrat-800.ttf"), 128)
+    f2 = ImageFont.truetype(str(fonts / "Montserrat-500.ttf"), 46)
+    d.text((W // 2, 175), big, font=f1, fill=(247, 197, 49), anchor="mm")
+    d.text((W // 2, 268), what, font=f2, fill=(250, 250, 250), anchor="mm")
+    return im
+
+
 def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: Path, out: Path,
-               steps: list[tuple[Path, float, Path]] | None = None) -> Path | None:
+               steps: list[tuple[Path, float, Path]] | None = None, intro: bool = True, headline=None) -> Path | None:
     """steps — проміжні кадри мапи по черзі (окупація червоним, деокупація блакитним…) з тривалістю в секундах,
     пропорційною тому, скільки днів тривав цей етап; кожен блимає, далі — кінцевий стан map_full."""
     if not shutil.which("ffmpeg"):
@@ -38,6 +54,35 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         n = int(sec * FPS)
         seq.extend(Image.blend(x, y, i / n) for i in range(1, n + 1))
 
+    if not intro and map_base and map_full:   # ДЕМО 17.11: без титульного кадру — одразу мапа з червоним
+        H_ = lambda im: _headline(im, headline)  # noqa: E731
+        mb, mf = H_(_vert(Image.open(map_base))), H_(_vert(Image.open(map_full)))
+        hold(mf, 1.2)
+        fade(mf, mb, 0.4)
+        hold(mb, 0.4)
+        prev = mb
+        for p, sec, off in (steps or []):
+            st, of = H_(_vert(Image.open(p))), H_(_vert(Image.open(off)))
+            fade(prev, of, 0.5)
+            blinks = max(2, int(sec / 1.0) - 1)
+            for _ in range(blinks):
+                fade(of, st, 0.4)
+                hold(st, 0.3)
+                fade(st, of, 0.3)
+            fade(of, st, 0.4)
+            hold(st, max(0.6, sec - blinks * 1.0 - 1.0))
+            prev = st
+        if not steps:
+            for _ in range(2):
+                fade(mb, mf, 0.8)
+                hold(mf, 0.4)
+                fade(mf, mb, 0.4)
+            prev = mb
+        fade(prev, mf, 0.6)
+        hold(mf, 4)
+        fade(mf, c, 0.5)
+        hold(c, 5)
+        return _encode(seq, out)
     hold(a, 5.0)   # перший кадр: 5 с — щоб устигнути прочитати назви й цифри (рішення 10.11: +1 с після фідбеку)
     if map_base and map_full:
         mb, mf = _vert(Image.open(map_base)), _vert(Image.open(map_full))
@@ -76,6 +121,10 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
     else:
         fade(a, c, 0.5)
     hold(c, 6)
+    return _encode(seq, out)
+
+
+def _encode(seq, out: Path) -> Path:
     with tempfile.TemporaryDirectory() as td:
         for i, im in enumerate(seq):
             im.save(f"{td}/f{i:04d}.jpg", quality=90)

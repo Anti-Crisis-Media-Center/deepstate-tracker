@@ -4,9 +4,6 @@ name: Тінь v9 — нова версія в гілку «Тести»
 # але надсилає все лише в гілку «Тести» службової групи. Нічого не публікує і не зберігає.
 # Після переходу на нову версію (16.11) цей файл видалити.
 on:
-  schedule:
-    - cron: "40 6 * * *"   # щодня 8:40 за Києвом (зима) — сторіз-картка за добу + мапа
-    - cron: "0 18 * * 0"   # неділя 20:00 за Києвом — тижневий Reels + перевірка автопублікації
   workflow_dispatch:
     inputs:
       kind:
@@ -29,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: v9-video
+          ref: demo-first-frame
           fetch-depth: 0
       - name: Свіжі дані з робочої гілки
         run: |
@@ -51,4 +48,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHADOW_KIND: ${{ inputs.kind || (github.event.schedule == '0 18 * * 0' && 'week' || 'day') }}
           DRY_RUN: "1"
+          DEMO: "1"
         run: python shadow.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo
+          path: data/shadow/*.mp4
