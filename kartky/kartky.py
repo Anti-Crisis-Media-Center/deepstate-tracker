@@ -139,7 +139,7 @@ def events_on(d: date) -> list[dict]:
     return out
 
 
-def drive_list(q: str, fields: str = "files(id,name,mimeType,parents,imageMediaMetadata(width,height))") -> list:
+def drive_list(q: str, fields: str = "files(id,name,mimeType,parents,modifiedTime,imageMediaMetadata(width,height))") -> list:
     r = google().get("https://www.googleapis.com/drive/v3/files",
                      params={"q": q, "fields": fields, "pageSize": 200, "supportsAllDrives": "true",
                              "includeItemsFromAllDrives": "true"}, timeout=30)
@@ -840,6 +840,14 @@ def main() -> int:
     try:
         if MODE == "poll":
             poll(st)
+        elif MODE == "check":   # лише перевірка у файл журналу, нічого в Telegram (для Claude)
+            for ds in (forced or (today + timedelta(days=1)).isoformat()).split(","):
+                d = date.fromisoformat(ds.strip())
+                for p in build_plan(d):
+                    log("\n" + re.sub(r"<[^>]+>", "", checklist(p, d, "Перевірка")))
+                    for fmt, f in (p.get("cards") or {}).items():
+                        if f:
+                            log(f"   картка {FORMAT_LABEL[fmt]}: {f['name']}, змінено {f.get('modifiedTime')}")
         elif MODE == "publish":
             run_publish(date.fromisoformat(forced) if forced else today, st)
         else:
