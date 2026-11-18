@@ -803,9 +803,16 @@ def run_publish(d: date, st: dict) -> None:
                 lines.append(f"✅ {NET_LABEL[net]}")
         else:
             ok_any, fail_any = False, False
+            done = st.setdefault("done", {}).setdefault(f"{key}:{p['event_id']}", {})
             for net, n in ready.items():
+                if net in done:   # уже вийшло при попередньому запуску — не дублюємо
+                    lines.append(f"✅ {NET_LABEL[net]}: {html.escape(done[net])}")
+                    ok_any = True
+                    continue
                 try:
                     res = PUBLISHERS[net](n, p)
+                    done[net] = res
+                    save_state(st)   # одразу: якщо запуск обірветься, повтор не продублює
                     lines.append(f"✅ {NET_LABEL[net]}: {html.escape(res)}")
                     ok_any = True
                 except Exception as e:  # noqa: BLE001
