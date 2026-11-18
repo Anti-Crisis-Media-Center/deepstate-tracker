@@ -8,7 +8,7 @@
 • Картки — на Диску АКМЦ, папка «Визначні дати АКМЦ (листівки для соцмереж)», підпапка
   «ММ.ДД Назва». Формат бот визначає за розміром: 1:1 → Telegram і Facebook, 4:5 → Instagram
   і Threads, 9:16 → сторіз (Facebook + Instagram). Файли зі словом «вручну» в назві бот не бере.
-• Напередодні о 18:00 — превʼю в гілку «тест» Суперчату (кожна мережа окремо + перелік ✅/❌/⚠️
+• Напередодні о 18:00 — превʼю в гілку «Тести» Суперчату (кожна мережа окремо + перелік ✅/❌/⚠️
   і кнопка «❌ Не публікувати»). О 8:30 — публікація і звіт із посиланнями. Після публікації
   папка дати переїжджає в «Опубліковано РРРР», тож наступного року старий текст сам не вийде.
 • Facebook — поки лише біла сторінка «У фокусі». Telegram — канал @acmc_ua, без звуку.
@@ -54,7 +54,7 @@ TEST = os.getenv("KARTKY_TEST", "1").strip() != "0"
 FORCE = os.getenv("KARTKY_FORCE", "0").strip() == "1"
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 REVIEW_CHAT = os.getenv("KARTKY_CHAT_ID", "-1003946430136").strip()      # Суперчат АКМЦ
-REVIEW_THREAD = os.getenv("KARTKY_THREAD_ID", "6").strip()              # гілка «тест»
+REVIEW_THREAD = os.getenv("KARTKY_THREAD_ID", "6").strip()              # гілка «Тести»
 CHANNEL = os.getenv("TELEGRAM_CHAT_ID", "@acmc_ua").strip() or "@acmc_ua"
 
 MARKERS = {"#TG": "tg", "#FB": "fb", "#IG": "ig", "#THREADS": "threads", "#СТОРІЗ": "stories",
@@ -482,7 +482,7 @@ def tg(method: str, data: dict, files: dict | None = None) -> dict:
 
 
 def review(method: str, data: dict, files: dict | None = None) -> dict:
-    log(f"→ гілка «тест»: {method}")
+    log(f"→ гілка «Тести»: {method}")
     data = {"chat_id": REVIEW_CHAT, **data}
     if REVIEW_THREAD:
         data["message_thread_id"] = int(REVIEW_THREAD)
