@@ -26,8 +26,7 @@ jobs:
         env:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          KARTKY_CHAT_ID: "-1003946430136"   # Суперчат АКМЦ
-          KARTKY_THREAD_ID: "6"              # гілка «тест»
+          # звіт лише у файл data/kartky_check.txt, без повідомлення в Telegram (18.11)
         run: python kartky/check_access.py
       - name: Зберегти звіт
         run: |
