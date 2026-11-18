@@ -202,7 +202,7 @@ def folder_cards(folder: dict) -> tuple[dict, list[str]]:
         fmt = classify(m.get("width"), m.get("height"))
         if not fmt:
             if f.get("mimeType", "").startswith("image/"):
-                notes.append(f"файл «{f['name']}» має незвичний розмір {m.get('width')}×{m.get('height')} — пропускаю")
+                notes.append((None, f"файл «{f['name']}» має незвичний розмір {m.get('width')}×{m.get('height')} — пропускаю"))
             continue
         by_fmt.setdefault(fmt, []).append(f)
     cards = {}
@@ -211,8 +211,8 @@ def folder_cards(folder: dict) -> tuple[dict, list[str]]:
             cards[fmt] = lst[0]
         else:
             names = ", ".join(f"«{x['name']}»" for x in lst)
-            notes.append(f"кілька карток {FORMAT_LABEL[fmt]} ({names}) — не знаю, яку взяти. "
-                         f"Зайву перейменуй, додавши слово «вручну»")
+            notes.append((fmt, f"кілька карток {FORMAT_LABEL[fmt]} ({names}) — не знаю, яку взяти. "
+                               f"Зайву перейменуй, додавши слово «вручну»"))
             cards[fmt] = None
     return cards, notes
 
@@ -402,7 +402,9 @@ def build_plan(d: date) -> list[dict]:
         if folder:
             p["folder"] = folder
             cards, notes = folder_cards(folder)
-            p["warn"] += notes
+            needed = {NET_FORMAT[n] for n in NET_FORMAT if n in parsed}
+            # дві картки одного формату заважають лише тоді, коли цей формат потрібен (28.11: дві сторіз, але без #СТОРІЗ)
+            p["warn"] += [t for fmt, t in notes if fmt is None or fmt in needed]
         p["cards"] = cards
         for net in ("tg", "fb", "ig", "threads", "stories"):
             if net not in parsed:
