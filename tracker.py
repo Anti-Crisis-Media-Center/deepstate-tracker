@@ -701,6 +701,9 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
         if gs:
             parts.append(gs)
         ment = mentioned.get(key) or []
+        # 18.11.2026: назви, що вже є в процитованому нижче повідомленні DeepState, вдруге не повторюємо
+        ment = [x for x in ment if not any(x[:max(4, len(x) - 3)].lower() in (mm.get("text") or "").lower()
+                                           for mm in (messages or [])[:MAX_MESSAGES_IN_POST])]
         if ment:   # рішення 12.11.2026: окремий рядок лише в Telegram, щоб місцеві бачили своє село
             parts.append(f"Також у повідомленнях DeepState: {', '.join(ment)}.")
         if r["newly_km2"] > 0 and r["deocc_km2"] > 0:   # обидва напрямки — кожен окремим рядком
@@ -1470,7 +1473,10 @@ def place_names(dates: list[str], key: str = "donetsk", n: int = 4) -> list[str]
         km = {id(p): _scale(p, xfact=111.32 * _k, yfact=110.57, origin=(0, 0)) for p in parts}
         clusters: list[list] = []
         for p in parts:
-            hit = [c for c in clusters if any(km[id(p)].distance(km[id(q)]) < MERGE_KM for q in c)]
+            # 18.11.2026 (Юля): у ДОБОВИХ зливаємо лише майже суміжні ділянки (<1 км) — дві ділянки за 1,6 км
+            # (Матяшеве / Василівка) злилися, і більша лишилася без назви
+            _mk = 1.0 if len(dates) == 1 else MERGE_KM
+            hit = [c for c in clusters if any(km[id(p)].distance(km[id(q)]) < _mk for q in c)]
             merged = [p] + [q for c in hit for q in c]
             clusters = [c for c in clusters if c not in hit] + [merged]
         parts = [unary_union(c) for c in clusters]
