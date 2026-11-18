@@ -131,3 +131,17 @@ def test_names_from_deepstate_messages_day():
              "grey_places": []} for k in tracker.OBLASTS}
     txt = tracker.build_text("05.11", r, mentioned={"donetsk": ["Русин Яр"]}, names={"donetsk": pn})
     assert "Також у повідомленнях DeepState: Русин Яр." in txt and "(" not in re.sub(r"\([^()]* громада\)", "", txt.split("Повідомлення")[0])   # дужки лише для громад (16.11)
+
+
+def test_day_two_areas_get_two_names_and_no_duplicate_mentions():
+    """18.11.2026: дві ділянки за 1,6 км — кожна зі своєю назвою; назви з процитованого повідомлення не дублюються."""
+    import tracker as T
+    from datetime import datetime
+    n = T.place_names(["2026-11-18"], "donetsk")
+    assert list(n) == ["Василівка", "Матяшеве"]
+    z = dict(newly_km2=0, newly_places=[], deocc_km2=0, deocc_places=[], grey_km2=0, grey_places=[])
+    res = {"donetsk": {**z, "newly_km2": 5.65}, "luhansk": dict(z)}
+    msgs = [{"time": datetime(2026, 11, 17, 21, 52), "text": "Ворог просунувся поблизу Василівки та Гришиного."}]
+    txt = T.build_text("2026-11-18", res, None, msgs, {"donetsk": n, "luhansk": []}, {"donetsk": ["Василівка", "Гришине"]})
+    assert "Також у повідомленнях" not in txt
+    assert txt.count("Гришин") == 1
