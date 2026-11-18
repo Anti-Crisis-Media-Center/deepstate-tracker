@@ -1,0 +1,95 @@
+name: Листівки до визначних дат
+
+# Календар «Визначні події АКМЦ» + картки з Диску → превʼю в Суперчаті (гілка «тест») о 18:00
+# напередодні → публікація о 8:30. Як писати тексти — див. kartky/README.md.
+# Скрипт сам чекає до 18:00 / 8:30 за Києвом, тож розклад стартує завчасно (зима й літо).
+
+on:
+  schedule:
+    - cron: "50 14 * * *"   # превʼю: 16:50 зима / 17:50 літо
+    - cron: "50 15 * * *"   # превʼю, запасний: 17:50 зима / 18:50 літо
+    - cron: "5 5 * * *"     # публікація: 07:05 зима / 08:05 літо
+    - cron: "5 6 * * *"     # публікація, запасний: 08:05 зима / 09:05 літо
+    - cron: "17 8 * * *"    # публікація, якщо ранкові не відбулися
+    - cron: "25 16-23 * * *"   # щогодини вночі: чи не натиснули «❌ Не публікувати»
+    - cron: "25 0-4 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "preview — превʼю, publish — публікація, poll — перевірити кнопку"
+        type: choice
+        options: [preview, publish, poll]
+        default: preview
+      date:
+        description: "Дата РРРР-ММ-ДД (порожньо — завтра для превʼю, сьогодні для публікації)"
+        type: string
+        default: ""
+      force:
+        description: "Зараз, не чекаючи 18:00 / 8:30 (тестовий запуск, не рахується)"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths: ["kartky/run_request.json"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kartky
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests google-auth Pillow
+      - name: Що запускаємо
+        id: what
+        run: |
+          MODE=poll; DATE=""; FORCE=0
+          case "${{ github.event_name }}" in
+            workflow_dispatch)
+              MODE="${{ inputs.mode }}"; DATE="${{ inputs.date }}"; FORCE="${{ inputs.force && '1' || '0' }}" ;;
+            push)
+              MODE=$(python -c "import json;print(json.load(open('kartky/run_request.json')).get('mode','preview'))")
+              DATE=$(python -c "import json;print(json.load(open('kartky/run_request.json')).get('date',''))")
+              FORCE=1 ;;
+            schedule)
+              case "${{ github.event.schedule }}" in
+                "50 14 * * *"|"50 15 * * *") MODE=preview ;;
+                "5 5 * * *"|"5 6 * * *"|"17 8 * * *") MODE=publish ;;
+                *) MODE=poll ;;
+              esac ;;
+          esac
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"; echo "date=$DATE" >> "$GITHUB_OUTPUT"; echo "force=$FORCE" >> "$GITHUB_OUTPUT"
+          echo "Режим: $MODE, дата: ${DATE:-авто}, force: $FORCE"
+      - name: Листівки
+        env:
+          KARTKY_MODE: ${{ steps.what.outputs.mode }}
+          KARTKY_DATE: ${{ steps.what.outputs.date }}
+          KARTKY_FORCE: ${{ steps.what.outputs.force }}
+          KARTKY_TEST: "1"                     # 1 — тестовий режим: у соцмережі нічого не йде
+          KARTKY_CHAT_ID: "-1003946430136"     # Суперчат АКМЦ
+          KARTKY_THREAD_ID: "6"                # гілка «тест»
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FACEBOOK_PAGE_ID: "111460408546782"  # біла сторінка «У фокусі»
+          FACEBOOK_PAGE_TOKEN: ${{ secrets.FACEBOOK_PAGE_TOKEN }}
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+        run: python kartky/kartky.py
+      - name: Зберегти стан
+        if: always()
+        run: |
+          git config user.name "deepstate-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/kartky_state.json 2>/dev/null || true
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Листівки: стан"
+          for i in 1 2 3; do git pull --rebase -q && git push -q && break; sleep 5; done

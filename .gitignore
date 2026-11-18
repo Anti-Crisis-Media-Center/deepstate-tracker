@@ -1,3 +1,6 @@
 data/ig_*.jpg
 data/map_*.jpg
 data/tiktok_*.jpg
+
+# Листівки: тимчасові картинки
+data/kartky_tmp/
