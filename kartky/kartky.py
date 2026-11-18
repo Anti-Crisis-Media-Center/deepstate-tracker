@@ -69,8 +69,23 @@ MONTHS_GEN = ["січня", "лютого", "березня", "квітня", "�
               "вересня", "жовтня", "листопада", "грудня"]
 
 
+LOG: list[str] = []
+
+
 def log(msg: str) -> None:
-    print(f"[{datetime.now(KYIV):%H:%M:%S}] {msg}", flush=True)
+    line = f"[{datetime.now(KYIV):%Y-%m-%d %H:%M:%S}] {msg}"
+    LOG.append(line)
+    print(line, flush=True)
+
+
+def save_log() -> None:
+    """Останній запуск — у data/kartky_last_run.txt (щоб розбиратися без доступу до Actions)."""
+    try:
+        (ROOT / "data").mkdir(exist_ok=True)
+        (ROOT / "data" / "kartky_last_run.txt").write_text(
+            f"Режим: {MODE}, тест: {TEST}, force: {FORCE}\n" + "\n".join(LOG) + "\n", encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def human_date(d: date) -> str:
@@ -467,6 +482,7 @@ def tg(method: str, data: dict, files: dict | None = None) -> dict:
 
 
 def review(method: str, data: dict, files: dict | None = None) -> dict:
+    log(f"→ гілка «тест»: {method}")
     data = {"chat_id": REVIEW_CHAT, **data}
     if REVIEW_THREAD:
         data["message_thread_id"] = int(REVIEW_THREAD)
@@ -822,14 +838,18 @@ def main() -> int:
         else:
             run_preview(date.fromisoformat(forced) if forced else today + timedelta(days=1), st)
     except Exception as e:  # noqa: BLE001
-        log(f"Помилка: {e}")
+        import traceback
+        log(f"Помилка: {e}\n{traceback.format_exc()}")
         try:
             review_text(f"⚠️ Бот листівок: помилка — {html.escape(str(e))[:3000]}")
         except Exception:  # noqa: BLE001
             pass
         save_state(st)
+        save_log()
         return 1
     save_state(st)
+    log("Готово.")
+    save_log()
     return 0
 
 
