@@ -887,6 +887,18 @@ def main() -> int:
     try:
         if MODE == "poll":
             poll(st)
+        elif MODE == "fbcheck":   # чи має наш токен доступ до сторінок (нічого не публікує)
+            tok = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
+            for pid, name in (("111460408546782", "біла"), ("414302258746592", "жовта")):
+                js = requests.get(f"{FB_GRAPH}/{pid}", params={"fields": "name,access_token,tasks", "access_token": tok},
+                                  timeout=30).json()
+                if "error" in js:
+                    log(f"{name}: помилка — {js['error'].get('message')}")
+                else:
+                    log(f"{name}: {js.get('name')} — токен сторінки {'є' if js.get('access_token') else 'немає'}, "
+                        f"права {js.get('tasks')}")
+            dbg = requests.get(f"{FB_GRAPH}/me/accounts", params={"fields": "name,id", "access_token": tok}, timeout=30).json()
+            log(f"me/accounts: {[(a.get('name'), a.get('id')) for a in dbg.get('data', [])] or dbg.get('error', {}).get('message')}")
         elif MODE == "week":
             run_week(date.fromisoformat(forced) if forced else today)
         elif MODE == "check":   # лише перевірка у файл журналу, нічого в Telegram (для Claude)
