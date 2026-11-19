@@ -60,7 +60,7 @@ CHANNEL = os.getenv("TELEGRAM_CHAT_ID", "@acmc_ua").strip() or "@acmc_ua"
 MARKERS = {"#TG": "tg", "#FB": "fb", "#IG": "ig", "#THREADS": "threads", "#СТОРІЗ": "stories",
            "#STORIES": "stories", "#ALT": "alt", "#СТОП": "stop", "#STOP": "stop"}
 NET_LABEL = {"tg": "Telegram", "fb": "Facebook (біла сторінка)", "fby": "Facebook (жовта сторінка)", "ig": "Instagram",
-             "threads": "Threads", "stories": "Сторіз (Facebook + Instagram)"}
+             "threads": "Threads", "stories": "Сторіз (біла сторінка FB + Instagram)"}
 NET_FORMAT = {"tg": "square", "fb": "square", "fby": "square", "ig": "45", "threads": "45", "stories": "story"}
 # Жовта сторінка «Антикризовий медіа-центр» (рішення Юлі 19.11): той самий текст #FB і картка 1:1, що й на білу;
 # сторіз — лише біла сторінка й Instagram. Вимкнути — KARTKY_FB_YELLOW=0.
@@ -462,7 +462,7 @@ def checklist(p: dict, d: date, when: str) -> str:
         mark = "❌" if n["problems"] else ("⚠️" if n["notes"] and net == "tg" and len(n["text"]) > 1024 else "✅")
         info = [f"картка {FORMAT_LABEL[n['fmt']]}"]
         if net in LIMITS and n["text"]:
-            info.append(f"текст {len(n['text'])}/{LIMITS[net]}" if net != "fb" else f"текст {len(n['text'])} зн.")
+            info.append(f"текст {len(n['text'])}/{LIMITS[net]}" if net not in ("fb", "fby") else f"текст {len(n['text'])} зн.")
         info += n["notes"]
         info += n["problems"]
         lines.append(f"{mark} {NET_LABEL[net]} — {html.escape('; '.join(info))}")
