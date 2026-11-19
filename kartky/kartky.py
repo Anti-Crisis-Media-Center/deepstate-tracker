@@ -57,16 +57,20 @@ REVIEW_CHAT = os.getenv("KARTKY_CHAT_ID", "-1003946430136").strip()      # Су�
 REVIEW_THREAD = os.getenv("KARTKY_THREAD_ID", "6").strip()              # гілка «Тести»
 CHANNEL = os.getenv("TELEGRAM_CHAT_ID", "@acmc_ua").strip() or "@acmc_ua"
 
-MARKERS = {"#TG": "tg", "#FB": "fb", "#IG": "ig", "#THREADS": "threads", "#СТОРІЗ": "stories",
+MARKERS = {"#TG": "tg", "#FB": "fb", "#FB_БІЛА": "fb", "#FBБІЛА": "fb", "#FB-БІЛА": "fb",
+           "#FB_ЖОВТА": "fby", "#FBЖОВТА": "fby", "#FB-ЖОВТА": "fby", "#ЖОВТА": "fby", "#IG": "ig", "#THREADS": "threads", "#СТОРІЗ": "stories",
            "#STORIES": "stories", "#ALT": "alt", "#СТОП": "stop", "#STOP": "stop"}
 NET_LABEL = {"tg": "Telegram", "fb": "Facebook (біла сторінка)", "fby": "Facebook (жовта сторінка)", "ig": "Instagram",
              "threads": "Threads", "stories": "Сторіз (обидві сторінки FB + Instagram)"}
 NET_FORMAT = {"tg": "square", "fb": "square", "fby": "square", "ig": "45", "threads": "45", "stories": "story"}
-# Жовта сторінка «Антикризовий медіа-центр» (рішення Юлі 19.11): той самий текст #FB і картка 1:1, що й на білу;
+# Жовта сторінка «Антикризовий медіа-центр» (рішення Юлі 19.11): свій текст під міткою #FB_ЖОВТА (СММ-ниця: для жовтої
+# текст має відрізнятися), картка 1:1 та сама. Немає #FB_ЖОВТА — на жовту нічого не йде;
 # сторіз — теж на обидві сторінки й Instagram. Вимкнути жовту — KARTKY_FB_YELLOW=0.
 FB_WHITE = "111460408546782"
 FB_YELLOW = "414302258746592"
 FB_YELLOW_ON = os.getenv("KARTKY_FB_YELLOW", "1").strip() != "0"
+SHORT = {"tg": "Telegram", "fb": "FB біла", "fby": "FB жовта", "ig": "Instagram", "threads": "Threads",
+         "stories": "сторіз"}
 FORMAT_LABEL = {"square": "1:1", "45": "4:5", "story": "9:16"}
 LIMITS = {"tg": 1024, "fb": 60000, "fby": 60000, "ig": 2200, "threads": 500}
 WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"]
@@ -411,7 +415,9 @@ def build_plan(d: date) -> list[dict]:
             # дві картки одного формату заважають лише тоді, коли цей формат потрібен (28.11: дві сторіз, але без #СТОРІЗ)
             p["warn"] += [t for fmt, t in notes if fmt is None or fmt in needed]
         p["cards"] = cards
-        for net in ("tg", "fb", "ig", "threads", "stories"):
+        for net in ("tg", "fb", "fby", "ig", "threads", "stories"):
+            if net == "fby" and not FB_YELLOW_ON:
+                continue
             if net not in parsed:
                 p["skip"].append(net)
                 continue
@@ -437,8 +443,6 @@ def build_plan(d: date) -> list[dict]:
             if net == "ig" and parsed.get("alt", {}).get("plain"):
                 n["notes"].append("є альт-текст")
             p["nets"][net] = n
-            if net == "fb" and FB_YELLOW_ON:   # той самий допис — ще й на жовту сторінку
-                p["nets"]["fby"] = {**n, "problems": list(n["problems"]), "notes": list(n["notes"])}
         plans.append(p)
     return plans
 
@@ -467,7 +471,7 @@ def checklist(p: dict, d: date, when: str) -> str:
         info += n["problems"]
         lines.append(f"{mark} {NET_LABEL[net]} — {html.escape('; '.join(info))}")
     if p["skip"]:
-        lines.append("➖ Без мітки, не публікую: " + ", ".join(NET_LABEL[s].split(' (')[0] for s in p["skip"]))
+        lines.append("➖ Без мітки, не публікую: " + ", ".join(SHORT[s] for s in p["skip"]))
     for w in p["warn"]:
         lines.append(f"⚠️ {html.escape(w)}")
     if any(n["problems"] for n in p["nets"].values()):
@@ -514,7 +518,7 @@ def review_photo(img: Path, caption: str, parse_html: bool) -> None:
 
 
 def preview_network(net: str, n: dict, parsed: dict) -> None:
-    label = {"tg": "✈️ Telegram", "fb": "📘 Facebook" + (" — біла й жовта сторінки" if FB_YELLOW_ON else ""), "ig": "📷 Instagram", "threads": "🧵 Threads",
+    label = {"tg": "✈️ Telegram", "fb": "📘 Facebook — біла «У фокусі»", "fby": "📙 Facebook — жовта «Антикризовий медіа-центр»", "ig": "📷 Instagram", "threads": "🧵 Threads",
              "stories": "📱 Сторіз"}[net]
     card = n["card"]
     img = prepared(card, n["fmt"]) if card else None
@@ -771,8 +775,6 @@ def run_preview(d: date, st: dict) -> None:
         when = "Завтра" if d == datetime.now(KYIV).date() + timedelta(days=1) else "Превʼю"
         if p["nets"] and not p["stop"]:
             for net, n in p["nets"].items():
-                if net == "fby":   # той самий допис, що й на білу — превʼю один раз
-                    continue
                 try:
                     preview_network(net, n, p["parsed"])
                 except Exception as e:  # noqa: BLE001
@@ -873,14 +875,14 @@ def run_week(start: date) -> None:
                 for x in n["problems"]:
                     if "картки" in x or "папки" in x:
                         continue
-                    other.append(f"{NET_LABEL[net].split(' (')[0]}: {x}")
+                    other.append(f"{SHORT[net]}: {x}")
             probs = []
             if not p["folder"]:
                 probs.append(f"немає папки «{d.month:02d}.{d.day:02d} …» з картками")
             elif miss_cards:
                 probs.append("немає карток " + ", ".join(miss_cards))
             probs += list(dict.fromkeys(other))
-            nets = ", ".join(dict.fromkeys(NET_LABEL[n].split(" (")[0] for n in p["nets"]))
+            nets = ", ".join(SHORT[n] for n in p["nets"])
             if probs:
                 lines.append(f"❌ {head} — " + html.escape("; ".join(probs)))
             else:
