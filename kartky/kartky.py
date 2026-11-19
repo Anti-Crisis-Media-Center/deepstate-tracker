@@ -59,7 +59,11 @@ REVIEW_THREAD = os.getenv("KARTKY_THREAD_ID", "6").strip()              # гіл
 CHANNEL = os.getenv("TELEGRAM_CHAT_ID", "@acmc_ua").strip() or "@acmc_ua"
 
 MARKERS = {"#TG": "tg", "#FB": "fb", "#FB_БІЛА": "fb", "#FBБІЛА": "fb", "#FB-БІЛА": "fb",
-           "#FB_ЖОВТА": "fby", "#FBЖОВТА": "fby", "#FB-ЖОВТА": "fby", "#ЖОВТА": "fby", "#IG": "ig", "#THREADS": "threads", "#СТОРІЗ": "stories",
+           "#FB_ЖОВТА": "fby", "#FBЖОВТА": "fby", "#FB-ЖОВТА": "fby", "#ЖОВТА": "fby", "#IG": "ig", "#THREADS": "threads",
+           # перший коментар (рішення 19.11): посилання — у коментар, бо FB ріже охоплення постів із лінками
+           "#FB_КОМЕНТАР": "fbc", "#FBКОМЕНТАР": "fbc", "#FB-КОМЕНТАР": "fbc", "#КОМЕНТАР_FB": "fbc",
+           "#FB_БІЛА_КОМЕНТАР": "fbcw", "#FB_ЖОВТА_КОМЕНТАР": "fbcy",
+           "#THREADS_КОМЕНТАР": "thc", "#THREADSКОМЕНТАР": "thc", "#THREADS-КОМЕНТАР": "thc", "#СТОРІЗ": "stories",
            "#STORIES": "stories", "#ALT": "alt", "#СТОП": "stop", "#STOP": "stop"}
 NET_LABEL = {"tg": "Telegram", "fb": "Facebook (біла сторінка)", "fby": "Facebook (жовта сторінка)", "ig": "Instagram",
              "threads": "Threads", "stories": "Сторіз (обидві сторінки FB + Instagram)"}
@@ -357,15 +361,24 @@ def _tidy(text: str) -> str:
 def parse_description(desc: str) -> dict:
     """{мережа: {"tg": html, "plain": текст}}, плюс "stop", "stories" (без тексту), "alt", "topic"."""
     sections: dict[str, list[tuple[str, str]]] = {}
+    unknown: list[str] = []
     current = None
     for line in split_lines(desc or ""):
         w = _Walker()
         w.feed(line)
         tg, plain = w.result()
-        key = plain.strip().upper().replace(" ", "")
+        raw = plain.strip()
+        # «#FB_КОМЕНТАР (для обох сторінок)» — пояснення в дужках після мітки ігноруємо
+        key = re.sub(r"\(.*?\)", "", raw).upper().replace(" ", "") if raw.startswith("#") else raw.upper().replace(" ", "")
         if key in MARKERS:
             current = MARKERS[key]
             sections.setdefault(current, [])
+            continue
+        tok = re.sub(r"\(.*?\)", "", raw).strip()
+        if re.fullmatch(r"#[A-ZА-ЯІЇЄҐ0-9_\-]{2,}", tok) and tok == tok.upper() and not tok[1:].isdigit():
+            # невідома мітка великими літерами — не приклеюємо її текст до попередньої мережі
+            unknown.append(tok)
+            current = None
             continue
         if current:
             sections[current].append((tg, plain))
@@ -383,6 +396,8 @@ def parse_description(desc: str) -> dict:
             lines = keep
             out["topic"] = topic
         out[net] = {"tg": _tidy("\n".join(t for t, _ in lines)), "plain": _tidy("\n".join(p for _, p in lines))}
+    if unknown:
+        out["unknown"] = unknown
     return out
 
 
@@ -443,7 +458,19 @@ def build_plan(d: date) -> list[dict]:
                 n["notes"].append(f"тема «{parsed['topic']}»")
             if net == "ig" and parsed.get("alt", {}).get("plain"):
                 n["notes"].append("є альт-текст")
+            ckey = {"fb": ("fbcw", "fbc"), "fby": ("fbcy", "fbc"), "threads": ("thc",)}.get(net, ())
+            comment = next((parsed[k]["plain"] for k in ckey if parsed.get(k, {}).get("plain")), "")
+            n["comment"] = comment
+            if comment:
+                n["notes"].append(f"+ перший коментар ({len(comment)} зн.)")
+                if net == "threads" and len(comment) > 500:
+                    n["problems"].append(f"коментар {len(comment)} знаків — ліміт 500")
+            elif ckey and re.search(r"коментар", text, re.I):
+                n["notes"].append("у тексті згадано коментар, але розділу "
+                                  + ("#THREADS_КОМЕНТАР" if net == "threads" else "#FB_КОМЕНТАР") + " немає — допиши або прибери згадку")
             p["nets"][net] = n
+        for k in parsed.get("unknown", []):
+            p["warn"].append(f"мітку {k} бот не знає — текст під нею ніде не публікується")
         plans.append(p)
     return plans
 
@@ -464,7 +491,8 @@ def checklist(p: dict, d: date, when: str) -> str:
         return "\n".join(lines)
     lines.append(f"О {PUBLISH_AT[0]}:{PUBLISH_AT[1]:02d} вийде:")
     for net, n in p["nets"].items():
-        mark = "❌" if n["problems"] else ("⚠️" if n["notes"] and net == "tg" and len(n["text"]) > 1024 else "✅")
+        mark = "❌" if n["problems"] else ("⚠️" if (net == "tg" and len(n["text"]) > 1024)
+                                          or any(x.startswith("у тексті згадано коментар") for x in n["notes"]) else "✅")
         info = [f"картка {FORMAT_LABEL[n['fmt']]}"]
         if net in LIMITS and n["text"]:
             info.append(f"текст {len(n['text'])}/{LIMITS[net]}" if net not in ("fb", "fby") else f"текст {len(n['text'])} зн.")
@@ -541,8 +569,10 @@ def preview_network(net: str, n: dict, parsed: dict) -> None:
         review_photo(img, f"{label} — картка {FORMAT_LABEL[n['fmt']]}", False)
     else:
         review_text(f"{label} — ❌ картки немає")
+    if n.get("comment"):
+        extra += f"\n\n💬 <i>Перший коментар:</i>\n{html.escape(n['comment'])}"
     if n["text"]:
-        review_text(body + extra)
+        review_text((body + extra)[:4096])
 
 
 def stop_button(d: date) -> dict:
@@ -654,7 +684,16 @@ def pub_fb(n: dict, alt: str | None, page: str | None = None) -> str:
             js = requests.post(f"{FB_GRAPH}/{page_id}/photos", data=data, files={"source": fh}, timeout=120).json()
     js = _fb_check(js)
     post_id = js.get("post_id") or js.get("id")
-    return f"https://www.facebook.com/{post_id}"
+    link = f"https://www.facebook.com/{post_id}"
+    if n.get("comment"):   # помилка коментаря не скасовує вже опублікований пост
+        try:
+            time.sleep(3)
+            _fb_check(requests.post(f"{FB_GRAPH}/{post_id}/comments",
+                                    data={"message": n["comment"], "access_token": token}, timeout=60).json())
+            link += " + коментар"
+        except Exception as e:  # noqa: BLE001
+            link += f" (⚠️ коментар не додано: {e}; додай вручну)"
+    return link
 
 
 def pub_ig(n: dict, alt: str | None) -> str:
@@ -700,7 +739,25 @@ def pub_threads(n: dict, topic: str | None) -> str:
                                   data={"creation_id": cid, "access_token": tok}, timeout=60).json())["id"]
     js = requests.get(f"{THREADS_GRAPH}/{pid}", params={"fields": "permalink", "access_token": tok},
                       timeout=30).json()
-    return js.get("permalink") or f"Threads {pid}"
+    link = js.get("permalink") or f"Threads {pid}"
+    if n.get("comment"):   # відповідь під власним дописом = «перший коментар»
+        try:
+            time.sleep(5)
+            rid = _fb_check(requests.post(f"{THREADS_GRAPH}/{uid}/threads",
+                                          data={"media_type": "TEXT", "text": n["comment"], "reply_to_id": pid,
+                                                "access_token": tok}, timeout=60).json())["id"]
+            for _ in range(10):
+                stt = requests.get(f"{THREADS_GRAPH}/{rid}", params={"fields": "status", "access_token": tok},
+                                   timeout=30).json()
+                if stt.get("status") in ("FINISHED", "ERROR", "EXPIRED"):
+                    break
+                time.sleep(3)
+            _fb_check(requests.post(f"{THREADS_GRAPH}/{uid}/threads_publish",
+                                    data={"creation_id": rid, "access_token": tok}, timeout=60).json())
+            link += " + коментар"
+        except Exception as e:  # noqa: BLE001
+            link += f" (⚠️ коментар не додано: {e}; додай вручну)"
+    return link
 
 
 def pub_stories(n: dict) -> str:
@@ -916,6 +973,12 @@ def main() -> int:
                         "")
             dbg = requests.get(f"{FB_GRAPH}/me/accounts", params={"fields": "name,id,tasks", "access_token": tok}, timeout=30).json()
             log(f"me/accounts: {[(a.get('name'), a.get('id'), a.get('tasks')) for a in dbg.get('data', [])] or dbg.get('error', {}).get('message')}")
+            perms = requests.get(f"{FB_GRAPH}/me/permissions", params={"access_token": tok}, timeout=30).json()
+            log(f"FB дозволи: {[x.get('permission') for x in perms.get('data', []) if x.get('status') == 'granted'] or perms.get('error', {}).get('message')}")
+            ttok = os.getenv("THREADS_TOKEN", "").strip()
+            lim = requests.get(f"{THREADS_GRAPH}/me/threads_publishing_limit",
+                               params={"fields": "quota_usage,reply_quota_usage,reply_config", "access_token": ttok}, timeout=30).json()
+            log(f"Threads ліміти/відповіді: {lim}")
         elif MODE == "week":
             run_week(date.fromisoformat(forced) if forced else today)
         elif MODE == "check":   # лише перевірка у файл журналу, нічого в Telegram (для Claude)
