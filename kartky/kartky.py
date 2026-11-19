@@ -60,10 +60,10 @@ CHANNEL = os.getenv("TELEGRAM_CHAT_ID", "@acmc_ua").strip() or "@acmc_ua"
 MARKERS = {"#TG": "tg", "#FB": "fb", "#IG": "ig", "#THREADS": "threads", "#СТОРІЗ": "stories",
            "#STORIES": "stories", "#ALT": "alt", "#СТОП": "stop", "#STOP": "stop"}
 NET_LABEL = {"tg": "Telegram", "fb": "Facebook (біла сторінка)", "fby": "Facebook (жовта сторінка)", "ig": "Instagram",
-             "threads": "Threads", "stories": "Сторіз (біла сторінка FB + Instagram)"}
+             "threads": "Threads", "stories": "Сторіз (обидві сторінки FB + Instagram)"}
 NET_FORMAT = {"tg": "square", "fb": "square", "fby": "square", "ig": "45", "threads": "45", "stories": "story"}
 # Жовта сторінка «Антикризовий медіа-центр» (рішення Юлі 19.11): той самий текст #FB і картка 1:1, що й на білу;
-# сторіз — лише біла сторінка й Instagram. Вимкнути — KARTKY_FB_YELLOW=0.
+# сторіз — теж на обидві сторінки й Instagram. Вимкнути жовту — KARTKY_FB_YELLOW=0.
 FB_WHITE = "111460408546782"
 FB_YELLOW = "414302258746592"
 FB_YELLOW_ON = os.getenv("KARTKY_FB_YELLOW", "1").strip() != "0"
@@ -520,7 +520,7 @@ def preview_network(net: str, n: dict, parsed: dict) -> None:
     img = prepared(card, n["fmt"]) if card else None
     if net == "stories":
         if img:
-            review_photo(img, f"{label} — Facebook + Instagram", False)
+            review_photo(img, f"{label} — " + ("Facebook (обидві сторінки)" if FB_YELLOW_ON else "Facebook") + " + Instagram", False)
         return
     if net == "tg" and img and len(n["text"]) <= 1024:   # саме так, як вийде в каналі
         review_text(f"{label} — так виглядатиме в каналі:")
@@ -699,21 +699,25 @@ def pub_threads(n: dict, topic: str | None) -> str:
 
 
 def pub_stories(n: dict) -> str:
-    page_id, token = fb_credentials()
+    """Сторіз: біла сторінка FB, жовта сторінка FB (з 19.11, рішення Юлі) і Instagram (прив'язаний до білої)."""
     img = prepared(n["card"], n["fmt"])
     done = []
     errors = []
+    pages = [(FB_WHITE, "Facebook біла")] + ([(FB_YELLOW, "Facebook жовта")] if FB_YELLOW_ON else [])
+    for pid, name in pages:
+        try:
+            page_id, token = fb_credentials(pid)
+            with img.open("rb") as fh:
+                up = _fb_check(requests.post(f"{FB_GRAPH}/{page_id}/photos",
+                                             data={"published": "false", "access_token": token},
+                                             files={"source": fh}, timeout=120).json())
+            _fb_check(requests.post(f"{FB_GRAPH}/{page_id}/photo_stories",
+                                    data={"photo_id": up["id"], "access_token": token}, timeout=60).json())
+            done.append(name)
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{name}: {e}")
     try:
-        with img.open("rb") as fh:
-            up = _fb_check(requests.post(f"{FB_GRAPH}/{page_id}/photos",
-                                         data={"published": "false", "access_token": token},
-                                         files={"source": fh}, timeout=120).json())
-        _fb_check(requests.post(f"{FB_GRAPH}/{page_id}/photo_stories",
-                                data={"photo_id": up["id"], "access_token": token}, timeout=60).json())
-        done.append("Facebook")
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"Facebook: {e}")
-    try:
+        page_id, token = fb_credentials(FB_WHITE)
         ig_id = ig_api.ig_user_id(FB_GRAPH, page_id, token)
         if not ig_id:
             raise RuntimeError("Instagram не підключений")
