@@ -13,12 +13,13 @@ on:
     - cron: "17 8 * * *"    # публікація, якщо ранкові не відбулися
     - cron: "25 16-23 * * *"   # щогодини вночі: чи не натиснули «❌ Не публікувати»
     - cron: "25 0-4 * * *"
+    - cron: "40 7 * * 1"    # щопонеділка 09:40 зима / 10:40 літо: огляд дат на два тижні (рішення 19.11)
   workflow_dispatch:
     inputs:
       mode:
-        description: "preview — превʼю, publish — публікація, poll — перевірити кнопку"
+        description: "preview — превʼю, publish — публікація, poll — перевірити кнопку, week — огляд на 2 тижні"
         type: choice
-        options: [preview, publish, poll]
+        options: [preview, publish, poll, week]
         default: preview
       date:
         description: "Дата РРРР-ММ-ДД (порожньо — завтра для превʼю, сьогодні для публікації)"
@@ -64,6 +65,7 @@ jobs:
               case "${{ github.event.schedule }}" in
                 "50 14 * * *"|"50 15 * * *") MODE=preview ;;
                 "5 5 * * *"|"5 6 * * *"|"17 8 * * *") MODE=publish ;;
+                "40 7 * * 1") MODE=week ;;
                 *) MODE=poll ;;
               esac ;;
           esac

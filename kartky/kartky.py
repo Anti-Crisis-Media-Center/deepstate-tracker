@@ -835,6 +835,51 @@ def run_publish(d: date, st: dict) -> None:
         st.setdefault("published", {})[key] = datetime.now(KYIV).isoformat(timespec="minutes")
 
 
+def run_week(start: date) -> None:
+    """Щопонеділковий огляд (рішення Юлі 19.11): усі дати на 14 днів уперед — що готово, чого бракує."""
+    end = start + timedelta(days=13)
+    lines = [f"📅 <b>Листівки на два тижні: {start.day}.{start.month:02d}–{end.day}.{end.month:02d}</b>"]
+    found = False
+    for i in range(14):
+        d = start + timedelta(days=i)
+        for p in build_plan(d):
+            found = True
+            head = f"{d.day}.{d.month:02d} ({WEEKDAYS[d.weekday()]}) {html.escape(p['title'])}"
+            if p["stop"]:
+                lines.append(f"🚫 {head} — #СТОП, не публікуємо")
+                continue
+            if not p["nets"]:
+                what = "немає текстів під мітками" + ("" if p["folder"] else f" і папки «{d.month:02d}.{d.day:02d} …»")
+                lines.append(f"❌ {head} — {what}")
+                continue
+            miss_cards = sorted({FORMAT_LABEL[n["fmt"]] for n in p["nets"].values()
+                                 if any("картки" in x or "папки" in x for x in n["problems"])})
+            other = []
+            for net, n in p["nets"].items():
+                for x in n["problems"]:
+                    if "картки" in x or "папки" in x:
+                        continue
+                    other.append(f"{NET_LABEL[net].split(' (')[0]}: {x}")
+            probs = []
+            if not p["folder"]:
+                probs.append(f"немає папки «{d.month:02d}.{d.day:02d} …» з картками")
+            elif miss_cards:
+                probs.append("немає карток " + ", ".join(miss_cards))
+            probs += other
+            nets = ", ".join(NET_LABEL[n].split(" (")[0] for n in p["nets"])
+            if probs:
+                lines.append(f"❌ {head} — " + html.escape("; ".join(probs)))
+            else:
+                lines.append(f"✅ {head} — усе готово ({nets})")
+            for w in p["warn"]:
+                lines.append(f"   ⚠️ {html.escape(w)}")
+    if not found:
+        lines.append("Дат у календарі на ці два тижні немає.")
+    else:
+        lines.append("\nДе ❌ — виправ до вечора напередодні: о 18:00 бот надішле превʼю, о 8:30 опублікує готове.")
+    review_text("\n".join(lines))
+
+
 def main() -> int:
     st = load_state()
     today = datetime.now(KYIV).date()
@@ -842,6 +887,8 @@ def main() -> int:
     try:
         if MODE == "poll":
             poll(st)
+        elif MODE == "week":
+            run_week(date.fromisoformat(forced) if forced else today)
         elif MODE == "check":   # лише перевірка у файл журналу, нічого в Telegram (для Claude)
             for ds in (forced or (today + timedelta(days=1)).isoformat()).split(","):
                 d = date.fromisoformat(ds.strip())
