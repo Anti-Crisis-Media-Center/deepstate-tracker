@@ -59,11 +59,16 @@ CHANNEL = os.getenv("TELEGRAM_CHAT_ID", "@acmc_ua").strip() or "@acmc_ua"
 
 MARKERS = {"#TG": "tg", "#FB": "fb", "#IG": "ig", "#THREADS": "threads", "#СТОРІЗ": "stories",
            "#STORIES": "stories", "#ALT": "alt", "#СТОП": "stop", "#STOP": "stop"}
-NET_LABEL = {"tg": "Telegram", "fb": "Facebook (біла сторінка)", "ig": "Instagram",
+NET_LABEL = {"tg": "Telegram", "fb": "Facebook (біла сторінка)", "fby": "Facebook (жовта сторінка)", "ig": "Instagram",
              "threads": "Threads", "stories": "Сторіз (Facebook + Instagram)"}
-NET_FORMAT = {"tg": "square", "fb": "square", "ig": "45", "threads": "45", "stories": "story"}
+NET_FORMAT = {"tg": "square", "fb": "square", "fby": "square", "ig": "45", "threads": "45", "stories": "story"}
+# Жовта сторінка «Антикризовий медіа-центр» (рішення Юлі 19.11): той самий текст #FB і картка 1:1, що й на білу;
+# сторіз — лише біла сторінка й Instagram. Вимкнути — KARTKY_FB_YELLOW=0.
+FB_WHITE = "111460408546782"
+FB_YELLOW = "414302258746592"
+FB_YELLOW_ON = os.getenv("KARTKY_FB_YELLOW", "1").strip() != "0"
 FORMAT_LABEL = {"square": "1:1", "45": "4:5", "story": "9:16"}
-LIMITS = {"tg": 1024, "fb": 60000, "ig": 2200, "threads": 500}
+LIMITS = {"tg": 1024, "fb": 60000, "fby": 60000, "ig": 2200, "threads": 500}
 WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"]
 MONTHS_GEN = ["січня", "лютого", "березня", "квітня", "травня", "червня", "липня", "серпня",
               "вересня", "жовтня", "листопада", "грудня"]
@@ -432,6 +437,8 @@ def build_plan(d: date) -> list[dict]:
             if net == "ig" and parsed.get("alt", {}).get("plain"):
                 n["notes"].append("є альт-текст")
             p["nets"][net] = n
+            if net == "fb" and FB_YELLOW_ON:   # той самий допис — ще й на жовту сторінку
+                p["nets"]["fby"] = {**n, "problems": list(n["problems"]), "notes": list(n["notes"])}
         plans.append(p)
     return plans
 
@@ -507,7 +514,7 @@ def review_photo(img: Path, caption: str, parse_html: bool) -> None:
 
 
 def preview_network(net: str, n: dict, parsed: dict) -> None:
-    label = {"tg": "✈️ Telegram", "fb": "📘 Facebook", "ig": "📷 Instagram", "threads": "🧵 Threads",
+    label = {"tg": "✈️ Telegram", "fb": "📘 Facebook" + (" — біла й жовта сторінки" if FB_YELLOW_ON else ""), "ig": "📷 Instagram", "threads": "🧵 Threads",
              "stories": "📱 Сторіз"}[net]
     card = n["card"]
     img = prepared(card, n["fmt"]) if card else None
@@ -590,10 +597,10 @@ def poll(st: dict) -> None:
 _FB: dict = {}
 
 
-def fb_credentials() -> tuple[str, str]:
-    if "v" in _FB:
-        return _FB["v"]
-    page_id = os.getenv("FACEBOOK_PAGE_ID", "").strip() or "111460408546782"   # біла сторінка «У фокусі»
+def fb_credentials(page: str | None = None) -> tuple[str, str]:
+    page_id = page or os.getenv("FACEBOOK_PAGE_ID", "").strip() or FB_WHITE   # за замовчуванням біла «У фокусі»
+    if page_id in _FB:
+        return _FB[page_id]
     token = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
     res = (page_id, token)
     if page_id and token and page_id != "me":
@@ -601,7 +608,7 @@ def fb_credentials() -> tuple[str, str]:
                           timeout=30).json()
         if js.get("access_token"):
             res = (page_id, js["access_token"])
-    _FB["v"] = res
+    _FB[page_id] = res
     return res
 
 
@@ -628,8 +635,8 @@ def pub_tg(n: dict) -> str:
     return f"повідомлення {res['message_id']}"
 
 
-def pub_fb(n: dict, alt: str | None) -> str:
-    page_id, token = fb_credentials()
+def pub_fb(n: dict, alt: str | None, page: str | None = None) -> str:
+    page_id, token = fb_credentials(page)
     img = prepared(n["card"], n["fmt"])
     data = {"caption": n["text"], "published": "true", "access_token": token}
     if alt:
@@ -722,7 +729,8 @@ def pub_stories(n: dict) -> str:
 
 PUBLISHERS = {
     "tg": lambda n, p: pub_tg(n),
-    "fb": lambda n, p: pub_fb(n, (p["parsed"].get("alt") or {}).get("plain")),
+    "fb": lambda n, p: pub_fb(n, (p["parsed"].get("alt") or {}).get("plain"), FB_WHITE),
+    "fby": lambda n, p: pub_fb(n, (p["parsed"].get("alt") or {}).get("plain"), FB_YELLOW),
     "ig": lambda n, p: pub_ig(n, (p["parsed"].get("alt") or {}).get("plain")),
     "threads": lambda n, p: pub_threads(n, p["parsed"].get("topic")),
     "stories": lambda n, p: pub_stories(n),
@@ -759,6 +767,8 @@ def run_preview(d: date, st: dict) -> None:
         when = "Завтра" if d == datetime.now(KYIV).date() + timedelta(days=1) else "Превʼю"
         if p["nets"] and not p["stop"]:
             for net, n in p["nets"].items():
+                if net == "fby":   # той самий допис, що й на білу — превʼю один раз
+                    continue
                 try:
                     preview_network(net, n, p["parsed"])
                 except Exception as e:  # noqa: BLE001
@@ -865,8 +875,8 @@ def run_week(start: date) -> None:
                 probs.append(f"немає папки «{d.month:02d}.{d.day:02d} …» з картками")
             elif miss_cards:
                 probs.append("немає карток " + ", ".join(miss_cards))
-            probs += other
-            nets = ", ".join(NET_LABEL[n].split(" (")[0] for n in p["nets"])
+            probs += list(dict.fromkeys(other))
+            nets = ", ".join(dict.fromkeys(NET_LABEL[n].split(" (")[0] for n in p["nets"]))
             if probs:
                 lines.append(f"❌ {head} — " + html.escape("; ".join(probs)))
             else:
