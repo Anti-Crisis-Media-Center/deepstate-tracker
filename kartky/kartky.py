@@ -635,7 +635,7 @@ _FB: dict = {}
 # ============================ НОВІ КАРТКИ НА ДИСКУ (рішення 21.11) ============================
 
 def watch_cards(st: dict) -> None:
-    """Пише в «Тести», коли дизайнер поклав або замінив картки в папках дат. Лише 8:00–21:59 за Києвом."""
+    """Раз на добу після превʼю: зведення в «Тести», які картки дизайнер поклав чи замінив за добу."""
     now = datetime.now(KYIV)
     if not (8 <= now.hour <= 21) and not os.getenv("KARTKY_WATCH_ANYTIME"):
         log("Стеження за картками: нічна пора — перевірю зранку.")
@@ -689,7 +689,7 @@ def watch_cards(st: dict) -> None:
     if not lines:
         log("Стеження за картками: змін немає.")
         return
-    text = "🎨 <b>Нові картки на Диску</b>\n\n" + "\n\n".join(lines)
+    text = "🎨 <b>Нові картки на Диску за добу</b>\n\n" + "\n\n".join(lines)
     text += "\n\n<i>9:16 потрібна лише для подій із #СТОРІЗ. Повна перевірка – у превʼю о 18:00 напередодні.</i>"
     review_text(text[:4000])
 
@@ -1023,7 +1023,6 @@ def main() -> int:
     try:
         if MODE == "poll":
             poll(st)
-            watch_cards(st)
         elif MODE == "watch":
             watch_cards(st)
         elif MODE == "fbcheck":   # чи має наш токен доступ до сторінок (нічого не публікує)
@@ -1058,6 +1057,7 @@ def main() -> int:
             run_publish(date.fromisoformat(forced) if forced else today, st)
         else:
             run_preview(date.fromisoformat(forced) if forced else today + timedelta(days=1), st)
+            watch_cards(st)   # раз на добу, після превʼю: зведення нових карток (рішення 21.11)
     except Exception as e:  # noqa: BLE001
         import traceback
         log(f"Помилка: {e}\n{traceback.format_exc()}")
