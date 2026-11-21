@@ -465,7 +465,7 @@ def build_plan(d: date) -> list[dict]:
                 n["notes"].append(f"+ перший коментар ({len(comment)} зн.)")
                 if net == "threads" and len(comment) > 500:
                     n["problems"].append(f"коментар {len(comment)} знаків — ліміт 500")
-            elif ckey and re.search(r"коментар", text, re.I):
+            elif ckey and re.search(r"перш\w*\s+коментар|[ув]\s+коментарі\b|коментарі?\s*👇", text, re.I):
                 n["notes"].append("у тексті згадано коментар, але розділу "
                                   + ("#THREADS_КОМЕНТАР" if net == "threads" else "#FB_КОМЕНТАР") + " немає — допиши або прибери згадку")
             p["nets"][net] = n
