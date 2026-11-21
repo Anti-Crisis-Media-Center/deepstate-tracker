@@ -634,65 +634,126 @@ _FB: dict = {}
 
 # ============================ НОВІ КАРТКИ НА ДИСКУ (рішення 21.11) ============================
 
-def watch_cards(st: dict) -> None:
-    """Раз на добу після превʼю: зведення в «Тести», які картки дизайнер поклав чи замінив за добу."""
-    now = datetime.now(KYIV)
-    if not (8 <= now.hour <= 21) and not os.getenv("KARTKY_WATCH_ANYTIME"):
-        log("Стеження за картками: нічна пора — перевірю зранку.")
-        return
+SEC_LABEL = {"tg": "#TG", "fb": "#FB_БІЛА", "fby": "#FB_ЖОВТА", "ig": "#IG", "threads": "#THREADS",
+             "stories": "#СТОРІЗ", "fbc": "#FB_КОМЕНТАР", "fbcw": "#FB_БІЛА_КОМЕНТАР", "fbcy": "#FB_ЖОВТА_КОМЕНТАР",
+             "thc": "#THREADS_КОМЕНТАР", "alt": "#ALT", "stop": "#СТОП", "topic": "Тема Threads"}
+
+
+def _h(x: str) -> str:
+    import hashlib
+    return hashlib.sha1(x.encode("utf-8")).hexdigest()[:12]
+
+
+def _card_changes(st: dict) -> list[str]:
     root = root_folder()
     if not root:
-        log("Стеження за картками: не бачу кореневої папки.")
-        return
+        return []
     folders = [f for f in drive_list(f"'{root['id']}' in parents and trashed=false and mimeType='{FOLDER}'")
                if re.match(r"\s*\d{2}\.\d{2}", f["name"])]
-    first_run = "seen_cards" not in st
+    first = "seen_cards" not in st
     seen = st.setdefault("seen_cards", {})
-    lines = []
-    alive = set()
+    out, alive = [], set()
+    flds = "files(id,name,mimeType,modifiedTime,imageMediaMetadata(width,height),lastModifyingUser(displayName))"
     for fo in sorted(folders, key=lambda f: f["name"]):
-        files = drive_list(f"'{fo['id']}' in parents and trashed=false and mimeType!='{FOLDER}'")
+        files = drive_list(f"'{fo['id']}' in parents and trashed=false and mimeType!='{FOLDER}'", flds)
         old = seen.get(fo["id"], {})
         cur = {f["id"]: f.get("modifiedTime", "") for f in files}
         alive.add(fo["id"])
         added = [f for f in files if f["id"] not in old]
         changed = [f for f in files if f["id"] in old and old[f["id"]] != cur[f["id"]]]
         seen[fo["id"]] = cur
-        if first_run or not (added or changed):
+        if first or not (added or changed):
             continue
         fmts = set()
         for f in files:
-            if "вручну" in f["name"].lower():
-                continue
             m = f.get("imageMediaMetadata") or {}
-            fm = classify(m.get("width"), m.get("height"))
+            fm = None if "вручну" in f["name"].lower() else classify(m.get("width"), m.get("height"))
             if fm:
                 fmts.add(fm)
+        who = sorted({(f.get("lastModifyingUser") or {}).get("displayName", "") for f in added + changed} - {""})
         def names(lst):
             return ", ".join(f"«{html.escape(x['name'])}»" for x in lst[:6]) + (" …" if len(lst) > 6 else "")
-        part = [f"📁 <b>{html.escape(fo['name'].strip())}</b>"]
+        part = [f"📁 <b>{html.escape(fo['name'].strip())}</b>" + (f" – {html.escape(', '.join(who))}" if who else "")]
         if added:
             part.append(f"   ➕ нові: {names(added)}")
         if changed:
-            part.append(f"   ✏️ оновлені: {names(changed)}")
+            part.append(f"   ✏️ замінені: {names(changed)}")
         have = [FORMAT_LABEL[k] for k in ("square", "45", "story") if k in fmts]
         miss = [FORMAT_LABEL[k] for k in ("square", "45", "story") if k not in fmts]
         part.append("   Є формати: " + (", ".join(have) if have else "жодного придатного")
-                    + (f"; бракує: {', '.join(miss)}" if miss else " – усі три є ✅"))
-        lines.append("\n".join(part))
+                    + (f"; бракує: {', '.join(miss)}" if miss else " – усі три ✅"))
+        out.append("\n".join(part))
     for k in list(seen):
-        if k not in alive:   # папку перенесено в «Опубліковано» чи видалено
+        if k not in alive:
             seen.pop(k)
-    if first_run:
-        log(f"Стеження за картками: запам'ятала {len(folders)} папок, повідомлення не надсилаю (перший запуск).")
-        return
-    if not lines:
-        log("Стеження за картками: змін немає.")
-        return
-    text = "🎨 <b>Нові картки на Диску за добу</b>\n\n" + "\n\n".join(lines)
-    text += "\n\n<i>9:16 потрібна лише для подій із #СТОРІЗ. Повна перевірка – у превʼю о 18:00 напередодні.</i>"
-    review_text(text[:4000])
+    return out
 
+
+def _calendar_changes(st: dict) -> list[str]:
+    now = datetime.now(KYIV)
+    r = google().get(f"https://www.googleapis.com/calendar/v3/calendars/{quote(CALENDAR_ID)}/events",
+                     params={"timeMin": now.replace(hour=0, minute=0).isoformat(),
+                             "timeMax": (now + timedelta(days=90)).isoformat(),
+                             "singleEvents": "true", "orderBy": "startTime", "maxResults": 250}, timeout=30)
+    r.raise_for_status()
+    first = "seen_cal" not in st
+    seen = st.setdefault("seen_cal", {})
+    out, alive = [], set()
+    for ev in r.json().get("items", []):
+        if ev.get("status") == "cancelled":
+            continue
+        day = (ev.get("start") or {}).get("date") or ((ev.get("start") or {}).get("dateTime") or "")[:10]
+        parsed = parse_description(ev.get("description") or "")
+        sec = {k: _h(v["plain"] if isinstance(v, dict) else str(v)) for k, v in parsed.items() if k in SEC_LABEL}
+        sig = _h((ev.get("summary") or "") + "\n" + (ev.get("description") or ""))
+        alive.add(ev["id"])
+        old = seen.get(ev["id"])
+        seen[ev["id"]] = {"sig": sig, "sec": sec}
+        if first or (old and old["sig"] == sig):
+            continue
+        if old:
+            diff = [SEC_LABEL[k] for k in SEC_LABEL if old["sec"].get(k) != sec.get(k)]
+            what = ("змінено: " + ", ".join(diff)) if diff else "змінено назву або нотатки"
+        else:
+            what = "нова подія"
+        d = date.fromisoformat(day)
+        probs = []
+        for pl in build_plan(d):
+            if pl["event_id"] != ev["id"]:
+                continue
+            probs += pl["warn"]
+            for net, n in pl["nets"].items():
+                probs += [f"{SHORT[net]}: {x}" for x in n["problems"]]
+        line = f"🗓 <b>{human_date(d)} – {html.escape((ev.get('summary') or '').strip())}</b>\n   {what}"
+        line += ("\n   ⚠️ " + "\n   ⚠️ ".join(html.escape(x) for x in probs[:8])) if probs else "\n   ✅ бот усе розуміє, мітки й ліміти в нормі"
+        out.append(line)
+    for k in list(seen):
+        if k not in alive:
+            seen.pop(k)
+    return out
+
+
+def watch_cards(st: dict) -> None:
+    """Раз на добу після превʼю: «сьогодні відбулися зміни» – картки на Диску й тексти в календарі (рішення 21.11)."""
+    cards = cal = []
+    try:
+        cards = _card_changes(st)
+    except Exception as e:  # noqa: BLE001
+        log(f"Зведення: картки не перевірено – {e}")
+    try:
+        cal = _calendar_changes(st)
+    except Exception as e:  # noqa: BLE001
+        log(f"Зведення: календар не перевірено – {e}")
+    if not (cards or cal):
+        log("Зведення: змін за добу немає (або перший запуск – запам'ятала поточний стан).")
+        return
+    parts = ["📝 <b>Сьогодні відбулися зміни</b>"]
+    if cards:
+        parts.append("🎨 <b>Картки на Google Диску</b>\n\n" + "\n\n".join(cards))
+    if cal:
+        parts.append("✏️ <b>Тексти в Google Календарі</b>\n\n" + "\n\n".join(cal))
+    parts.append("<i>9:16 потрібна лише для подій із #СТОРІЗ. Повна перевірка – у превʼю о 18:00 напередодні дати.</i>")
+    review_text("\n\n".join(parts)[:4000])
 
 def fb_credentials(page: str | None = None) -> tuple[str, str]:
     page_id = page or os.getenv("FACEBOOK_PAGE_ID", "").strip() or FB_WHITE   # за замовчуванням біла «У фокусі»
@@ -1024,6 +1085,9 @@ def main() -> int:
         if MODE == "poll":
             poll(st)
         elif MODE == "watch":
+            watch_cards(st)
+        elif MODE == "digestdry":   # те саме зведення, але лише в журнал (для перевірки Claude)
+            globals()["review_text"] = lambda text, button=None: log("ЗВЕДЕННЯ (не надіслано):\n" + re.sub(r"<[^>]+>", "", text))
             watch_cards(st)
         elif MODE == "fbcheck":   # чи має наш токен доступ до сторінок (нічого не публікує)
             tok = os.getenv("FACEBOOK_PAGE_TOKEN", "").strip()
