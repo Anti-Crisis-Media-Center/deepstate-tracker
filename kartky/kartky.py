@@ -1032,6 +1032,131 @@ def run_publish(d: date, st: dict) -> None:
         st.setdefault("published", {})[key] = datetime.now(KYIV).isoformat(timespec="minutes")
 
 
+# ============================ СТАТИСТИКА ЛИСТІВОК (рішення 21.11) ============================
+
+def _ins_value(js) -> int | None:
+    for m in (js or {}).get("data", []):
+        if "total_value" in m:
+            return int((m["total_value"] or {}).get("value") or 0)
+        vals = m.get("values") or []
+        if vals and isinstance(vals[0].get("value"), (int, float)):
+            return int(vals[0]["value"])
+    return None
+
+
+def _median(xs: list) -> float | None:
+    xs = sorted(x for x in xs if isinstance(x, (int, float)))
+    if not xs:
+        return None
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+def _fb_posts(page_id: str, since: datetime) -> dict:
+    _, tok = fb_credentials(page_id)
+    js = requests.get(f"{FB_GRAPH}/{page_id}/posts", params={
+        "fields": "id,message,shares,reactions.summary(true).limit(0),comments.summary(true).limit(0)",
+        "since": int(since.timestamp()), "limit": 100, "access_token": tok}, timeout=60).json()
+    out = {}
+    for p in js.get("data", []):
+        if (p.get("message") or "").lstrip().startswith("DeepState"):
+            continue
+        eng = ((p.get("reactions") or {}).get("summary", {}).get("total_count", 0)
+               + (p.get("comments") or {}).get("summary", {}).get("total_count", 0)
+               + (p.get("shares") or {}).get("count", 0))
+        reach = None
+        for metric in ("post_impressions_unique", "post_total_media_view_unique"):
+            reach = _ins_value(requests.get(f"{FB_GRAPH}/{p['id']}/insights",
+                                            params={"metric": metric, "access_token": tok}, timeout=30).json())
+            if reach is not None:
+                break
+        out[p["id"]] = (reach, eng)
+    return out
+
+
+def _ig_posts(since: datetime) -> dict:
+    page_id, tok = fb_credentials()
+    ig = ig_api.ig_user_id(FB_GRAPH, page_id, tok)
+    js = requests.get(f"{FB_GRAPH}/{ig}/media", params={
+        "fields": "id,caption,timestamp,permalink,like_count,comments_count", "limit": 60,
+        "access_token": tok}, timeout=60).json()
+    out = {}
+    for m in js.get("data", []):
+        ts = datetime.fromisoformat(m["timestamp"].replace("+0000", "+00:00"))
+        if ts < since or (m.get("caption") or "").lstrip().startswith("DeepState"):
+            continue
+        reach = _ins_value(requests.get(f"{FB_GRAPH}/{m['id']}/insights",
+                                        params={"metric": "reach", "access_token": tok}, timeout=30).json())
+        out[(m.get("permalink") or "").rstrip("/").split("/")[-1]] = (reach, (m.get("like_count") or 0) + (m.get("comments_count") or 0))
+    return out
+
+
+def _threads_posts(since: datetime) -> dict:
+    tok = os.getenv("THREADS_TOKEN", "").strip()
+    js = requests.get(f"{THREADS_GRAPH}/me/threads", params={
+        "fields": "id,text,timestamp,permalink", "since": int(since.timestamp()), "limit": 60,
+        "access_token": tok}, timeout=60).json()
+    out = {}
+    for p in js.get("data", []):
+        if (p.get("text") or "").lstrip().startswith("DeepState"):
+            continue
+        ins = requests.get(f"{THREADS_GRAPH}/{p['id']}/insights",
+                           params={"metric": "views,likes,replies,reposts", "access_token": tok}, timeout=30).json()
+        v = {m["name"]: (m.get("values") or [{}])[0].get("value", 0) for m in ins.get("data", [])}
+        out[(p.get("permalink") or "").rstrip("/").split("/")[-1]] = (v.get("views"), v.get("likes", 0) + v.get("replies", 0) + v.get("reposts", 0))
+    return out
+
+
+def card_stats(st: dict, days: int = 35) -> list[str]:
+    """Результати опублікованих листівок порівняно з медіаною інших дописів сторінки за той самий період."""
+    today = datetime.now(KYIV).date()
+    items = []
+    for key, nets in (st.get("done") or {}).items():
+        d = date.fromisoformat(key.split(":")[0])
+        if today - timedelta(days=days) <= d <= today - timedelta(days=1):
+            items.append((d, key.split(":", 1)[1], nets))
+    if not items:
+        return []
+    since = datetime.combine(min(i[0] for i in items) - timedelta(days=21), datetime.min.time(), KYIV)
+    src = {}
+    for net, fn in (("fb", lambda: _fb_posts(FB_WHITE, since)), ("fby", lambda: _fb_posts(FB_YELLOW, since)),
+                    ("ig", lambda: _ig_posts(since)), ("threads", lambda: _threads_posts(since))):
+        try:
+            src[net] = fn()
+        except Exception as e:  # noqa: BLE001
+            log(f"Статистика {net}: {e}")
+            src[net] = {}
+    def key_of(net, link):
+        link = (link or "").split(" ")[0].rstrip("/")
+        return link.split("facebook.com/")[-1] if net in ("fb", "fby") else link.split("/")[-1]
+    card_keys = {net: {key_of(net, n.get(net)) for _, _, n in items} for net in src}
+    med = {net: (_median([r for k, (r, e) in data.items() if k not in card_keys[net]]),
+                 _median([e for k, (r, e) in data.items() if k not in card_keys[net]])) for net, data in src.items()}
+    lines = []
+    for d, ev_id, nets in sorted(items):
+        title = ""
+        try:
+            title = next((p["title"] for p in build_plan(d) if p["event_id"] == ev_id), "")
+        except Exception:  # noqa: BLE001
+            pass
+        parts = []
+        for net in ("fby", "fb", "ig", "threads"):
+            if net not in nets or net not in src:
+                continue
+            r, e = src[net].get(key_of(net, nets[net]), (None, None))
+            mr, me = med[net]
+            if r is None and e is None:
+                parts.append(f"{SHORT[net]}: немає даних")
+                continue
+            mark = "✅" if (r or 0) >= (mr or 0) else ("➖" if mr and (r or 0) >= mr / 2 else "❌")
+            unit = "переглядів" if net == "threads" else "охопл."
+            parts.append(f"{mark} {SHORT[net]}: {r if r is not None else '?'} {unit}, {e or 0} взаєм."
+                         + (f" (зазвичай {round(mr)} / {round(me or 0)})" if mr is not None else ""))
+        if parts:
+            lines.append(f"<b>{d.day}.{d.month:02d} {html.escape(title)}</b>\n   " + "\n   ".join(parts))
+    return lines
+
+
 def run_week(start: date) -> None:
     """Щопонеділковий огляд (рішення Юлі 19.11): усі дати на 14 днів уперед — що готово, чого бракує."""
     end = start + timedelta(days=13)
@@ -1075,10 +1200,23 @@ def run_week(start: date) -> None:
     else:
         lines.append("\nДе ❌ — виправ до вечора напередодні: о 18:00 бот надішле превʼю, о 8:30 опублікує готове.")
     review_text("\n".join(lines))
+    try:
+        res = card_stats(STATE_FOR_WEEK)
+    except Exception as e:  # noqa: BLE001
+        res = []
+        log(f"Статистика листівок: {e}")
+    if res:
+        review_text(("📊 <b>Як спрацювали листівки (останні 5 тижнів)</b>\n\n" + "\n\n".join(res)
+                     + "\n\n<i>«Зазвичай» – медіана інших дописів сторінки за той самий час (без DeepState). "
+                       "✅ не гірше за звичайне, ➖ від половини, ❌ менше половини. Telegram: перегляди бот не бачить.</i>")[:4000])
+
+
+STATE_FOR_WEEK: dict = {}
 
 
 def main() -> int:
     st = load_state()
+    STATE_FOR_WEEK.update(st)
     today = datetime.now(KYIV).date()
     forced = os.getenv("KARTKY_DATE", "").strip()
     try:
@@ -1086,6 +1224,9 @@ def main() -> int:
             poll(st)
         elif MODE == "watch":
             watch_cards(st)
+        elif MODE == "statsdry":   # статистика листівок лише в журнал (для перевірки Claude)
+            for line in card_stats(st):
+                log(re.sub(r"<[^>]+>", "", line))
         elif MODE == "digestdry":   # те саме зведення, але лише в журнал (для перевірки Claude)
             globals()["review_text"] = lambda text, button=None: log("ЗВЕДЕННЯ (не надіслано):\n" + re.sub(r"<[^>]+>", "", text))
             watch_cards(st)
