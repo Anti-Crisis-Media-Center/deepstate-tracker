@@ -2,7 +2,8 @@
  "previewed": {
   "2026-11-19": "no-events",
   "2026-11-20": "2026-11-19T18:00+02:00",
-  "2026-11-21": "2026-11-20T18:00+02:00"
+  "2026-11-21": "2026-11-20T18:00+02:00",
+  "2026-11-22": "no-events"
  },
  "published": {
   "2026-11-19": "no-events",
@@ -89,89 +90,89 @@
    }
   },
   "go1vdb90cesf3ja6gl3rih7k0k_20261201": {
-   "sig": "b8e711554701",
+   "sig": "59cf3f0fc439",
    "sec": {
-    "tg": "8e05c34dd060",
-    "fb": "8e05c34dd060",
-    "fby": "acb935a018f3",
-    "ig": "561ddc714b5f",
+    "tg": "837c7a9f8acf",
+    "fb": "5fadca1ec88c",
+    "fby": "36b39f6ac5ba",
+    "ig": "69a5de3ed8e8",
     "topic": "31f4645934bd",
-    "threads": "9b69bbde9840",
+    "threads": "d86b2d96abc3",
     "stories": "da39a3ee5e6b"
    }
   },
   "njopmafsbps6scbhm2250603qs_20261205": {
-   "sig": "5f2907e67f14",
+   "sig": "d0067b9ae1f9",
    "sec": {
-    "tg": "1e0dbe677d64",
-    "fb": "1e0dbe677d64",
-    "fby": "a23417fcbe39",
-    "ig": "ad6e5e0d3054",
+    "tg": "55f8166ef312",
+    "fb": "40a93ec0a73b",
+    "fby": "14f9a4747172",
+    "ig": "2bafe5682660",
     "topic": "00e8bce11e66",
-    "threads": "583e9b3cc4ea",
+    "threads": "dbd443a55cf1",
     "stories": "da39a3ee5e6b"
    }
   },
   "7onnqkl1eoccmdurt42ge0q2qc_20261206": {
-   "sig": "09e4f7b642a7",
+   "sig": "f769326b0d1e",
    "sec": {
-    "tg": "7b13829a3987",
-    "fb": "7b13829a3987",
-    "fby": "288afd61e745",
-    "ig": "38e9ed32d8dd",
+    "tg": "ca83cf24d475",
+    "fb": "0b81037b3a36",
+    "fby": "87f134a64042",
+    "ig": "88b4874748ca",
     "topic": "d6606a00f6ab",
-    "threads": "4ade8830d28d",
+    "threads": "22abc286a2c0",
     "stories": "da39a3ee5e6b"
    }
   },
   "tpccuo87k5rf7ctqpo4m4e5ukg_20261209": {
-   "sig": "f3b8405de522",
+   "sig": "4d29c0dd7cba",
    "sec": {
-    "tg": "95982a120980",
-    "fb": "a7e01e017ea7",
-    "fby": "813c9615fb11",
+    "tg": "d2b8919bf520",
+    "fb": "5e301b49265e",
+    "fby": "041242ee5e0c",
     "fbc": "2c1f0790eafb",
-    "ig": "2b030e1a9453",
+    "ig": "074dff3a3f58",
     "topic": "e95cd652a861",
-    "threads": "85c3dd389eee",
+    "threads": "0c7b7574d4e6",
     "thc": "51795dd60592",
     "stories": "da39a3ee5e6b"
    }
   },
   "7q0aqnshdqqotai4m53jne80l0_20261210": {
-   "sig": "79e70160b79c",
+   "sig": "7c55270b462b",
    "sec": {
-    "tg": "3ec243599803",
-    "fb": "3ec243599803",
-    "fby": "c651decc7aa5",
-    "ig": "901bcaaa27d8",
+    "tg": "af9141794066",
+    "fb": "6cc2e122f74f",
+    "fby": "df660be201fc",
+    "ig": "3ee80c77dfbe",
     "topic": "e0cc09af385b",
-    "threads": "05c36aaff0fa",
+    "threads": "1ed36b3032f8",
     "thc": "0e9f627a1e98",
     "stories": "da39a3ee5e6b"
    }
   },
   "p1sh52uu9jt1sqfp37j9ksaoa0_20261222": {
-   "sig": "fe8e47c357dc",
+   "sig": "132d8368f682",
    "sec": {
-    "tg": "258073a3035d",
-    "fb": "258073a3035d",
-    "fby": "f3a623b0c58b",
-    "ig": "38ac8b69472e",
+    "tg": "80cd5766ad57",
+    "fb": "5e7a48411858",
+    "fby": "f8778ff2d0a9",
+    "ig": "18ac7d67fa35",
     "topic": "86ec86ae083a",
-    "threads": "1411a27664ef",
+    "threads": "9b4c7b7e40ba",
     "stories": "da39a3ee5e6b"
    }
   },
   "944aekoo5ph7qgqs7quv1bedqs_20261225": {
-   "sig": "6dc4167f6d37",
+   "sig": "e5885dc9377e",
    "sec": {
-    "tg": "70b4cce5f585",
-    "fb": "70b4cce5f585",
-    "fby": "a05e3d906f57",
-    "ig": "09c99a2dffc4",
+    "tg": "b217d0e9ecd3",
+    "fb": "5cb6a940be22",
+    "fby": "2bbeba6b6c4d",
+    "ig": "de7c94efdf5d",
     "topic": "274fa88e23fa",
-    "threads": "82d1b959c17e",
+    "threads": "e8d81860e304",
     "stories": "da39a3ee5e6b"
    }
   },
