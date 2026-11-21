@@ -6,7 +6,8 @@
  },
  "published": {
   "2026-11-19": "no-events",
-  "2026-11-20": "2026-11-20T08:31+02:00"
+  "2026-11-20": "2026-11-20T08:31+02:00",
+  "2026-11-21": "2026-11-21T08:30+02:00"
  },
  "done": {
   "2026-11-20:3phudm9c5373679quk1i81ojp9_20261120": {
@@ -15,6 +16,14 @@
    "fby": "https://www.facebook.com/414302258746592_1599838545492769 + коментар",
    "ig": "https://www.instagram.com/p/Df9BBFFl5zp/",
    "threads": "https://www.threads.com/@acmc.ua/post/Df9BCz9ER0S + коментар",
+   "stories": "опубліковано: Facebook біла, Facebook жовта, Instagram"
+  },
+  "2026-11-21:vmalcnb7l9knu2j5prbrk44r54_20261121": {
+   "tg": "https://t.me/acmc_ua/6577",
+   "fb": "https://www.facebook.com/111460408546782_1133506459673658",
+   "fby": "https://www.facebook.com/414302258746592_1600927098717247",
+   "ig": "https://www.instagram.com/p/Df_lyUfDNza/",
+   "threads": "https://www.threads.com/@acmc.ua/post/Df_lzyXnB3C",
    "stories": "опубліковано: Facebook біла, Facebook жовта, Instagram"
   }
  }
