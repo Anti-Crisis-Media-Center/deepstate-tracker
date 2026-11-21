@@ -29,6 +29,7 @@
  },
  "seen_cards": {
   "1_eVc4hthWOGRVQswLxXNyLag4UA2NpPI": {
+   "1TJm0bi15vmoI5YCibdRlkn3iUvHTgJ7w": "2026-11-18T08:50:47.022Z",
    "1HukET26pOuqegtiJnDQyDlqmJeoyLiQB": "2026-11-18T08:50:42.075Z",
    "1m4rmksMpwKlhCFuy02UA4A3hqHzcwsM1": "2026-11-18T08:50:36.878Z"
   },
@@ -64,10 +65,11 @@
    }
   },
   "kmgpnbk9tp7t1v0dl4l0nj6t8k_20261125": {
-   "sig": "x",
+   "sig": "483745c49813",
    "sec": {
     "tg": "f49273b048df",
     "fb": "f49273b048df",
+    "fby": "184bd8cf6f2c",
     "ig": "1b8a6b7206a9",
     "topic": "f1e3e1348b1b",
     "threads": "1e736965ce66",
