@@ -27,7 +27,7 @@ import os
 import re
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
@@ -698,6 +698,9 @@ def _calendar_changes(st: dict) -> list[str]:
     r.raise_for_status()
     first = "seen_cal" not in st
     seen = st.setdefault("seen_cal", {})
+    # подія, що просто «заїхала» у 90-денне вікно, – не зміна; нова лише якщо її створили/редагували після минулої перевірки
+    since = st.get("seen_cal_ts") or (now - timedelta(days=1)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    st["seen_cal_ts"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     out, alive = [], set()
     for ev in r.json().get("items", []):
         if ev.get("status") == "cancelled":
@@ -710,6 +713,8 @@ def _calendar_changes(st: dict) -> list[str]:
         old = seen.get(ev["id"])
         seen[ev["id"]] = {"sig": sig, "sec": sec}
         if first or (old and old["sig"] == sig):
+            continue
+        if not old and (ev.get("updated") or "")[:19] < since[:19]:
             continue
         if old:
             diff = [SEC_LABEL[k] for k in SEC_LABEL if old["sec"].get(k) != sec.get(k)]
