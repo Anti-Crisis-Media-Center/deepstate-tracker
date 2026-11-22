@@ -198,13 +198,16 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         hl_occ = unary_union(ho) if ho else None
         hl_free = unary_union(hf) if hf else None
     st = json.loads((DATA / "state" / "current.json").read_text())
-    occ = unary_union(_geoms(st["occupied"][oblast_key]))
+    # окупація обох областей: інакше сусідня область у кадрі (напр. Луганщина біля Сіверська)
+    # зафарбовувалась як «підконтрольна Україні» (22.11.2026)
+    occ = unary_union([g for v in st["occupied"].values() if v for g in _geoms(v)])
     # фон — окупація на початок періоду, щоб «до змін» і повернуті ділянки виглядали так, як були
     if new_free is not None:
         occ = occ.union(new_free)
     if new_occ is not None:
         occ = occ.difference(new_occ)
-    unk = unary_union(_geoms(st["unknown"][oblast_key])) if st.get("unknown", {}).get(oblast_key) else None
+    _unk = [g for v in (st.get("unknown") or {}).values() if v for g in _geoms(v)]
+    unk = unary_union(_unk) if _unk else None
     obl = json.loads((DATA / "reference" / "oblasts.geojson").read_text())
     region = unary_union([shape(f["geometry"]) for f in obl["features"]])  # обидві області
 
