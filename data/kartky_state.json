@@ -3,7 +3,8 @@
   "2026-11-19": "no-events",
   "2026-11-20": "2026-11-19T18:00+02:00",
   "2026-11-21": "2026-11-20T18:00+02:00",
-  "2026-11-22": "no-events"
+  "2026-11-22": "no-events",
+  "2026-11-23": "no-events"
  },
  "published": {
   "2026-11-19": "no-events",
@@ -54,18 +55,6 @@
   "1TMTeFiYpZkIpnOS_qE40X_JWPkahfToX": {}
  },
  "seen_cal": {
-  "vmalcnb7l9knu2j5prbrk44r54_20261121": {
-   "sig": "56ba6bcdc0c1",
-   "sec": {
-    "tg": "ac725faeb6d7",
-    "fb": "ac725faeb6d7",
-    "fby": "5397c2407ae7",
-    "ig": "f81f7aa2df35",
-    "topic": "fc6569225d5c",
-    "threads": "f2354f3d6496",
-    "stories": "da39a3ee5e6b"
-   }
-  },
   "kmgpnbk9tp7t1v0dl4l0nj6t8k_20261125": {
    "sig": "483745c49813",
    "sec": {
@@ -191,6 +180,10 @@
   },
   "754l03iv5rekhq65b96pilvaho_20270219": {
    "sig": "c3d3a8264c50",
+   "sec": {}
+  },
+  "10uh55sgc2ftqkqpe1jb8sk3bl_20270220": {
+   "sig": "ba31a34bf4ab",
    "sec": {}
   }
  }
