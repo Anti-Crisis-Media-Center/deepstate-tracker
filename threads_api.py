@@ -103,7 +103,7 @@ def adapt_text(fb_text: str) -> str:
         lead = sorted(body, key=lambda l: l.rstrip(".").endswith("без змін"))   # спершу області зі змінами
     # 14.11.2026: заголовок «DeepState: зміни за добу, 14.11» знову першим рядком — так, як дописи з
     # найбільшим охопленням (1 000–1 400); джерело — наприкінці
-    text = "\n\n".join([head, "\n".join(lead), *rest, "За даними DeepStateMap.live."])
+    text = "\n\n".join([head, "\n".join(lead), *rest, "За даними DeepStateMap."])
     if len(text) > MAX_LEN:
         text = text[: MAX_LEN - 1].rstrip() + "…"
     return text

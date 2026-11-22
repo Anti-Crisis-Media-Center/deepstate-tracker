@@ -145,7 +145,7 @@ DRY_RUN = os.getenv("DRY_RUN") == "1"
 MONTHS_UA = ["січень", "лютий", "березень", "квітень", "травень", "червень",
              "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"]
 
-SOURCE_LINE = 'За даними <a href="https://deepstatemap.live">DeepStateMap.live</a>'
+SOURCE_LINE = 'За даними DeepStateMap.'   # без «.live» і без посилання — щоб читачі лишались у нас (рішення Юлі 17.11, увімкнено 22.11)
 # Заклик підписатися на сам майданчик (рішення Юлі 15.11.2026; у Telegram не додаємо — там уже підписники, пост довгий): мета — і інформувати, і нарощувати
 # аудиторію АКМЦ; підписуємо на АКМЦ, а не «на DeepState». Щоденні дописи — «підпишіться тут»,
 # тижневі/місячні — як і раніше, посилання на Telegram (там повний перелік населених пунктів).
@@ -853,7 +853,7 @@ def build_fb_teaser(day: str, results: dict, names: dict | None = None) -> str:
                           names.get(k))
              or f"{cfg['short']}: без змін." for k, cfg in OBLASTS.items()]
     lines += found
-    lines += ["", SUB_CTA, "", "За даними DeepStateMap.live."]
+    lines += ["", SUB_CTA, "", "За даними DeepStateMap."]
     return "\n".join(lines)
 
 
@@ -887,7 +887,7 @@ def build_fb_summary_teaser(kind: str, rows: list[dict], label: str | None = Non
     # 16.11.2026 (Юля): один заклик — у Telegram (два заклики поспіль заважають один одному;
     # особливо для жовтої сторінки з великою аудиторією — мета привести людей у Telegram)
     lines += ["", "Повний перелік населених пунктів — у нашому Telegram. Посилання в першому коментарі 👇",
-              "", "За даними DeepStateMap.live."]
+              "", "За даними DeepStateMap."]
     return "\n".join(lines)
 
 
@@ -1777,7 +1777,7 @@ def youtube_text(kind: str, body: list[str], date_label: str, places: list[str],
             + ("Нові підсумки щопонеділка." if kind == "week" else "Нові підсумки щомісяця."),
             SUB_CTA_YT,
             "Зміни за кожну добу — щоранку о 8:00 у нашому Telegram: " + YOUTUBE_TELEGRAM_LINK, "",
-            "За даними DeepStateMap.live. Антикризовий медіа-центр.", "",
+            "За даними DeepStateMap. Антикризовий медіа-центр.", "",
             "#Донеччина #DeepState #Shorts"]
     # 16.11.2026 (Юля): готовий рядок тегів — постійні DeepState + міста цього періоду (ті ж, що на мапі)
     # загальні теги (Донеччина, Донбас, АКМЦ, міста…) стоять у стандартних тегах каналу (Юля 16.11.2026),
@@ -1820,7 +1820,7 @@ def send_tiktok_pack(kind: str, rows: list[dict], cover: Path, date_label: str, 
         caption = "\n".join([title, *body, "",
                               SUB_CTA_TT,   # 15.11: без «змінюється мапа Донеччини» — Донеччина лишається Україною
                               # «Збережіть» прибрано 16.11.2026: один допис — один заклик
-                              "За даними DeepStateMap.live.", "",   # з крапкою: у TikTok це не посилання (Юля 16.11)
+                              "За даними DeepStateMap.", "",   # без «.live» — не посилання (Юля 17.11, увімкнено 22.11)
                               _tiktok_tags(places, any(_f(r.get("luhansk_newly_occupied_km2")) or _f(r.get("luhansk_deoccupied_km2")) for r in rows))])
         if DRY_RUN and not os.getenv("TIKTOK_PREVIEW"):
             log("DRY_RUN — матеріали для TikTok не надсилаються. Підпис:\n" + caption)
