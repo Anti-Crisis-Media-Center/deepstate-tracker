@@ -153,13 +153,13 @@ SUB_CTA = "Підписуйтеся на нашу сторінку, щоб ст�
 SUB_CTA_YT = "Підписуйтеся на наш YouTube-канал, щоб стежити за змінами на мапі Донеччини."
 SUB_CTA_TT = "Підписуйтеся на наш канал, щоб стежити за змінами на мапі Донеччини."
 
-EDITOR_NOTE = (
-    SOURCE_LINE + "\n\n"
-    "<blockquote expandable><i>Примітка: це автоматизований аналіз змін на мапі "
-    "DeepState. Він показує, як змінилися позначення на мапі порівняно з "
-    "попередньою версією, але не підтверджує фактичну зміну лінії фронту в "
-    "реальному часі. DeepState не є офіційним джерелом інформації.</i></blockquote>"
-)   # 24.11.2026 (Юля): «Примітка редакції» → «Примітка»; повний текст у підсумках лишається
+def editor_note(kind: str) -> str:
+    """Повна примітка для підсумків тижня/місяця (текст погоджено Юлею 24.11.2026, варіант А)."""
+    when = "саме цього тижня" if kind == "week" else "саме цього місяця"
+    return (SOURCE_LINE + "\n\n<blockquote expandable><i>Примітка: ці цифри автоматично рахує наша програма. "
+            "Вона порівнює мапу DeepState з попередньою версією і показує, що змінилось у позначеннях. "
+            f"Це не підтвердження того, що лінія фронту змістилась {when}: DeepState може оновлювати мапу "
+            "із запізненням. DeepState не є офіційним джерелом інформації.</i></blockquote>")
 
 HEADERS = {"User-Agent": "ACMC-DeepState-tracker/1.0 (+https://acmc.ua)"}
 
@@ -2081,7 +2081,7 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             if len(msgs) > MAX_MESSAGES_IN_POST:
                 lines.append(f"…та ще {len(msgs) - MAX_MESSAGES_IN_POST}.")
             lines.append("")
-    lines.append(EDITOR_NOTE)
+    lines.append(editor_note(kind))
     return "\n".join(lines)
 
 
