@@ -152,13 +152,6 @@ SOURCE_LINE = 'За даними DeepStateMap.'   # без «.live» і без �
 SUB_CTA = "Підписуйтеся на нашу сторінку, щоб стежити за змінами на мапі Донеччини."   # Facebook, Threads
 SUB_CTA_YT = "Підписуйтеся на наш YouTube-канал, щоб стежити за змінами на мапі Донеччини."
 SUB_CTA_TT = "Підписуйтеся на наш канал, щоб стежити за змінами на мапі Донеччини."
-EDITOR_NOTE = (
-    SOURCE_LINE + "\n\n"
-    "<blockquote expandable><i>Примітка редакції: це автоматизований аналіз змін на мапі "
-    "DeepState. Він показує, як змінилися позначення на мапі порівняно з "
-    "попередньою версією, але не підтверджує фактичну зміну лінії фронту в "
-    "реальному часі. DeepState не є офіційним джерелом інформації.</i></blockquote>"
-)
 
 HEADERS = {"User-Agent": "ACMC-DeepState-tracker/1.0 (+https://acmc.ua)"}
 
@@ -2080,7 +2073,7 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             if len(msgs) > MAX_MESSAGES_IN_POST:
                 lines.append(f"…та ще {len(msgs) - MAX_MESSAGES_IN_POST}.")
             lines.append("")
-    lines.append(EDITOR_NOTE)
+    lines.append(SHORT_NOTE)   # 24.11.2026 (Юля): у підсумках — та сама коротка «Примітка:», що в добових
     return "\n".join(lines)
 
 
