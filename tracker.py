@@ -153,6 +153,14 @@ SUB_CTA = "Підписуйтеся на нашу сторінку, щоб ст�
 SUB_CTA_YT = "Підписуйтеся на наш YouTube-канал, щоб стежити за змінами на мапі Донеччини."
 SUB_CTA_TT = "Підписуйтеся на наш канал, щоб стежити за змінами на мапі Донеччини."
 
+EDITOR_NOTE = (
+    SOURCE_LINE + "\n\n"
+    "<blockquote expandable><i>Примітка: це автоматизований аналіз змін на мапі "
+    "DeepState. Він показує, як змінилися позначення на мапі порівняно з "
+    "попередньою версією, але не підтверджує фактичну зміну лінії фронту в "
+    "реальному часі. DeepState не є офіційним джерелом інформації.</i></blockquote>"
+)   # 24.11.2026 (Юля): «Примітка редакції» → «Примітка»; повний текст у підсумках лишається
+
 HEADERS = {"User-Agent": "ACMC-DeepState-tracker/1.0 (+https://acmc.ua)"}
 
 GEOD = Geod(ellps="WGS84")
@@ -2073,7 +2081,7 @@ def build_summary(kind: str, rows: list[dict], period_start: str, period_end: st
             if len(msgs) > MAX_MESSAGES_IN_POST:
                 lines.append(f"…та ще {len(msgs) - MAX_MESSAGES_IN_POST}.")
             lines.append("")
-    lines.append(SHORT_NOTE)   # 24.11.2026 (Юля): у підсумках — та сама коротка «Примітка:», що в добових
+    lines.append(EDITOR_NOTE)
     return "\n".join(lines)
 
 
