@@ -241,6 +241,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
            oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None,
            upto: int | None = None, since: int = 0, caption: str | None = None,
            hide_step: bool = False, backdrop: Path | None = None, date_marks: list | None = None,
+           frame_override=None, head_color=None, inset: bool | None = None,
            must_label: list | None = None, blue_label: list | None = None,
            red_label: list | None = None) -> Path | None:
     """upto – для кадрів відео: показати стан після перших upto днів зі змінами, причому зміни днів
@@ -251,11 +252,15 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     H = height or size
     vertical = H >= 1600          # TikTok/Shorts 9:16
     portrait = H != size and not vertical   # 4:5 (1080×1350) – Threads/Instagram: як квадрат, лише вища мапа
-    steps = _load_steps(change_files, oblast_key)
-    if not steps:
+    steps = _load_steps(change_files, oblast_key) if change_files else []
+    if not steps and frame_override is None:
         return None
-    allg = [g for o, f in steps for g in o + f]
-    new = unary_union(allg)   # для кадру й підписів
+    if steps:
+        allg = [g for o, f in steps for g in o + f]
+        new = unary_union(allg)   # для кадру й підписів
+    else:   # день без змін (макет 24.11.2026): кадр – уся лінія фронту, нових ділянок немає
+        new = frame_override.centroid.buffer(1e-7)
+        show_new = False
     new_occ, new_free, flip = _timeline(steps)            # підсумок періоду
     grey_ch = _grey_changes(change_files, oblast_key)      # з окупованих – у сіру зону
     final_free, final_grey = _split(new_free, grey_ch)
@@ -288,7 +293,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     t_lines, t_size = _wrap_title(_md, title, _tw, 44 if vertical else 48, 32 if vertical else 34, one_min=32 if vertical else 40)
 
     # кадр: нова ділянка + ~18 км навколо, з урахуванням широти
-    frame = new
+    frame = frame_override if frame_override is not None else new
     if must_label:   # назви із заголовка мають потрапити в кадр – розширюємо його до цих пунктів
         try:
             from shapely.geometry import MultiPoint
@@ -479,6 +484,9 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             seen_m.add(p_[2])
             must_pts.append(p_)
     cities = sorted([p for p in pts if p[0] and p[2] not in set(must)], key=lambda p: -p[1])[:5]
+    if not steps:   # день без змін: орієнтири – найбільші міста, а не «найближчі до змін»
+        key_c = ["Краматорськ", "Слов'янськ", "Костянтинівка", "Дружківка", "Добропілля", "Лиман", "Покровськ"]
+        cities = sorted([p for p in pts if p[2] in key_c], key=lambda p: key_c.index(p[2]))
     lg_x, lg_y = ox + 18, top + 18
     boxes = [(lg_x - 8, lg_y - 8, lg_x + LOGO_W + 12, lg_y + round(LOGO_W * 319 / 600) + 12)]   # місце знака АКМЦ
     used = set()
@@ -494,7 +502,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             pass
     # мінікарта-орієнтир у відео (24.11.2026, на пробу): контур Донеччини й Луганщини з рамкою «ми тут»;
     # у нижньому правому куті мапи, а якщо там ділянки змін – у нижньому лівому; якщо й там – без неї
-    if vertical:
+    if (vertical if inset is None else inset):
         try:
             iw, ih = 270, 200
             spots = [(ox + mw - iw - 14, top + mh - ih - 14), (ox + 14, top + mh - ih - 14)]
@@ -655,7 +663,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         yy = (v_names_y + li * (tsz + 10)) if vertical else ty0 + 58 - tsz + li * (tsz + 10)
         xx = ox
         two_way = bool(blue_label) or bool(red_label)   # обидва напрямки: кольорові лише назви, решта – біла
-        name_col = V_NAMES_COLOR if vertical else NEW
+        name_col = head_color or (V_NAMES_COLOR if vertical else NEW)
         if li == 0 and ln.startswith("Поблизу: "):   # «Поблизу:» – нежирним, назви – жирним
             d.text((xx, yy), "Поблизу: ", font=_font("500", tsz),
                    fill=WHITE if two_way else (MUTED if name_col == WHITE else name_col))
@@ -701,7 +709,9 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         d.rounded_rectangle([cx0, cy0, cx0 + cw + 40, cy0 + 60], radius=14, fill=(8, 12, 26))
         d.text((cx0 + 20, cy0 + 10), caption, font=cf, fill=WHITE)
     # легенда – коротша й в один рядок (24.11.2026); якщо не влазить навіть дрібно – переносимо
-    if new_occ is not None and final_free is not None:
+    if not steps:   # день без змін – без «нових ділянок» у легенді
+        legend = [(OCC, "окуповано")]
+    elif new_occ is not None and final_free is not None:
         legend = [(NEW_OCC, "позначені окупованими"), (DEOCC, "позначені деокупованими"), (OCC, "окуповано раніше")]
     elif final_free is not None and new_occ is None:
         legend = [(DEOCC, "нові деокуповані"), (OCC, "окуповано")]
