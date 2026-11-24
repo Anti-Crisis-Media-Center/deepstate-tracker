@@ -17,6 +17,10 @@ on:
         description: "Тестовий запуск: порахувати, але не надсилати в Telegram"
         type: boolean
         default: false
+      skip_map_check:
+        description: "Опублікувати попри перевірку «текст = мапа» (якщо допис притримано в «Тестах», а мапа в порядку)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -58,6 +62,7 @@ jobs:
           GH_ADMIN_TOKEN: ${{ secrets.GH_ADMIN_TOKEN }}
           FORCE_RUN: ${{ inputs.force && '1' || '0' }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          MAP_CHECK: ${{ inputs.skip_map_check && '0' || '1' }}
         run: python tracker.py
 
       - name: Записати кількість підписників на всіх майданчиках (для «(+2)» в аналітиці)

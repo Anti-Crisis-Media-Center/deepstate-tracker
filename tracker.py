@@ -771,7 +771,9 @@ def map_problems(mp) -> list[str]:
 def hold_for_review(what: str, text: str, image: Path, problems: list[str], extra_images=None) -> None:
     """Текст і мапа не збігаються – допис не публікуємо, а надсилаємо в «Тести» на ручну перевірку."""
     msg = (f"⚠️ {what}: назви в тексті не збігаються з мапою – допис НЕ опубліковано.\n• " + "\n• ".join(problems)
-           + "\nПеревірте прев'ю нижче: якщо все гаразд – опублікуйте вручну, або напишіть Claude.")
+           + "\nПеревірте прев'ю нижче. Якщо мапа в порядку, опублікувати можна так: GitHub → deepstate-tracker → "
+             "Actions → «DeepState — моніторинг змін» → Run workflow → позначте force і skip_map_check → Run workflow "
+             "(через 3–5 хв допис вийде скрізь). Або напишіть Claude.")
     log(msg)
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_ALERT_CHAT_ID", "").strip()
