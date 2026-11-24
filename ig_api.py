@@ -4,7 +4,7 @@
 коли в ньому є instagram_basic, instagram_content_publish, instagram_manage_insights,
 а Instagram підключений до сторінки й призначений боту в бізнес-портфоліо.
 
-Instagram не приймає файл — лише публічну адресу картинки. Тому спершу завантажуємо
+Instagram не приймає файл – лише публічну адресу картинки. Тому спершу завантажуємо
 картинку на сторінку Facebook як неопубліковане фото й беремо його адресу.
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 import requests
 
 ENABLED = os.getenv("IG_ENABLED", "1") == "1"
-POSTS = os.getenv("IG_POSTS", "1") == "1"      # 0 — лише сторіз, без дописів у стрічку
+POSTS = os.getenv("IG_POSTS", "1") == "1"      # 0 – лише сторіз, без дописів у стрічку
 _CACHE: dict = {}
 
 
@@ -27,7 +27,7 @@ def _check(js: dict) -> dict:
 
 
 def ig_user_id(graph: str, page_id: str, page_token: str) -> str | None:
-    """ID бізнес-акаунта Instagram, підключеного до сторінки (None — якщо не підключений або немає дозволів)."""
+    """ID бізнес-акаунта Instagram, підключеного до сторінки (None – якщо не підключений або немає дозволів)."""
     if "id" in _CACHE:
         return _CACHE["id"]
     js = requests.get(f"{graph}/{page_id}", params={"fields": "instagram_business_account{id,username}",
@@ -66,7 +66,7 @@ def ig_feed_image(image: Path) -> Path:
     from PIL import Image
     W, H, inner = 1080, 1350, 900
     src = Image.open(image).convert("RGB")
-    if src.size == (W, H):   # уже 4:5 (мапа змін для Instagram) — без полів
+    if src.size == (W, H):   # уже 4:5 (мапа змін для Instagram) – без полів
         return image
     bg = Image.new("RGB", (W, H), (12, 18, 38))  # темно-синій, як краї обкладинки
     bg.paste(src.resize((inner, inner), Image.LANCZOS), ((W - inner) // 2, (H - inner) // 2))
@@ -76,8 +76,11 @@ def ig_feed_image(image: Path) -> Path:
 
 
 def adapt_caption(fb_text: str) -> str:
-    """Посилання в Instagram не клікабельні — ведемо в шапку профілю."""
-    text = fb_text.replace("Посилання в першому коментарі 👇", "Посилання на Telegram — у шапці профілю.")
+    """Посилання в Instagram не клікабельні – ведемо в шапку профілю."""
+    # 23.11.2026: в Instagram – заклик підписатися (а не «у Telegram… у шапці профілю»: там двічі «Telegram»)
+    paras = [("Підписуйтеся, аби щотижня бачити зміни на мапі Донеччини." if "Посилання в першому коментарі" in p_ else p_)
+             for p_ in fb_text.split("\n\n")]
+    text = "\n\n".join(dict.fromkeys(paras))
     return text[:2200]
 
 
@@ -90,10 +93,10 @@ def post(graph: str, page_id: str, page_token: str, fb_text: str, image: Path, l
     try:
         ig_id = ig_user_id(graph, page_id, page_token)
         if not ig_id:
-            log("Instagram: акаунт не підключений до сторінки або немає дозволів — пропускаю.")
+            log("Instagram: акаунт не підключений до сторінки або немає дозволів – пропускаю.")
             return False
         if dry_run:
-            log("DRY_RUN — в Instagram не публікується. Підпис:\n" + adapt_caption(fb_text))
+            log("DRY_RUN – в Instagram не публікується. Підпис:\n" + adapt_caption(fb_text))
             return True
         if not extra:
             url = _public_url(graph, page_id, page_token, ig_feed_image(image))
@@ -110,7 +113,7 @@ def post(graph: str, page_id: str, page_token: str, fb_text: str, image: Path, l
         log(f"Допис в Instagram опубліковано: {media_id}")
         return True
     except Exception as e:  # noqa: BLE001
-        log(f"Instagram: помилка — {e}")
+        log(f"Instagram: помилка – {e}")
         alert(f"Не вдалося опублікувати в Instagram: {e}")
         return False
 
@@ -126,7 +129,7 @@ def post_story(graph: str, page_id: str, page_token: str, image: Path, log, aler
         media_id = _publish(graph, ig_id, page_token, {"image_url": url, "media_type": "STORIES"})
         log(f"Сторіз в Instagram опубліковано: {media_id}")
     except Exception as e:  # noqa: BLE001
-        log(f"Instagram-сторіз: помилка — {e}")
+        log(f"Instagram-сторіз: помилка – {e}")
         alert(f"Сторіз в Instagram не опубліковано: {e}")
 
 
@@ -141,5 +144,5 @@ def followers(graph: str, page_id: str, page_token: str, log) -> int | None:
                                  timeout=30).json())
         return int(js.get("followers_count") or 0)
     except Exception as e:  # noqa: BLE001
-        log(f"Instagram: підписників не отримано — {e}")
+        log(f"Instagram: підписників не отримано – {e}")
         return None

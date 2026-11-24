@@ -1,6 +1,6 @@
 """Вертикальна картинка 1080×1920 для сторіз Facebook.
 
-Зверху — обкладинка (доба / тиждень / місяць), нижче — головні цифри
+Зверху – обкладинка (доба / тиждень / місяць), нижче – головні цифри
 і заклик підписатися на Telegram. Без ШІ: Pillow + шрифт Montserrat (OFL).
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ YELLOW = (255, 204, 51)     # фірмовий жовтий АКМЦ #FFCC33
 WHITE = (255, 255, 255)
 GREY = (190, 198, 216)
 MARGIN = 80
-# Безпечні зони: зверху Instagram/Facebook показують ім'я профілю, знизу — поле відповіді
+# Безпечні зони: зверху Instagram/Facebook показують ім'я профілю, знизу – поле відповіді
 SAFE_TOP = 190
 SAFE_BOTTOM = 170
 
@@ -47,10 +47,10 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str, font, max_w: int) -> list[str]:
 
 
 def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
-                 footer: str = "Деталі — щоранку о 8:00", handle: str = "Telegram: @acmc_ua") -> Path:
-    """Синє тло; обкладинка — прямокутник на тому ж місці й тієї ж ширини, що мапа у відео
-    (x 40–1040, верх 400). Висота: повна обкладинка, якщо текст уміщається, інакше — компактна
-    (заголовок + нижня смуга з регіоном, «7 днів» і лого). Період — жовтим над обкладинкою."""
+                 footer: str = "Деталі – щоранку о 8:00", handle: str = "Telegram: @acmc_ua") -> Path:
+    """Синє тло; обкладинка – прямокутник на тому ж місці й тієї ж ширини, що мапа у відео
+    (x 40–1040, верх 400). Висота: повна обкладинка, якщо текст уміщається, інакше – компактна
+    (заголовок + нижня смуга з регіоном, «7 днів» і лого). Період – жовтим над обкладинкою."""
     BG = (13, 19, 38)
     OX, TOP, MW = 40, 400, 1000
     img = Image.new("RGB", (W, H), BG)
@@ -85,7 +85,7 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
                 y += int(122 * k)
             f_bold = _font("800", int(44 * k))
             for line in _wrap(d, b.get("text", ""), f_text, max_w):
-                if draw:   # «окупованими» / «деокупованими» — жирним, як на першому кадрі відео (рішення 10.11)
+                if draw:   # «окупованими» / «деокупованими» – жирним, як на першому кадрі відео (рішення 10.11)
                     x = MARGIN
                     for wi, w in enumerate(line.split(" ")):
                         fnt = f_bold if w.strip(".,:;·") in ("окупованими", "деокупованими") else f_text
@@ -104,7 +104,7 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
     choice = None
     opts = [(False, True, 0.85), (False, False, 0.85), (True, True, 0.8), (True, False, 0.8), (True, False, 0.55)]
     if sum(1 for b in blocks if b.get("big") and b.get("note")) >= 2:
-        # кілька цифр, кожна зі своїми назвами (напр. окупація й деокупація) — назви важливіші
+        # кілька цифр, кожна зі своїми назвами (напр. окупація й деокупація) – назви важливіші
         # за повну обкладинку: спершу пробуємо зменшену обкладинку, але з назвами (рішення 10.11)
         opts = [(False, True, 0.85), (True, True, 0.8), (True, True, 0.6), (False, False, 0.85),
                 (True, False, 0.8), (True, False, 0.55)]
@@ -122,7 +122,7 @@ def render_story(cover: Path, date_label: str, blocks: list[dict], out: Path,
     cv, y0, notes, k = choice
     img.paste(cv, (OX, TOP))
     d = ImageDraw.Draw(img)
-    d.text((MARGIN, TOP - 160), date_label, font=_font("800", 62), fill=YELLOW)   # період — над обкладинкою
+    d.text((MARGIN, TOP - 160), date_label, font=_font("800", 62), fill=YELLOW)   # період – над обкладинкою
     layout(k, True, y0, notes)
 
     f_foot = _font("500", 40)

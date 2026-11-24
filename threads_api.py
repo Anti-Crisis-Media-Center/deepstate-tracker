@@ -1,12 +1,12 @@
 """Публікація зведень DeepState у Threads і збір статистики акаунта.
 
 Секрети (GitHub → Settings → Secrets and variables → Actions):
-  THREADS_TOKEN          — довгостроковий маркер Threads (діє 60 днів);
-  THREADS_TELEGRAM_LINK  — окреме запрошення в Telegram для Threads (щоб рахувати переходи);
-  GH_ADMIN_TOKEN         — необов'язково: ключ GitHub з правом змінювати секрети,
+  THREADS_TOKEN          – довгостроковий маркер Threads (діє 60 днів);
+  THREADS_TELEGRAM_LINK  – окреме запрошення в Telegram для Threads (щоб рахувати переходи);
+  GH_ADMIN_TOKEN         – необов'язково: ключ GitHub з правом змінювати секрети,
                            тоді бот сам зберігатиме продовжений маркер Threads.
 
-Threads не приймає файл картинки — лише публічне посилання. Обкладинки лежать у
+Threads не приймає файл картинки – лише публічне посилання. Обкладинки лежать у
 публічному репозиторії, тож беремо їх звідти (raw.githubusercontent.com).
 """
 from __future__ import annotations
@@ -55,7 +55,7 @@ def image_url(image: Path) -> str | None:
 
 
 def _wait_ready(container_id: str, tries: int = 10) -> None:
-    """Threads обробляє картинку кілька секунд — чекаємо, поки контейнер буде готовий."""
+    """Threads обробляє картинку кілька секунд – чекаємо, поки контейнер буде готовий."""
     for _ in range(tries):
         js = requests.get(f"{GRAPH}/{container_id}", params={"fields": "status,error_message",
                                                               "access_token": _token()}, timeout=30).json()
@@ -72,7 +72,7 @@ def _publish(uid: str, data: dict) -> str:
     if "reply_to_id" not in data:
         data["topic_tag"] = TOPIC
     js = requests.post(f"{GRAPH}/{uid}/threads", data=data, timeout=60).json()
-    if "error" in js and "topic_tag" in data:   # тему не прийняли — публікуємо без неї
+    if "error" in js and "topic_tag" in data:   # тему не прийняли – публікуємо без неї
         data.pop("topic_tag")
         js = requests.post(f"{GRAPH}/{uid}/threads", data=data, timeout=60).json()
     cid = _check(js)["id"]
@@ -82,35 +82,32 @@ def _publish(uid: str, data: dict) -> str:
 
 
 TOPIC = "Донеччина"   # тема допису в Threads (одна на допис)
-CTA = "Поширте, якщо стежите за Донеччиною."
+CTA = "Підписуйтеся, аби щоранку бачити зміни на мапі Донеччини."   # усі дописи DeepState (рішення Юлі 23.11.2026)
 
 
 def adapt_text(fb_text: str) -> str:
-    """Threads: першим рядком — «DeepState: зміни за добу, 14.11», далі новина, джерело — наприкінці
-    (рішення Юлі 14.11.2026, повернення до формату з найкращим охопленням; 9.11 заголовок був у кінці)."""
+    """Threads: першим рядком – «DeepState: зміни за добу, 14.11», далі новина, наприкінці – заклик підписатися.
+    24.11.2026: без рядка «За даними DeepStateMap.» (джерело – у заголовку, тексті й на картинці) і без
+    заклику в Telegram у тексті (посилання на Telegram – лише відповіддю під тижневими/місячними)."""
     paras = [p for p in fb_text.split("\n\n") if "Telegram" not in p and "коментар" not in p]
     if len(paras) < 2:
         return _old_adapt(fb_text)
     head, body = paras[0], paras[1].split("\n")
-    rest = [p for p in paras[2:] if "DeepStateMap" not in p]
-    rest = [CTA if "Збережіть" in p else p for p in rest]
+    rest = [p for p in paras[2:] if "DeepStateMap" not in p and "Підписуйтеся" not in p
+            and "Збережіть" not in p and "Поширте" not in p]
     word = "добу" if "за добу" in head else ("тиждень" if "тижня" in head else "місяць")
-    if word != "добу" and CTA not in rest:   # 16.11.2026: у FB-тизері підсумків лишився лише заклик у Telegram
-        rest.append(CTA)
     if all(l.rstrip(".").endswith("без змін") for l in body):
-        lead = [f"За {word} на мапі DeepState Донеччина й Луганщина без змін."]
+        lead = [f"Донеччина й Луганщина: за {word} на мапі DeepState без змін."]   # рішення Юлі 17.11
     else:
         lead = sorted(body, key=lambda l: l.rstrip(".").endswith("без змін"))   # спершу області зі змінами
-    # 14.11.2026: заголовок «DeepState: зміни за добу, 14.11» знову першим рядком — так, як дописи з
-    # найбільшим охопленням (1 000–1 400); джерело — наприкінці
-    text = "\n\n".join([head, "\n".join(lead), *rest, "За даними DeepStateMap."])
+    text = "\n\n".join([head, "\n".join(lead), *rest, CTA])
     if len(text) > MAX_LEN:
         text = text[: MAX_LEN - 1].rstrip() + "…"
     return text
 
 
 def _old_adapt(fb_text: str) -> str:
-    """Тизер із Facebook → Threads. Threads — окремий канал, а не воронка в Telegram:
+    """Тизер із Facebook → Threads. Threads – окремий канал, а не воронка в Telegram:
     прибираємо абзаци із закликом перейти в Telegram, лишаємо саму інформацію. Ліміт 500 знаків."""
     paras = [p for p in fb_text.split("\n\n") if "Telegram" not in p and "коментар" not in p]
     text = "\n\n".join(paras)
@@ -132,46 +129,49 @@ def _carousel(uid: str, urls: list[str], text: str) -> str:
 
 
 def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url: str | None = None,
-         reply: bool = False) -> bool:
+         reply: bool = False, extra_urls: list | None = None) -> bool:
     """Допис + відповідь із посиланням на Telegram. Помилка не зупиняє бота.
-    Є мапа змін (image_url) → одна картинка — мапа (з 14.11.2026; карусель «обкладинка + мапа» вимкнено);
+    Є мапа змін (image_url) → одна картинка – мапа (з 14.11.2026; карусель «обкладинка + мапа» вимкнено);
     немає → лише обкладинка."""
     if not enabled():
         return False
     text = adapt_text(fb_text)
     link = (os.getenv("THREADS_TELEGRAM_LINK", "").strip()
             or os.getenv("FB_WHITE_TELEGRAM_LINK", "").strip() or os.getenv("FB_TELEGRAM_LINK", "").strip() or "https://t.me/acmc_ua")
-    reply_text = f"Ці зведення щоранку о 8:00 виходять і в нашому Telegram-каналі: {link}"
+    reply_text = f"Більше деталей – щоранку о 8:00 у нашому Telegram: {link}"   # лише під тижневими/місячними (23.11)
     if dry_run:
-        log(("DRY_RUN — у Threads не публікується (карусель: обкладинка + мапа). Текст:\n" if image_url
-             else "DRY_RUN — у Threads не публікується. Текст:\n") + text)
+        log(("DRY_RUN – у Threads не публікується (карусель: обкладинка + мапа). Текст:\n" if image_url
+             else "DRY_RUN – у Threads не публікується. Текст:\n") + text)
         return True
     try:
         uid = _user_id()
-        c45 = image.with_name(image.stem + "_45.jpg")   # обкладинка 4:5 — під мапу 4:5 у каруселі
+        c45 = image.with_name(image.stem + "_45.jpg")   # обкладинка 4:5 – під мапу 4:5 у каруселі
         cover = globals()["image_url"](c45 if c45.exists() else image) if image.exists() else None   # 4:5 завжди, і в тихі дні
-        if False and image_url and cover:   # карусель «обкладинка + мапа» вимкнено 14.11.2026: у стрічці першою
-            # видно обкладинку, а дописи з мапою першою мали втричі більше охоплення — тепер лише мапа
+        extra_urls = [u for u in (extra_urls or []) if u]
+        if image_url and extra_urls:   # дві мапи (дві області або далекі ділянки) – карусель із двох карток (Юля 18 і 22.11)
+            post_id = _carousel(uid, [image_url, *extra_urls], text)
+        elif False and image_url and cover:   # карусель «обкладинка + мапа» вимкнено 14.11.2026: у стрічці першою
+            # видно обкладинку, а дописи з мапою першою мали втричі більше охоплення – тепер лише мапа
             try:
                 post_id = _carousel(uid, [cover, image_url], text)
-            except Exception as e:  # noqa: BLE001 — карусель не вийшла: публікуємо хоча б мапу
-                log(f"Threads: карусель не вийшла ({e}) — публікую одну мапу")
+            except Exception as e:  # noqa: BLE001 – карусель не вийшла: публікуємо хоча б мапу
+                log(f"Threads: карусель не вийшла ({e}) – публікую одну мапу")
                 post_id = _publish(uid, {"media_type": "IMAGE", "image_url": image_url, "text": text})
         else:
             url = image_url or cover
             data = {"media_type": "IMAGE", "image_url": url, "text": text} if url else {"media_type": "TEXT", "text": text}
             post_id = _publish(uid, data)
         log(f"Допис у Threads опубліковано: {post_id}")
-        if not reply:   # відповідь із посиланням — лише під тижневим і місячним підсумком
+        if not reply:   # відповідь із посиланням – лише під тижневим і місячним підсумком
             return True
         try:
             _publish(uid, {"media_type": "TEXT", "text": reply_text, "reply_to_id": post_id})
         except Exception as e:  # noqa: BLE001
-            log(f"Threads: відповідь із посиланням не додано — {e}")
+            log(f"Threads: відповідь із посиланням не додано – {e}")
             alert(f"Допис у Threads вийшов, але відповідь із посиланням на Telegram не додано: {e}")
         return True
     except Exception as e:  # noqa: BLE001
-        log(f"Threads: помилка — {e}")
+        log(f"Threads: помилка – {e}")
         alert(f"Не вдалося опублікувати у Threads: {e}")
         return False
 
@@ -189,12 +189,12 @@ def followers(log) -> int | None:
             if m.get("name") == "followers_count":
                 return int(m.get("total_value", {}).get("value") or 0)
     except Exception as e:  # noqa: BLE001
-        log(f"Threads: статистику не отримано — {e}")
+        log(f"Threads: статистику не отримано – {e}")
     return None
 
 
 def account_insights(since: datetime, until: datetime, log) -> dict:
-    """Перегляди, вподобання, відповіді, репости за період — для тижневого звіту редакції."""
+    """Перегляди, вподобання, відповіді, репости за період – для тижневого звіту редакції."""
     if not enabled():
         return {}
     try:
@@ -211,7 +211,7 @@ def account_insights(since: datetime, until: datetime, log) -> dict:
                 out[m["name"]] = sum(v.get("value", 0) for v in m.get("values", []))
         return out
     except Exception as e:  # noqa: BLE001
-        log(f"Threads: статистику за період не отримано — {e}")
+        log(f"Threads: статистику за період не отримано – {e}")
         return {}
 
 
@@ -247,7 +247,7 @@ def refresh_token(log, alert) -> None:
             log(f"Маркер Threads продовжено й збережено в секретах, діє ще ~{days} дн.")
         else:
             alert("Маркер Threads продовжено, але зберегти новий автоматично не вдалося (немає GH_ADMIN_TOKEN). "
-                  f"Старий діє ще ~{days} дн. — напишіть Claude, щоб налаштувати автозбереження.")
+                  f"Старий діє ще ~{days} дн. – напишіть Claude, щоб налаштувати автозбереження.")
     except Exception as e:  # noqa: BLE001
-        log(f"Threads: маркер не продовжено — {e}")
+        log(f"Threads: маркер не продовжено – {e}")
         alert(f"Не вдалося продовжити маркер Threads: {e}. Якщо він прострочиться, публікації в Threads зупиняться.")

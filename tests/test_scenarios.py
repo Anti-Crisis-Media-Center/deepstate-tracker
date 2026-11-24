@@ -122,26 +122,65 @@ def test_near_phrase_same_names_as_map():
 
 
 def test_names_from_deepstate_messages_day():
-    """12.11.2026: пункти з повідомлень DeepState — окремим рядком лише в Telegram; у головні назви
-    (графіка) їх не додаємо. Відмінки розпізнаються («у Костянтинівці», «Русиного Яру»)."""
+    """Пункти з повідомлень DeepState розпізнаються (відмінки: «у Костянтинівці», «Русиного Яру») — для внутрішньої
+    звірки. У дописах повідомлень DeepState більше немає (рішення Юлі 18.11.2026, впроваджено 24.11)."""
     pn = list(tracker.place_names(["2026-11-05"]))
     assert tracker.deepstate_mentioned(["2026-11-05"])[:2] == ["Костянтинівка", "Русин Яр"]
     assert "Русин Яр" not in tracker.deepstate_mentioned(["2026-11-05"], skip=pn)   # без повторів головних назв
     r = {k: {"newly_km2": 1.0, "deocc_km2": 0, "grey_km2": 0, "newly_places": [], "deocc_places": [],
              "grey_places": []} for k in tracker.OBLASTS}
-    txt = tracker.build_text("05.11", r, mentioned={"donetsk": ["Русин Яр"]}, names={"donetsk": pn})
-    assert "Також у повідомленнях DeepState: Русин Яр." in txt and "(" not in re.sub(r"\([^()]* громада\)", "", txt.split("Повідомлення")[0])   # дужки лише для громад (16.11)
+    msgs = [{"time": __import__("datetime").datetime(2026, 11, 5, 22, 0), "text": "Ворог просунувся поблизу Русиного Яру."}]
+    txt = tracker.build_text("05.11.2026", r, None, msgs, {"donetsk": pn}, {"donetsk": ["Русин Яр"]})
+    assert "Також у повідомленнях" not in txt and "Повідомлення на сайті" not in txt
+    assert "(" not in re.sub(r"\([^()]* громада\)", "", txt)   # дужки лише для громад (16.11)
 
 
-def test_day_two_areas_get_two_names_and_no_duplicate_mentions():
-    """18.11.2026: дві ділянки за 1,6 км — кожна зі своєю назвою; назви з процитованого повідомлення не дублюються."""
+def test_day_two_areas_get_two_names_one_hromada():
+    """18.11.2026: дві ділянки за 1,6 км — кожна зі своєю назвою; села однієї громади — через «й», громада один раз."""
     import tracker as T
-    from datetime import datetime
     n = T.place_names(["2026-11-18"], "donetsk")
     assert list(n) == ["Василівка", "Матяшеве"]
     z = dict(newly_km2=0, newly_places=[], deocc_km2=0, deocc_places=[], grey_km2=0, grey_places=[])
     res = {"donetsk": {**z, "newly_km2": 5.65}, "luhansk": dict(z)}
-    msgs = [{"time": datetime(2026, 11, 17, 21, 52), "text": "Ворог просунувся поблизу Василівки та Гришиного."}]
-    txt = T.build_text("2026-11-18", res, None, msgs, {"donetsk": n, "luhansk": []}, {"donetsk": ["Василівка", "Гришине"]})
-    assert "Також у повідомленнях" not in txt
-    assert txt.count("Гришин") == 1
+    txt = T.build_text("18.11.2026", res, None, None, {"donetsk": n, "luhansk": []})
+    assert "Василівка й Матяшеве (" in txt and txt.count("громада)") == 1
+    assert "Гришин" not in txt and "—" not in txt
+
+
+def test_join_and_euphony():
+    assert tracker.join_and(["Федорівка", "Миколаївка"]) == "Федорівка й Миколаївка"
+    assert tracker.join_and(["Русин Яр", "Бересток"]) == "Русин Яр і Бересток"
+    assert tracker.join_and(["А", "Б", "Ізюм"]) == "А, Б і Ізюм"
+
+
+def test_threads_text_cta_no_source():
+    import threads_api
+    z = dict(newly_km2=0, newly_places=[], deocc_km2=0, deocc_places=[], grey_km2=0, grey_places=[])
+    res = {"donetsk": {**z, "newly_km2": 4.67}, "luhansk": dict(z)}
+    t = threads_api.adapt_text(tracker.build_fb_teaser("22.11.2026", res, {"donetsk": ["Федорівка", "Миколаївка"]}))
+    assert t.endswith("Підписуйтеся, аби щоранку бачити зміни на мапі Донеччини.")
+    assert "DeepStateMap" not in t and "Поширте" not in t and "—" not in t
+    q = threads_api.adapt_text(tracker.build_fb_teaser("23.11.2026", {"donetsk": dict(z), "luhansk": dict(z)}))
+    assert "Донеччина й Луганщина: за добу на мапі DeepState без змін." in q
+
+
+def test_yellow_week_text():
+    rows = [r for r in tracker.read_history() if "2026-11-17" <= r["date"] <= "2026-11-23"]
+    t = tracker.build_yellow_summary("week", rows)
+    assert t.startswith("Тиждень на мапі DeepState\n\n")
+    assert "– стільки DeepState позначив окупованими на Донеччині." in t
+    assert "На Луганщині змін немає." in t and t.endswith(tracker.FB_YELLOW_CTA)
+
+
+def test_youtube_title_hook_first():
+    """24.11.2026: цифра – у перших ~40 знаках назви; опис – щопонеділка + хештеги населених пунктів."""
+    import tracker as T
+    rows = [r for r in T.read_history() if "2026-11-17" <= r["date"] <= "2026-11-23"]
+    if not rows:
+        return
+    dl = T._period_label(rows[0]["compared_with"], "2026-11-23")
+    _, body, places = T.tiktok_caption("week", rows, dl)
+    txt = T.youtube_text("week", body, dl, places, rows)
+    title = txt.split("Назва:\n")[1].split("\n")[0]
+    assert title.startswith("Донеччина: +") and "км²" in title[:40] and title.endswith("| мапа DeepState")
+    assert "Щопонеділка" in txt and "#Донеччина #" in txt and "#Shorts" not in txt
