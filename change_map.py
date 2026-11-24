@@ -35,7 +35,7 @@ NEIGH = (44, 47, 58)         # інші області в кадрі (Харкі
                              # даних про окупацію там у нас немає, мапа нічого про них не стверджує (Юля 22.11.2026)
 OBL_LINE = (190, 200, 225)   # межі областей – тонкий світлий пунктир
 FRAME = (70, 84, 120)        # тонка рамка навколо мапи
-OBL_LABEL = (150, 162, 192)  # підписи областей – приглушено, дрібніше за назви міст
+OBL_LABEL = (165, 176, 205)  # підписи областей – дрібніше за назви міст; 24.11.2026: світліші (контраст із підконтрольною 5,3:1, було 4,5)
 LOGO = ROOT / "assets" / "logo_white.png"   # знак АКМЦ зліва вгорі на кожній мапі (рішення Юлі 21.11.2026)
 LOGO_W = 100                  # ширина знака на 1080 px (24.11.2026: у півтора раза менший, був 150)
 OBL_NAMES = {"UA14": "ДОНЕЦЬКА ОБЛАСТЬ", "UA44": "ЛУГАНСЬКА ОБЛАСТЬ", "UA63": "ХАРКІВСЬКА ОБЛАСТЬ",
@@ -613,12 +613,11 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         LAST_FLAGS.append("ділянка змін під знаком АКМЦ")
 
     # підписи областей у кадрі. 24.11.2026 (Юля): сусіди тепер у тих самих кольорах, тож без підпису межа
-    # незрозуміла – підписуємо кожну область, якої видно хоч 1,5% мапи; якщо місця мало – дрібнішим шрифтом
+    # незрозуміла – підписуємо кожну область, якої видно хоч 1,5% мапи; якщо місця мало – дрібнішим шрифтом.
+    # 24.11.2026 (Юля): і саму Донецьку (Луганську) – раніше її пропускали, і на мапі не було видно, де вона
     try:
         view_area = view.area
         for pc, g_ in obl_shapes:
-            if pc == {"donetsk": "UA14", "luhansk": "UA44"}.get(oblast_key):
-                continue
             inside = g_.intersection(view)
             if inside.is_empty or inside.area < 0.015 * view_area:
                 continue
@@ -636,6 +635,15 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
                 if ipb.is_empty:
                     break
                 c0 = ipb.representative_point()
+                if pc == {"donetsk": "UA14", "luhansk": "UA44"}.get(oblast_key):
+                    # своя область: підпис – у найбільшу «порожню» окуповану частину, подалі від назв міст
+                    try:
+                        io_ = inside.intersection(occ)
+                        io_ = max(getattr(io_, "geoms", [io_]), key=lambda q: q.area)
+                        if io_.area > 0.1 * inside.area:
+                            c0 = _Poly([px(x_, y_) for x_, y_ in io_.exterior.coords]).buffer(-8).representative_point()
+                    except Exception:  # noqa: BLE001
+                        pass
                 cands = sorted(((x_, y_) for x_ in range(int(ox + 8), int(ox + mw - lw - 8), 15)
                                 for y_ in range(int(top + 8), int(top + mh - lh - 8), 15)),
                                key=lambda q: (q[0] + lw / 2 - c0.x) ** 2 + (q[1] + lh / 2 - c0.y) ** 2)

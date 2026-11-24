@@ -4,3 +4,7 @@ data/tiktok_*.jpg
 
 # Листівки: тимчасові картинки
 data/kartky_tmp/
+
+# Python-кеш – не зберігаємо
+__pycache__/
+*.pyc
