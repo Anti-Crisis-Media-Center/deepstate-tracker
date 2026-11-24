@@ -153,13 +153,12 @@ SUB_CTA = "Підписуйтеся на нашу сторінку, щоб ст�
 SUB_CTA_YT = "Підписуйтеся на наш YouTube-канал, щоб стежити за змінами на мапі Донеччини."
 SUB_CTA_TT = "Підписуйтеся на наш канал, щоб стежити за змінами на мапі Донеччини."
 
-def editor_note(kind: str) -> str:
-    """Повна примітка для підсумків тижня/місяця (текст погоджено Юлею 24.11.2026, варіант А)."""
-    when = "саме цього тижня" if kind == "week" else "саме цього місяця"
+def editor_note(kind: str = "week") -> str:
+    """Повна примітка для підсумків тижня/місяця (текст погоджено Юлею 24.11.2026)."""
     return (SOURCE_LINE + "\n\n<blockquote expandable><i>Примітка: ці цифри автоматично рахує наша програма. "
             "Вона порівнює мапу DeepState з попередньою версією і показує, що змінилось у позначеннях. "
-            f"Це не підтвердження того, що лінія фронту змістилась {when}: DeepState може оновлювати мапу "
-            "із запізненням. DeepState не є офіційним джерелом інформації.</i></blockquote>")
+            "Це зміни на мапі, а не точна хронологія подій на фронті. "
+            "DeepState не є офіційним джерелом інформації.</i></blockquote>")
 
 HEADERS = {"User-Agent": "ACMC-DeepState-tracker/1.0 (+https://acmc.ua)"}
 
@@ -661,8 +660,9 @@ def esc(text: str) -> str:
     return html.escape(text, quote=False)
 
 
-SHORT_NOTE = (SOURCE_LINE + "\n\n<blockquote><i>Примітка: це автоматичне зведення змін на мапі DeepState. "
-              "DeepState не є офіційним джерелом інформації.</i></blockquote>")
+SHORT_NOTE = (SOURCE_LINE + "\n\n<blockquote><i>Примітка: це автоматичне зведення змін на мапі DeepState, "
+              "а не точна хронологія подій на фронті. "
+              "DeepState не є офіційним джерелом інформації.</i></blockquote>")   # 24.11.2026 (Юля)
 
 
 def build_text(period: str, results: dict, grey: dict | None = None, messages: list | None = None,
