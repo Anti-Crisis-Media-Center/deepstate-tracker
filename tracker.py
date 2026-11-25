@@ -1218,7 +1218,9 @@ STORY_LABELS = {"donetsk": "ДОНЕЧЧИНА", "luhansk": "ЛУГАНЩИНА"
 IG_DAILY_POSTS = os.getenv("IG_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку Instagram вимкнено
 # (9.11.2026): щоб сітка профілю не складалася з однакових мап. Щодня – лише сторіз; у стрічку – тиждень і місяць.
 FB_STORIES = os.getenv("FB_STORIES", "1") != "0"  # сторіз у Facebook увімкнено (4.11.2026)
-FB_YELLOW_STORIES = os.getenv("FB_YELLOW_STORIES", "1") != "0"  # сторіз на жовтій – з 26.11.2026 (вимкнути: "0")
+FB_YELLOW_STORIES = os.getenv("FB_YELLOW_STORIES", "1") != "0"  # сторіз на жовтій (вимкнути: "0")
+# 25.11.2026 (Юля): на жовтій сторіз стартують одразу в новому дизайні (з мапою, хвиля 2), а не зі старою обкладинкою
+FB_YELLOW_STORIES_FROM = os.getenv("FB_YELLOW_STORIES_FROM", "2026-11-30")
 
 
 def _short_places(places: list, n: int = 3) -> str:
@@ -1348,7 +1350,7 @@ def make_and_post_story(cover: Path, date_label: str, blocks: list[dict], kind: 
             return
         post_facebook_story(out)
         # 25.11.2026 (Юля): сторіз і на жовтій сторінці – щодня, і в тихі дні (дописи в стрічку там – лише в дні змін)
-        if FB_YELLOW_STORIES:
+        if FB_YELLOW_STORIES and datetime.now(KYIV).strftime("%Y-%m-%d") >= FB_YELLOW_STORIES_FROM:
             post_facebook_story(out, FB_YELLOW_PAGE_ID, "жовта FB")
         ig_api.post_story(FB_GRAPH, *fb_page_credentials(), out, log, alert, DRY_RUN)
     except Exception as e:  # noqa: BLE001
