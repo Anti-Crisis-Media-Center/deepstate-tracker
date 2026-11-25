@@ -69,7 +69,10 @@ def short(text: str, n: int = 60) -> str:
 
 
 def is_deepstate(text: str) -> bool:
-    return (text or "").lstrip().startswith("DeepState")
+    # 25.11.2026: дописи DeepState починаються не лише з «DeepState: …», а й з «Тиждень на мапі DeepState»,
+    # з хвилі 2 – «Донеччина на мапі DeepState»; раніше такі рахувалися як «інші дописи»
+    first = (text or "").lstrip().split("\n", 1)[0]
+    return first.startswith("DeepState") or "на мапі DeepState" in first
 
 
 def _metric(js) -> int | None:
