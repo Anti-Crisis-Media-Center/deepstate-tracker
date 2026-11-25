@@ -113,6 +113,11 @@ def recent_reports(minutes: int = 10) -> dict:
 
 
 RESTORE = False   # хтось написав /start — опублікувати кнопки заново
+WHO: dict[int, str] = {}   # днів → хто замовив звіт (видно в гілці «Аналітика», з 25.11.2026)
+
+
+def _name(u: dict) -> str:
+    return " ".join(x for x in [(u or {}).get("first_name", ""), (u or {}).get("last_name", "")] if x).strip() or "хтось"
 
 
 def collect() -> list[int]:
@@ -139,6 +144,7 @@ def collect() -> list[int]:
             tg("answerCallbackQuery", callback_query_id=cq["id"], text="Прийнято, звіт буде за кілька хвилин")
             if m:
                 days.append(int(m.group(1)))
+                WHO.setdefault(max(1, min(90, int(m.group(1)))), _name(cq.get("from")))
             continue
         msg = u.get("message") or {}
         if str(msg.get("chat", {}).get("id")) != CHAT:
@@ -152,6 +158,7 @@ def collect() -> list[int]:
             re.match(r"^(\d+)", text) if (msg.get("reply_to_message") or {}).get("from", {}).get("is_bot") else None)
         if m:
             days.append(int(m.group(1)))
+            WHO.setdefault(max(1, min(90, int(m.group(1)))), _name(msg.get("from")))
     out = []
     for d in days:
         d = max(1, min(90, d))
@@ -188,7 +195,7 @@ if __name__ == "__main__":
     prep: list[int] = []
     for d in days:
         per = "добу" if d == 1 else f"{d} дн."
-        r = tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), text=f"⏳ Готую звіт за {per}…",
+        r = tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), text=f"⏳ Готую звіт за {per}…\n👤 Замовлення: {WHO.get(d, 'хтось')}",
                disable_notification=True)
         if r.get("ok"):
             prep.append(r["result"]["message_id"])
