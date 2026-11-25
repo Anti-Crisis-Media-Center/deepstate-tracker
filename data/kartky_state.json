@@ -6,7 +6,8 @@
   "2026-11-22": "no-events",
   "2026-11-23": "no-events",
   "2026-11-24": "no-events",
-  "2026-11-25": "2026-11-24T18:00+02:00"
+  "2026-11-25": "2026-11-24T18:00+02:00",
+  "2026-11-26": "no-events"
  },
  "published": {
   "2026-11-19": "no-events",
@@ -44,11 +45,6 @@
   }
  },
  "seen_cards": {
-  "1_eVc4hthWOGRVQswLxXNyLag4UA2NpPI": {
-   "1TJm0bi15vmoI5YCibdRlkn3iUvHTgJ7w": "2026-11-18T08:50:47.022Z",
-   "1HukET26pOuqegtiJnDQyDlqmJeoyLiQB": "2026-11-18T08:50:42.075Z",
-   "1m4rmksMpwKlhCFuy02UA4A3hqHzcwsM1": "2026-11-18T08:50:36.878Z"
-  },
   "1j6VzP2UqMpiiE0H7heKhMLdhyhqg9z5t": {
    "13NW_VCMx7nqFx2xr1hEj5rKth95rMNwQ": "2026-11-18T08:52:16.436Z",
    "1CXBg4vpynEJ4-TBrnWOV4LdEfh_Ii1fu": "2026-11-18T08:52:10.353Z",
@@ -204,5 +200,5 @@
    "sec": {}
   }
  },
- "seen_cal_ts": "2026-11-24T16:50:53Z"
+ "seen_cal_ts": "2026-11-25T16:00:04Z"
 }
