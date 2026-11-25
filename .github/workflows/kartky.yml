@@ -78,7 +78,7 @@ jobs:
           KARTKY_FORCE: ${{ steps.what.outputs.force }}
           KARTKY_TEST: "0"                     # 0 — публікуємо (з 18.11.2026, рішення Юлі); 1 — тестовий режим
           KARTKY_CHAT_ID: "-1003946430136"     # Суперчат АКМЦ
-          KARTKY_THREAD_ID: "6"                # гілка «Тести»
+          KARTKY_THREAD_ID: "6"                # гілка «Листівки» (колишня «Тести»)
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

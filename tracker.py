@@ -753,7 +753,7 @@ def build_text(period: str, results: dict, grey: dict | None = None, messages: l
 # Гілки службової групи «Тестування ботів АКМЦ»
 THREAD_ERRORS = os.getenv("THREAD_ERRORS", "3")
 THREAD_TIKTOK = os.getenv("THREAD_TIKTOK", "4")
-THREAD_TESTS = os.getenv("THREAD_TESTS", "6")
+THREAD_TESTS = os.getenv("THREAD_TESTS", "407")   # гілка «DeepState» (з 25.11.2026; раніше «Тести» = 6)
 
 
 def map_problems(mp) -> list[str]:
@@ -769,7 +769,7 @@ def map_problems(mp) -> list[str]:
 
 
 def hold_for_review(what: str, text: str, image: Path, problems: list[str], extra_images=None) -> None:
-    """Текст і мапа не збігаються – допис не публікуємо, а надсилаємо в «Тести» на ручну перевірку."""
+    """Текст і мапа не збігаються – допис не публікуємо, а надсилаємо в гілку «DeepState» на ручну перевірку."""
     msg = (f"⚠️ {what}: назви в тексті не збігаються з мапою – допис НЕ опубліковано.\n• " + "\n• ".join(problems)
            + "\nПеревірте прев'ю нижче. Якщо мапа в порядку, опублікувати можна так: GitHub → deepstate-tracker → "
              "Actions → «DeepState — моніторинг змін» → Run workflow → позначте force і skip_map_check → Run workflow "
@@ -783,7 +783,7 @@ def hold_for_review(what: str, text: str, image: Path, problems: list[str], extr
         tg("sendMessage", token, {"chat_id": chat_id, "message_thread_id": THREAD_TESTS, "text": msg})
         publish(text, image, silent=True, extra_images=extra_images, chat_id=chat_id, thread_id=THREAD_TESTS)
     except Exception as e:  # noqa: BLE001
-        log(f"Не вдалося надіслати прев'ю в «Тести»: {e}")
+        log(f"Не вдалося надіслати прев'ю в гілку «DeepState»: {e}")
     alert(msg)
 
 
