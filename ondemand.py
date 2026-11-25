@@ -48,11 +48,15 @@ def tg(method: str, **data) -> dict:
 def setup() -> None:
     kb = {"inline_keyboard": [[{"text": t, "callback_data": f"rep:{d}"} for d, t in BUTTONS]]}
     r = tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), reply_markup=kb, parse_mode="HTML",
-           text="📊 <b>Звіт аналітики на вимогу</b>\n\nНатисніть, за який період потрібен звіт.\n"
-                "Інший період — напишіть <code>/report</code>, пробіл і кількість днів (від 1 до 90), "
-                "наприклад <code>/report 5</code>. Просто число бот не бачить.\n"
-                "Кнопки зникли — напишіть сюди <code>/start</code>.\n\n"
-                "<i>Звіт приходить сюди через 2–5 хвилин.</i>")
+           text="📊 <b>Аналітика соцмереж АКМЦ</b>\n\n"
+                "Щопонеділка о 10:00 сюди сам приходить звіт за тиждень: Telegram, Facebook, Instagram, "
+                "Threads, TikTok і обидва YouTube-канали – охоплення, підписники, топ-дописи. "
+                "У дужках – зміна до попереднього такого самого періоду.\n\n"
+                "<b>Звіт на вимогу</b> – натисніть, за який період (рахується від цієї хвилини назад). "
+                "Інший період – напишіть <code>/report</code>, пробіл і кількість днів (від 1 до 90), "
+                "наприклад <code>/report 5</code>. Звіт приходить через 2–5 хвилин, видно, хто замовив.\n"
+                "Кнопки зникли – напишіть сюди <code>/start</code>.\n\n"
+                "<i>Докладно – «06 Аналітика» в папці «00 Автоматизація АКМЦ – інструкції» на Google Диску АКМЦ.</i>")
     print("Кнопки:", "опубліковано" if r.get("ok") else r)
     if r.get("ok"):
         tg("pinChatMessage", chat_id=CHAT, message_id=r["result"]["message_id"], disable_notification=True)
