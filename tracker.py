@@ -1218,6 +1218,7 @@ STORY_LABELS = {"donetsk": "ДОНЕЧЧИНА", "luhansk": "ЛУГАНЩИНА"
 IG_DAILY_POSTS = os.getenv("IG_DAILY_POSTS", "0") == "1"   # щоденні дописи в стрічку Instagram вимкнено
 # (9.11.2026): щоб сітка профілю не складалася з однакових мап. Щодня – лише сторіз; у стрічку – тиждень і місяць.
 FB_STORIES = os.getenv("FB_STORIES", "1") != "0"  # сторіз у Facebook увімкнено (4.11.2026)
+FB_YELLOW_STORIES = os.getenv("FB_YELLOW_STORIES", "1") != "0"  # сторіз на жовтій – з 26.11.2026 (вимкнути: "0")
 
 
 def _short_places(places: list, n: int = 3) -> str:
@@ -1281,9 +1282,9 @@ def story_blocks_summary(kind: str, rows: list[dict]) -> list[dict]:
     return blocks
 
 
-def post_facebook_story(image_path: Path) -> None:
-    """Публікує картинку як сторіз сторінки Facebook. Помилка не зупиняє бота."""
-    page_id, page_token = fb_page_credentials()
+def post_facebook_story(image_path: Path, page_id: str | None = None, label: str = "Facebook") -> None:
+    """Публікує картинку як сторіз сторінки Facebook (page_id=None – біла). Помилка не зупиняє бота."""
+    page_id, page_token = fb_page_credentials(page_id)
     if not FB_STORIES or not page_id or not page_token or DRY_RUN:
         if DRY_RUN:
             log(f"DRY_RUN – сторіз не публікується ({image_path}).")
@@ -1299,10 +1300,10 @@ def post_facebook_story(image_path: Path) -> None:
                            data={"photo_id": up["id"], "access_token": page_token}, timeout=60).json()
         if "error" in st:
             raise RuntimeError(st["error"].get("message", str(st["error"]))[:300])
-        log(f"Сторіз у Facebook опубліковано: {st.get('post_id')}")
+        log(f"Сторіз ({label}) опубліковано: {st.get('post_id')}")
     except Exception as e:  # noqa: BLE001
-        log(f"Facebook-сторіз: помилка – {e}")
-        alert(f"Пост у Facebook вийшов, але сторіз не опубліковано: {e}")
+        log(f"Сторіз ({label}): помилка – {e}")
+        alert(f"Сторіз ({label}) не опубліковано: {e}")
 
 
 def _period_label(start: str, end: str) -> str:
@@ -1346,6 +1347,9 @@ def make_and_post_story(cover: Path, date_label: str, blocks: list[dict], kind: 
         if not fb_ok:
             return
         post_facebook_story(out)
+        # 25.11.2026 (Юля): сторіз і на жовтій сторінці – щодня, і в тихі дні (дописи в стрічку там – лише в дні змін)
+        if FB_YELLOW_STORIES:
+            post_facebook_story(out, FB_YELLOW_PAGE_ID, "жовта FB")
         ig_api.post_story(FB_GRAPH, *fb_page_credentials(), out, log, alert, DRY_RUN)
     except Exception as e:  # noqa: BLE001
         log(f"Не вдалося зробити сторіз: {e}")
