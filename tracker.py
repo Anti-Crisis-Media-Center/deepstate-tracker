@@ -1344,7 +1344,8 @@ def make_and_post_story(cover: Path, date_label: str, blocks: list[dict], kind: 
         from story import render_story
         foot, handle = STORY_FOOTERS.get(kind, STORY_FOOTERS["day"])
         out = render_story(cover, date_label, blocks, DATA / "story.jpg", footer=foot, handle=handle)
-        if kind in ("week", "month"):
+        # 25.11.2026 (Юля): сторіз у Telegram-каналі не публікуємо – картинку в «Рілзи» більше не шлемо
+        if kind in ("week", "month") and os.getenv("TG_STORY_IMAGE", "0") == "1":
             send_tg_story_image(out)
         if not fb_ok:
             return
