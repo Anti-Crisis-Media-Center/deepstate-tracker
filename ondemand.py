@@ -45,6 +45,15 @@ def tg(method: str, **data) -> dict:
         return {"ok": False, "error": str(e)}
 
 
+def remove_old_buttons() -> None:
+    """Перед новими кнопками прибрати старі (закріплене повідомлення цього бота з кнопками),
+    щоб у гілці не було двох наборів (25.11.2026)."""
+    pin = (tg("getChat", chat_id=CHAT).get("result") or {}).get("pinned_message") or {}
+    me = (tg("getMe").get("result") or {}).get("id")
+    if pin.get("reply_markup") and me and (pin.get("from") or {}).get("id") == me:
+        tg("deleteMessage", chat_id=CHAT, message_id=pin["message_id"])
+
+
 def setup() -> None:
     kb = {"inline_keyboard": [[{"text": t, "callback_data": f"rep:{d}"} for d, t in BUTTONS]]}
     r = tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), reply_markup=kb, parse_mode="HTML",
@@ -154,7 +163,9 @@ def collect() -> list[int]:
         if str(msg.get("chat", {}).get("id")) != CHAT:
             continue
         text = (msg.get("text") or "").strip()
-        if re.match(r"^/(start|buttons|knopky)(@\w+)?\b", text):   # кнопки зникли — повернути (12.11.2026)
+        # кнопки зникли — повернути (12.11.2026); лише «/start» у гілці «Аналітика»: «/start» в інших гілках
+        # Суперчату (напр. для Меморіал-бота) кнопки не чіпає (25.11.2026)
+        if re.match(r"^/(start|buttons|knopky)(@\w+)?\b", text) and str(msg.get("message_thread_id")) == str(THREAD):
             global RESTORE
             RESTORE = True
             continue
@@ -182,9 +193,11 @@ if __name__ == "__main__":
     if os.getenv("WEBHOOK_URL", "").strip():
         set_webhook(os.getenv("WEBHOOK_URL").strip())
     if os.getenv("SETUP") == "1":
+        remove_old_buttons()
         setup()
     days = collect()
     if RESTORE:
+        remove_old_buttons()
         setup()
     fresh = recent_reports()
     for d in list(days):   # той самий звіт уже готували менше ніж 10 хв тому — показуємо його (12.11.2026)
