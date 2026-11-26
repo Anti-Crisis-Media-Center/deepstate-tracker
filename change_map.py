@@ -627,7 +627,13 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
             ip = _Poly([px(x_, y_) for x_, y_ in inside.exterior.coords]) if inside.geom_type == "Polygon" else \
                 _Poly([px(x_, y_) for x_, y_ in max(inside.geoms, key=lambda q: q.area).exterior.coords])
             placed = False
-            for fs in (22, 19, 16):
+            # 26.11.2026 (Юля): свою область – одним рядком («ДОНЕЦЬКА ОБЛАСТЬ»), місця вистачає;
+            # у два рядки – лише сусіди (від них у кадрі зазвичай невеликі шматки) і запасний варіант
+            if pc == {"donetsk": "UA14", "luhansk": "UA44"}.get(oblast_key):
+                tries = [(fs_, [" ".join(words)]) for fs_ in (22, 19)] + [(fs_, words) for fs_ in (22, 19, 16)]
+            else:
+                tries = [(fs_, words) for fs_ in (22, 19, 16)]
+            for fs, words in tries:
                 fo = _font("500", fs)
                 lw = max(d.textlength(w_, font=fo) for w_ in words)
                 lh = (fs + 6) * len(words)
@@ -657,7 +663,23 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
                         bx = (q[0], q[1], q[0] + lw, q[1] + lh)
                         ds = [max(b[0] - bx[2], bx[0] - b[2], b[1] - bx[3], bx[1] - b[3], 0) for b in boxes]
                         return min(ds) if ds else 9999
-                    cands = sorted(cands[:4000], key=lambda q: -min(_clear(q), 220))
+                    # 26.11.2026 (Юля): підпис може йти наскрізь – через синю й червону частини, щоб було видно,
+                    # що обидві – Донецька область. Перевага кандидатам, що перетинають лінію фронту.
+                    try:
+                        _io = inside.intersection(occ)
+                        occ_px = _Poly([px(x_, y_) for x_, y_ in
+                                        max(getattr(_io, "geoms", [_io]), key=lambda q: q.area).exterior.coords])
+                    except Exception:  # noqa: BLE001
+                        occ_px = None
+
+                    def _both(q):
+                        if occ_px is None:
+                            return 0
+                        bx = _box(q[0], q[1], q[0] + lw, q[1] + lh)
+                        f = bx.intersection(occ_px).area / bx.area
+                        return 1 if 0.3 <= f <= 0.7 else 0
+                    cands = sorted(cands[:4000], key=lambda q: (-_both(q) if _clear(q) >= 25 else 0,
+                                                                -min(_clear(q), 220)))
                 for gap in ((45, 4) if own else (4,)):
                     for x_, y_ in cands:
                         bb = (x_ - 4, y_ - 4, x_ + lw + 4, y_ + lh + 4)
