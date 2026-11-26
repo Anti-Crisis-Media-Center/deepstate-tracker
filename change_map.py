@@ -774,8 +774,9 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     for col, label in legend:
         if lx + 36 + d.textlength(label, font=lf) > ox + mw:   # не вміщається – новий рядок
             lx, ly = ox, ly + 36
-        d.rectangle([lx, ly + 4, lx + 24, ly + 28], fill=col, outline=(90, 100, 130) if col == LAND else None,
-                    width=1)
+        # 26.11.2026 (Юля): квадратик підконтрольної здавався темнішим за мапу – через світлу обвідку.
+        # Колір той самий (LAND), обвідку прибрано: синій тепер достатньо відрізняється від тла.
+        d.rectangle([lx, ly + 4, lx + 24, ly + 28], fill=col)
         d.text((lx + 34, ly + 1), label, font=lf, fill=MUTED)
         lx += 36 + d.textlength(label, font=lf) + 30
     # тонка рамка навколо мапи (24.11.2026)
