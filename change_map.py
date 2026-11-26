@@ -650,6 +650,14 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
                 # 26.11.2026 (Юля): «ДОНЕЦЬКА ОБЛАСТЬ» стала впритул під «Рай-Олександрівка» і читалася як її
                 # адреса. Своя область – спершу з відступом ≥45 px від інших підписів, лише якщо ніде – впритул.
                 own = pc == {"donetsk": "UA14", "luhansk": "UA44"}.get(oblast_key)
+                if own:
+                    # 26.11.2026 (Юля): область велика – ставити в найвільніше місце, а не біля назв.
+                    # Сортуємо кандидатів за відстанню до найближчого іншого підпису / ділянки (більша – краще).
+                    def _clear(q):
+                        bx = (q[0], q[1], q[0] + lw, q[1] + lh)
+                        ds = [max(b[0] - bx[2], bx[0] - b[2], b[1] - bx[3], bx[1] - b[3], 0) for b in boxes]
+                        return min(ds) if ds else 9999
+                    cands = sorted(cands[:4000], key=lambda q: -min(_clear(q), 220))
                 for gap in ((45, 4) if own else (4,)):
                     for x_, y_ in cands:
                         bb = (x_ - 4, y_ - 4, x_ + lw + 4, y_ + lh + 4)
