@@ -7,7 +7,8 @@
   "2026-11-23": "no-events",
   "2026-11-24": "no-events",
   "2026-11-25": "2026-11-24T18:00+02:00",
-  "2026-11-26": "no-events"
+  "2026-11-26": "no-events",
+  "2026-11-27": "no-events"
  },
  "published": {
   "2026-11-19": "no-events",
@@ -65,19 +66,6 @@
   "1TMTeFiYpZkIpnOS_qE40X_JWPkahfToX": {}
  },
  "seen_cal": {
-  "kmgpnbk9tp7t1v0dl4l0nj6t8k_20261125": {
-   "sig": "483745c49813",
-   "sec": {
-    "tg": "f49273b048df",
-    "fb": "f49273b048df",
-    "fby": "184bd8cf6f2c",
-    "ig": "1b8a6b7206a9",
-    "topic": "f1e3e1348b1b",
-    "threads": "1e736965ce66",
-    "thc": "c3347023f6a9",
-    "stories": "da39a3ee5e6b"
-   }
-  },
   "c3iockoqedsq3o9cc6ogmn68n4_20261128": {
    "sig": "a59c708236ee",
    "sec": {
@@ -199,7 +187,11 @@
   "25av7uuh1bkts0jg0c607g1ias_20270221": {
    "sig": "f51fe5eed336",
    "sec": {}
+  },
+  "5oihnd179vuqgj2c9j844ucu8b_20270224": {
+   "sig": "e1e15f999383",
+   "sec": {}
   }
  },
- "seen_cal_ts": "2026-11-25T16:50:50Z"
+ "seen_cal_ts": "2026-11-26T16:00:03Z"
 }
