@@ -647,13 +647,20 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
                 cands = sorted(((x_, y_) for x_ in range(int(ox + 8), int(ox + mw - lw - 8), 15)
                                 for y_ in range(int(top + 8), int(top + mh - lh - 8), 15)),
                                key=lambda q: (q[0] + lw / 2 - c0.x) ** 2 + (q[1] + lh / 2 - c0.y) ** 2)
-                for x_, y_ in cands:
-                    bb = (x_ - 4, y_ - 4, x_ + lw + 4, y_ + lh + 4)
-                    if ipb.contains(_box(*bb)) and not hit(bb):
-                        for i_, w_ in enumerate(words):
-                            d.text((x_, y_ + (fs + 6) * i_), w_, font=fo, fill=OBL_LABEL)
-                        boxes.append(bb)
-                        placed = True
+                # 26.11.2026 (Юля): «ДОНЕЦЬКА ОБЛАСТЬ» стала впритул під «Рай-Олександрівка» і читалася як її
+                # адреса. Своя область – спершу з відступом ≥45 px від інших підписів, лише якщо ніде – впритул.
+                own = pc == {"donetsk": "UA14", "luhansk": "UA44"}.get(oblast_key)
+                for gap in ((45, 4) if own else (4,)):
+                    for x_, y_ in cands:
+                        bb = (x_ - 4, y_ - 4, x_ + lw + 4, y_ + lh + 4)
+                        bbg = (x_ - gap, y_ - gap, x_ + lw + gap, y_ + lh + gap)
+                        if ipb.contains(_box(*bb)) and not hit(bbg):
+                            for i_, w_ in enumerate(words):
+                                d.text((x_, y_ + (fs + 6) * i_), w_, font=fo, fill=OBL_LABEL)
+                            boxes.append(bb)
+                            placed = True
+                            break
+                    if placed:
                         break
                 if placed:
                     break
