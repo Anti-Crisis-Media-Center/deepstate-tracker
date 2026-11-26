@@ -223,3 +223,6 @@ if __name__ == "__main__":
             fh.write(f"days={' '.join(map(str, days))}\n")
             fh.write(f"old_btn={BTN_MSGS[0] if (BTN_MSGS and days) else ''}\n")
             fh.write(f"prep={' '.join(map(str, prep))}\n")
+            # хто замовив — у сам звіт (26.11.2026): повідомлення «⏳ Готую…» після звіту видаляється
+            clean = {d: re.sub(r"[;=\r\n]", " ", WHO.get(d, "")) for d in days}
+            fh.write("who=" + ";".join(f"{d}={clean[d]}" for d in days) + "\n")

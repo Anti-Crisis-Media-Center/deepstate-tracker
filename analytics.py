@@ -324,6 +324,11 @@ def remember_report(days: int, msg_id: int) -> None:
 
 if __name__ == "__main__":
     report = build()
+    # звіт на вимогу: хто замовив (26.11.2026). ORDERED_BY = «1=Ім'я;7=Ім'я» від ondemand.py
+    import html as _html
+    _who = dict(x.split("=", 1) for x in os.getenv("ORDERED_BY", "").split(";") if "=" in x).get(str(DAYS), "").strip()
+    if _who:
+        report += f"\n\n👤 Замовлення: {_html.escape(_who)}"
     log(report)
     if os.getenv("DRY_RUN", "0") != "1":
         send(report)

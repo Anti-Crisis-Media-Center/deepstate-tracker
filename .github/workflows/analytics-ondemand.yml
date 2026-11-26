@@ -58,6 +58,7 @@ jobs:
           ANALYTICS_CHAT_ID: ${{ secrets.ANALYTICS_CHAT_ID }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           YOUTUBE_CHANNELS: ${{ vars.YOUTUBE_CHANNELS }}
+          ORDERED_BY: ${{ steps.req.outputs.who }}   # хто замовив — рядок унизу звіту (26.11.2026)
         run: |
           for d in ${{ steps.req.outputs.days }}; do
             ANALYTICS_DAYS=$d python analytics.py || echo "Звіт за $d дн. не вдався"
