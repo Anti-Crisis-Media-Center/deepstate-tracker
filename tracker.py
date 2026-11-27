@@ -2651,11 +2651,11 @@ def _make_one_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places: 
             # скільки секунд показувати кожен етап – пропорційно до днів (від нього до наступного), мінімум 2,5 с
             starts = [info[(ends[i - 1] if i else 0)][0] for i in range(len(ends))]
             bounds = [dates.index(d) if d in dates else 0 for d in starts] + [len(dates)]
-            total = 7.0 if kind == "week" else 9.0   # 27.11.2026: «розповзання» – кожен крок ~1,5 с проявлення + пауза
+            total = 5.0 if kind == "week" else 6.0   # 27.11.2026 (Юля): усе відео ~16 с, як було
             # 16.11.2026 (Юля): загальний час не збільшуємо – ділимо його пропорційно до днів; кожен крок
             # щонайменше 1,2 с (щоб встигнути побачити блимання), а тоді приводимо суму назад до total
             raw = [max(1.3, total * (bounds[i + 1] - bounds[i]) / max(1, len(dates))) for i in range(len(ends))]
-            secs = [max(2.0, round(x * total / sum(raw), 2)) for x in raw]   # щонайменше 1,5 с розповзання + 0,5 с
+            secs = [max(1.5, round(x * total / sum(raw), 2)) for x in raw]   # щонайменше 1,2 с розповзання + 0,3 с
             (DATA / out_name.replace(".jpg", "_steps.json")).write_text(json.dumps(
                 [[out_name.replace(".jpg", f"_step{i + 1}_v.jpg"), sec, out_name.replace(".jpg", f"_step{i + 1}_off_v.jpg")]
                  for i, sec in enumerate(secs)]))

@@ -71,13 +71,13 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
             hold(mb, 0.5)
             for p, sec, _off in sg["steps"]:
                 st = _vert(Image.open(p))
-                fade(prev, st, 1.5)
-                hold(st, max(0.5, sec - 1.5))
+                fade(prev, st, 1.2)                       # 27.11.2026: 1,2 с – щоб усе відео було ~16 с
+                hold(st, max(0.3, sec - 1.2))
                 prev = st
             fade(prev, mf, 0.6)
         else:
             hold(mb, 0.5)
-            fade(mb, mf, 1.5)
+            fade(mb, mf, 1.2)
         hold(mf, 4 if si == len(segments) - 1 else 2.5)
         end = len(seq)
         if sg.get("intro"):
