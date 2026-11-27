@@ -29,6 +29,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 import ig_api
+import alt_text
 import threads_api
 from pyproj import Geod, Transformer
 import numpy as np
@@ -1113,6 +1114,37 @@ FB_DAILY_POSTS = os.getenv("FB_DAILY_POSTS", "0") == "1"   # щоденні до
 FB_POSTS = os.getenv("FB_POSTS", "1") == "1"   # 0 – на сторінці лише сторіз, без дописів у стрічку
 
 
+class _FBResp:   # щоб відповідь _fb_photo_upload читалась так само, як requests.Response (.json())
+    def __init__(self, js: dict):
+        self._js = js
+
+    def json(self) -> dict:
+        return self._js
+
+
+def _fb_photo_upload(page_id: str, page_token: str, image: Path, data: dict, text: str, label: str) -> dict:
+    """Фото на сторінку FB з альтернативним текстом (alt_text_custom, з 27.11.2026). Якщо Facebook не прийме
+    поле – повтор без опису, щоб допис не зірвався. Після вдалої публікації – перевірка, чи опис зберігся (у журнал)."""
+    alt = alt_text.build(text, image)
+    for with_alt in (True, False):
+        payload = dict(data, access_token=page_token, **({"alt_text_custom": alt} if with_alt else {}))
+        with image.open("rb") as fh:
+            js = requests.post(f"{FB_GRAPH}/{page_id}/photos", data=payload, files={"source": fh}, timeout=120).json()
+        if "error" in js and with_alt:
+            log(f"{label}: альтернативний текст не прийнято ({js['error'].get('message', '')[:150]}) – публікую без нього")
+            continue
+        break
+    if "error" not in js and with_alt and js.get("id"):
+        try:
+            got = requests.get(f"{FB_GRAPH}/{js['id']}", params={"fields": "alt_text_custom,alt_text",
+                                                                  "access_token": page_token}, timeout=30).json()
+            log(f"{label}: альтернативний текст {'збережено' if got.get('alt_text_custom') else 'НЕ збережено'}"
+                f" (alt_text_custom={str(got.get('alt_text_custom'))[:80]!r})")
+        except Exception as e:  # noqa: BLE001
+            log(f"{label}: не вдалося перевірити альтернативний текст – {e}")
+    return js
+
+
 def post_facebook(text: str, image: Path, page_id: str | None = None, comment: str | None = None,
                   extra_images: list | None = None, label: str = "Facebook") -> bool:
     """Публікує допис на сторінці Facebook і додає перший коментар із посиланням на Telegram.
@@ -1133,10 +1165,7 @@ def post_facebook(text: str, image: Path, page_id: str | None = None, comment: s
         if extra and image.exists():   # кілька фото в одному дописі (дві мапи – рішення Юлі 18 і 22.11)
             ids = []
             for img in [image, *extra]:
-                with img.open("rb") as fh:
-                    up = requests.post(f"{FB_GRAPH}/{page_id}/photos",
-                                       data={"published": "false", "access_token": page_token},
-                                       files={"source": fh}, timeout=120).json()
+                up = _fb_photo_upload(page_id, page_token, img, {"published": "false"}, text, label)
                 if "error" in up:
                     raise RuntimeError(up["error"].get("message", str(up["error"]))[:300])
                 ids.append(up["id"])
@@ -1145,10 +1174,7 @@ def post_facebook(text: str, image: Path, page_id: str | None = None, comment: s
                 data[f"attached_media[{i}]"] = json.dumps({"media_fbid": fid})
             r = requests.post(f"{FB_GRAPH}/{page_id}/feed", data=data, timeout=60)
         elif image.exists():
-            with image.open("rb") as fh:
-                r = requests.post(f"{FB_GRAPH}/{page_id}/photos",
-                                  data={"caption": text, "published": "true", "access_token": page_token},
-                                  files={"source": fh}, timeout=120)
+            r = _FBResp(_fb_photo_upload(page_id, page_token, image, {"caption": text, "published": "true"}, text, label))
         else:
             r = requests.post(f"{FB_GRAPH}/{page_id}/feed",
                               data={"message": text, "access_token": page_token}, timeout=60)

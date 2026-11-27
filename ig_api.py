@@ -15,6 +15,8 @@ from pathlib import Path
 
 import requests
 
+import alt_text
+
 ENABLED = os.getenv("IG_ENABLED", "1") == "1"
 POSTS = os.getenv("IG_POSTS", "1") == "1"      # 0 – лише сторіз, без дописів у стрічку
 _CACHE: dict = {}
@@ -48,7 +50,11 @@ def _public_url(graph: str, page_id: str, page_token: str, image: Path) -> str:
 
 
 def _publish(graph: str, ig_id: str, token: str, data: dict) -> str:
-    cid = _check(requests.post(f"{graph}/{ig_id}/media", data={**data, "access_token": token}, timeout=60).json())["id"]
+    js = requests.post(f"{graph}/{ig_id}/media", data={**data, "access_token": token}, timeout=60).json()
+    if "error" in js and "alt_text" in data:   # опис картинки не прийняли – без нього (27.11.2026)
+        js = requests.post(f"{graph}/{ig_id}/media", data={**{k: v for k, v in data.items() if k != "alt_text"},
+                                                             "access_token": token}, timeout=60).json()
+    cid = _check(js)["id"]
     for _ in range(15):  # Instagram обробляє картинку кілька секунд
         st = requests.get(f"{graph}/{cid}", params={"fields": "status_code", "access_token": token}, timeout=30).json()
         if st.get("status_code") == "FINISHED":
@@ -100,7 +106,8 @@ def post(graph: str, page_id: str, page_token: str, fb_text: str, image: Path, l
             return True
         if not extra:
             url = _public_url(graph, page_id, page_token, ig_feed_image(image))
-            media_id = _publish(graph, ig_id, page_token, {"image_url": url, "caption": adapt_caption(fb_text)})
+            media_id = _publish(graph, ig_id, page_token, {"image_url": url, "caption": adapt_caption(fb_text),
+                                                           "alt_text": alt_text.build(fb_text, image)})   # 27.11.2026
         else:
             children = []
             for img in [image] + extra:

@@ -19,6 +19,8 @@ from pathlib import Path
 
 import requests
 
+import alt_text
+
 GRAPH = "https://graph.threads.net/v1.0"
 REPO = os.getenv("GITHUB_REPOSITORY", "Anti-Crisis-Media-Center/deepstate-tracker")
 RAW_BASE = f"https://raw.githubusercontent.com/{REPO}/main"
@@ -74,6 +76,9 @@ def _publish(uid: str, data: dict) -> str:
     js = requests.post(f"{GRAPH}/{uid}/threads", data=data, timeout=60).json()
     if "error" in js and "topic_tag" in data:   # тему не прийняли – публікуємо без неї
         data.pop("topic_tag")
+        js = requests.post(f"{GRAPH}/{uid}/threads", data=data, timeout=60).json()
+    if "error" in js and "alt_text" in data:   # опис картинки не прийняли – без нього (27.11.2026)
+        data.pop("alt_text")
         js = requests.post(f"{GRAPH}/{uid}/threads", data=data, timeout=60).json()
     cid = _check(js)["id"]
     _wait_ready(cid)
@@ -159,7 +164,9 @@ def post(fb_text: str, image: Path, log, alert, dry_run: bool = False, image_url
                 post_id = _publish(uid, {"media_type": "IMAGE", "image_url": image_url, "text": text})
         else:
             url = image_url or cover
-            data = {"media_type": "IMAGE", "image_url": url, "text": text} if url else {"media_type": "TEXT", "text": text}
+            data = ({"media_type": "IMAGE", "image_url": url, "text": text,
+                     "alt_text": alt_text.build(fb_text, cover=not image_url, limit=1000)}   # опис картинки (27.11.2026)
+                    if url else {"media_type": "TEXT", "text": text})
             post_id = _publish(uid, data)
         log(f"Допис у Threads опубліковано: {post_id}")
         if not reply:   # відповідь із посиланням – лише під тижневим і місячним підсумком
