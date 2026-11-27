@@ -237,6 +237,10 @@ def _oblast_shapes() -> list[tuple[str, object]]:
     return out
 
 
+def _two_rows(subtitle: str) -> bool:
+    return subtitle.startswith("позначено окупованими") and ", деокупованими" in subtitle
+
+
 def render(change_files: list[Path], out: Path, title: str, subtitle: str, size: int = 1080,
            oblast_key: str = "donetsk", show_new: bool = True, height: int | None = None,
            upto: int | None = None, since: int = 0, caption: str | None = None,
@@ -314,6 +318,8 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         # праворуч ~170 px – кнопки лайків і коментарів, тож мапа вужча й притиснута ліворуч
         v_sub_y = 300
         v_names_y = v_sub_y + 66 + 22      # цифра у відео – велика (64 px), назви – дрібніші (Юля 24.11.2026)
+        if _two_rows(subtitle):           # окупація й деокупація – дві цифри двома рядками (Юля 27.11.2026)
+            v_names_y += 74
         top, bottom = max(500, v_names_y + len(t_lines) * (t_size + 10) + 20), 480
         mw = size - 40 - 170   # YouTube: кнопки ширші за TikTok (~170 px), Reels і TikTok – ~145
         mh = H - top - bottom
@@ -677,11 +683,18 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
                             return 0
                         bx = _box(q[0], q[1], q[0] + lw, q[1] + lh)
                         f = bx.intersection(occ_px).area / bx.area
-                        return 1 if 0.3 <= f <= 0.7 else 0
-                    cands = sorted(cands[:4000], key=lambda q: (-_both(q) if _clear(q) >= 25 else 0,
+                        return 1 if 0.15 <= f <= 0.85 else 0
+                    # 27.11.2026: усі кандидати, не лише 4000 найближчих до центру окупованої частини – у високому
+                    # кадрі відео (1920) місця «наскрізь через фронт» лежали далі й не потрапляли до вибору
+                    cands = sorted(cands, key=lambda q: (-_both(q) if _clear(q) >= 25 else 0,
                                                                 -min(_clear(q), 220)))
-                for gap in ((45, 4) if own else (4,)):
+                # 27.11.2026: спершу – місця наскрізь через фронт із відступом ≥25 px (раніше відступ 45 px
+                # відкидав їх, і підпис ішов повністю в окуповану частину); далі – як було
+                passes = ([("both", 25), (None, 45), (None, 4)] if own else [(None, 4)])
+                for need, gap in passes:
                     for x_, y_ in cands:
+                        if need == "both" and not _both((x_, y_)):
+                            continue
                         bb = (x_ - 4, y_ - 4, x_ + lw + 4, y_ + lh + 4)
                         bbg = (x_ - gap, y_ - gap, x_ + lw + gap, y_ + lh + gap)
                         if ipb.contains(_box(*bb)) and not hit(bbg):
@@ -724,6 +737,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     if len(lines) > 1:
         ty0 += (62 if vertical else 50) * (len(lines) - 1)   # підзаголовок – нижче, над мапою
     hw = size - 80 if vertical else mw   # у відео шапка – на всю ширину (кнопки нижче)
+    subtitle_full = subtitle
     ssz = 40
     while ssz > 30 and d.textlength(subtitle, font=_font("500", ssz)) > hw:
         ssz -= 2
@@ -733,16 +747,40 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
         subtitle = _re.sub(r" за (добу|тиждень|місяць)(?=(,? [\d.–]+)?$)", "", subtitle).replace(" – ", " ")
         while ssz > 26 and d.textlength(subtitle, font=_font("500", ssz)) > hw:
             ssz -= 2
-    if vertical:   # цифри – великі й жирні, решта – звичайним шрифтом, по одній базовій лінії
-        import re as _re2
-        toks = [t for t in _re2.split(r"(\d[\d,.]* км²)", subtitle) if t]
+    if vertical and _two_rows(subtitle):
+        # 27.11.2026 (Юля): «каша» з двох цифр в одному рядку – тепер два однакові рядки, вирівняні ліворуч:
+        # «35,95 км² позначено окупованими за тиждень 16–23.11» / «1,66 км² – деокупованими»; цифри білі
+        import re as _re3
+        nums = _re3.findall(r"\d[\d,.]* км²", subtitle_full)
+        word = _re3.sub(r"^.*?км²", "", subtitle_full.split(", деокупованими")[1]).strip()
+        # 27.11.2026 (Юля): слово «окупованими» / «деокупованими» – жирним, цифри білі
+        # 27.11.2026 (Юля, увечері): обидва слова білі жирні (кольори – лише в назвах, на мапі й у легенді);
+        # період – в обох рядках
+        rows_ = [[(nums[0], "n", WHITE), (" позначено ", "r", WHITE), ("окупованими", "b", WHITE),
+                  (f" {word}".rstrip(), "r", WHITE)],
+                 [(nums[1], "n", WHITE), (" позначено ", "r", WHITE), ("деокупованими", "b", WHITE),
+                  (f" {word}".rstrip(), "r", WHITE)]]
         nb, rs = 64, 38
-        while nb > 40 and sum(d.textlength(t, font=_font("800", nb) if t[0].isdigit() else _font("500", rs))
-                              for t in toks) > hw:
+        _fw = lambda k_, nb_, rs_: _font("800", nb_) if k_ == "n" else _font("800" if k_ == "b" else "500", rs_)
+        while nb > 40 and max(sum(d.textlength(t_, font=_fw(k_, nb, rs)) for t_, k_, _ in r_) for r_ in rows_) > hw:
+            nb, rs = nb - 4, max(28, rs - 2)
+        for ri, r_ in enumerate(rows_):
+            yb, xx = v_sub_y + 64 + ri * 74, ox
+            for t_, k_, col_ in r_:
+                d.text((xx, yb), t_, font=_fw(k_, nb, rs), fill=col_, anchor="ls")
+                xx += d.textlength(t_, font=_fw(k_, nb, rs))
+    elif vertical:   # цифри – великі й жирні, решта – звичайним шрифтом, по одній базовій лінії
+        import re as _re2
+        # 27.11.2026 (Юля): «окупованими» / «деокупованими» – жирним (білим), щоб дрібний рядок читався
+        toks = [t for t in _re2.split(r"(\d[\d,.]* км²|(?:де)?окупованими)", subtitle) if t]
+        nb, rs = 64, 38
+        _ft = lambda t, nb_, rs_: (_font("800", nb_) if t[0].isdigit() else
+                                   _font("800", rs_) if t.endswith("окупованими") else _font("500", rs_))
+        while nb > 40 and sum(d.textlength(t, font=_ft(t, nb, rs)) for t in toks) > hw:
             nb, rs = nb - 4, max(28, rs - 2)
         xx = ox
         for t in toks:
-            f_ = _font("800", nb) if t[0].isdigit() else _font("500", rs)
+            f_ = _ft(t, nb, rs)
             d.text((xx, v_sub_y + 64), t, font=f_, fill=WHITE, anchor="ls")
             xx += d.textlength(t, font=f_)
     else:

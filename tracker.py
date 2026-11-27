@@ -2642,6 +2642,7 @@ def _make_one_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places: 
                     dm = lambda x: f"{x.day}.{x.month:02d}"   # noqa: E731
                     marks.append((since_, end, dm(a_) if a_ == b_ else f"{a_.day}–{dm(b_)}"
                                   if a_.month == b_.month else f"{dm(a_)}–{dm(b_)}"))
+            marks = []   # 27.11.2026 (Юля): дат біля ділянок у відео не показуємо – мапа ставала строкатою
             frames = [(sfx, {**kw, "date_marks": marks}) for sfx, kw in frames]
             for i, end in enumerate(ends):
                 kw = {"upto": end, "since": ends[i - 1] if i else 0, "date_marks": marks}
@@ -2650,16 +2651,19 @@ def _make_one_map(kind: str, dates: list[str], oblast_km2: dict, oblast_places: 
             # скільки секунд показувати кожен етап – пропорційно до днів (від нього до наступного), мінімум 2,5 с
             starts = [info[(ends[i - 1] if i else 0)][0] for i in range(len(ends))]
             bounds = [dates.index(d) if d in dates else 0 for d in starts] + [len(dates)]
-            total = 5.0 if kind == "week" else 7.0   # 24.11.2026: коротше – ціль 15–20 с на все відео
+            total = 7.0 if kind == "week" else 9.0   # 27.11.2026: «розповзання» – кожен крок ~1,5 с проявлення + пауза
             # 16.11.2026 (Юля): загальний час не збільшуємо – ділимо його пропорційно до днів; кожен крок
             # щонайменше 1,2 с (щоб встигнути побачити блимання), а тоді приводимо суму назад до total
             raw = [max(1.3, total * (bounds[i + 1] - bounds[i]) / max(1, len(dates))) for i in range(len(ends))]
-            secs = [round(x * total / sum(raw), 2) for x in raw]
+            secs = [max(2.0, round(x * total / sum(raw), 2)) for x in raw]   # щонайменше 1,5 с розповзання + 0,5 с
             (DATA / out_name.replace(".jpg", "_steps.json")).write_text(json.dumps(
                 [[out_name.replace(".jpg", f"_step{i + 1}_v.jpg"), sec, out_name.replace(".jpg", f"_step{i + 1}_off_v.jpg")]
                  for i, sec in enumerate(secs)]))
             MAP_OBLAST[str(DATA / out_name)] = key
             v_names = sorted(list(pn), key=lambda n: not is_city(n))[:3] if pn else []
+            if blue_nm and pn and not any(n in blue_nm for n in v_names):   # 27.11.2026: обидва напрямки –
+                bl = [n for n in sorted(list(pn), key=lambda n: not is_city(n)) if n in blue_nm][:1]   # блакитна назва
+                v_names = [n for n in v_names if n not in blue_nm][:2] + bl                             # теж у шапці
             title_v = ("Поблизу: " + " · ".join(v_names)) if v_names and title.startswith("Поблизу: ") else title
             for suffix, kw in frames:
                 try:

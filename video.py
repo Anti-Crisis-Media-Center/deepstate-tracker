@@ -64,30 +64,20 @@ def make_video(first: Path, map_base: Path | None, map_full: Path | None, card: 
         if prev_full is not None:
             fade(prev_full, mb, 0.3)              # тут згасає рядок попередньої частини
         start = len(seq)
-        # 24.11.2026 (Юля): одразу з мапи (без титульного кадру); ділянки спалахують по черзі, кожна двічі
+        # 27.11.2026 (Юля): одразу з мапи (без титульного кадру); замість подвійного блимання ділянки
+        # «розповзаються» по черзі, як відбувалося: кожна нова частина плавно проявляється (~1,5 с) і лишається
         if sg.get("steps"):
             prev = mb
-            for i_, (p, sec, off) in enumerate(sg["steps"]):
-                st, of = _vert(Image.open(p)), _vert(Image.open(off))
-                if i_:
-                    fade(prev, of, 0.2)
-                else:
-                    hold(of, 0.2)
-                fade(of, st, 0.15)                        # спалах 1
-                hold(st, 0.35)
-                fade(st, of, 0.15)
-                hold(of, 0.15)
-                fade(of, st, 0.15)                        # спалах 2 – і лишається
-                hold(st, max(0.4, sec - 1.15))
+            hold(mb, 0.5)
+            for p, sec, _off in sg["steps"]:
+                st = _vert(Image.open(p))
+                fade(prev, st, 1.5)
+                hold(st, max(0.5, sec - 1.5))
                 prev = st
-            fade(prev, mf, 0.3)
+            fade(prev, mf, 0.6)
         else:
-            hold(mb, 0.2)
-            fade(mb, mf, 0.15)
-            hold(mf, 0.35)
-            fade(mf, mb, 0.15)
-            hold(mb, 0.15)
-            fade(mb, mf, 0.15)
+            hold(mb, 0.5)
+            fade(mb, mf, 1.5)
         hold(mf, 4 if si == len(segments) - 1 else 2.5)
         end = len(seq)
         if sg.get("intro"):
