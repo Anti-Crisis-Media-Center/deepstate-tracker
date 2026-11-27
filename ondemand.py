@@ -39,10 +39,15 @@ BTN_MSGS: list[int] = []   # id повідомлення з кнопками, п
 
 
 def tg(method: str, **data) -> dict:
-    try:
-        return requests.post(API + method, json=data, timeout=40).json()
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": str(e)}
+    # до 3 спроб при обриві зв'язку (27.11.2026: «Connection reset by peer» на sendMessage – кнопки зникли)
+    err = ""
+    for attempt in range(3):
+        try:
+            return requests.post(API + method, json=data, timeout=40).json()
+        except Exception as e:  # noqa: BLE001
+            err = str(e)
+            time.sleep(3 * (attempt + 1))
+    return {"ok": False, "error": err}
 
 
 def remove_old_buttons() -> None:
@@ -64,34 +69,50 @@ def setup() -> None:
                 "<b>Звіт на вимогу</b> – натисніть, за який період (рахується від цієї хвилини назад). "
                 "Інший період – напишіть <code>/report</code>, пробіл і кількість днів (від 1 до 90), "
                 "наприклад <code>/report 5</code>. Звіт приходить через 2–5 хвилин, видно, хто замовив.\n"
-                "Кнопки зникли – напишіть сюди <code>/start</code>.\n\n"
+                "Після кожного звіту кнопки є й унизу гілки. Кнопки зникли – напишіть сюди <code>/start</code>.\n\n"
                 "<i>Докладно – «06 Аналітика» в папці «00 Автоматизація АКМЦ – інструкції» на Google Диску АКМЦ.</i>")
     print("Кнопки:", "опубліковано" if r.get("ok") else r)
     if r.get("ok"):
         tg("pinChatMessage", chat_id=CHAT, message_id=r["result"]["message_id"], disable_notification=True)
 
 
-def move_buttons_down(old_id: int, prep_ids: list[int]) -> None:
-    """Після звіту: прибрати «⏳ Готую…» і перенести кнопки вниз гілки, щоб не шукати їх угорі
-    (рішення 10.11.2026). Нові кнопки публікуємо, лише якщо вдалося видалити старі — так при
-    двох швидких натисканнях не з'являться два набори кнопок."""
+SHORT_FILE = ".analytics_last.json"   # той самий файл, що зберігає кеш GitHub Actions; ключ "short_btn"
+
+
+def _short_get() -> int | None:
+    try:
+        return int(json.load(open(SHORT_FILE)).get("short_btn") or 0) or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _short_set(mid: int) -> None:
+    try:
+        try:
+            data = json.load(open(SHORT_FILE))
+        except Exception:  # noqa: BLE001
+            data = {}
+        data["short_btn"] = mid
+        json.dump(data, open(SHORT_FILE, "w"))
+    except Exception as e:  # noqa: BLE001
+        print("Не вдалося запам'ятати короткі кнопки:", e)
+
+
+def move_buttons_down(prep_ids: list[int]) -> None:
+    """Після звіту на вимогу (варіант 1, рішення Юлі 26.11.2026): довгий опис із кнопками закріплений угорі
+    й не чіпаємо; прибираємо «⏳ Готую…» і попередній короткий рядок, а внизу публікуємо новий короткий
+    «Звіт на вимогу:» з тими самими кнопками (не закріплюємо)."""
     for pid in prep_ids:
         tg("deleteMessage", chat_id=CHAT, message_id=pid)
-    r = tg("deleteMessage", chat_id=CHAT, message_id=old_id)
+    prev = _short_get()
+    if prev:
+        tg("deleteMessage", chat_id=CHAT, message_id=prev)
+    kb = {"inline_keyboard": [[{"text": t, "callback_data": f"rep:{d}"} for d, t in BUTTONS]]}
+    r = tg("sendMessage", chat_id=CHAT, message_thread_id=int(THREAD), reply_markup=kb,
+           disable_notification=True, text="Звіт на вимогу:")
+    print("Короткі кнопки:", "опубліковано" if r.get("ok") else r)
     if r.get("ok"):
-        setup()
-        return
-    # Старі кнопки вже переніс попередній запуск (два швидкі натискання). Запуски йдуть по черзі
-    # (concurrency у workflow), тож беремо актуальні кнопки — закріплене повідомлення бота —
-    # і знову переносимо їх під щойно надісланий звіт (виправлення 11.11.2026).
-    pin = (tg("getChat", chat_id=CHAT).get("result") or {}).get("pinned_message") or {}
-    me = (tg("getMe").get("result") or {}).get("id")
-    if pin.get("reply_markup") and me and (pin.get("from") or {}).get("id") == me \
-            and tg("deleteMessage", chat_id=CHAT, message_id=pin["message_id"]).get("ok"):
-        setup()
-        print("Кнопки перенесено вниз (після іншого запуску).")
-    else:
-        print("Старі кнопки вже прибрано, актуальних не знайдено — нові не публікую:", r, pin.get("message_id"))
+        _short_set(r["result"]["message_id"])
 
 
 def set_webhook(url: str) -> None:
@@ -120,7 +141,7 @@ def recent_reports(minutes: int = 10) -> dict:
     try:
         data = json.load(open(".analytics_last.json"))
         now = time.time()
-        return {k: v for k, v in data.items() if now - v[0] < minutes * 60}
+        return {k: v for k, v in data.items() if isinstance(v, list) and now - v[0] < minutes * 60}
     except Exception:  # noqa: BLE001
         return {}
 
@@ -187,8 +208,7 @@ if __name__ == "__main__":
         print("Немає ANALYTICS_BOT_TOKEN або чату — пропускаю.")
         sys.exit(0)
     if os.getenv("REFRESH_OLD", "").strip():   # окремий крок після звітів
-        move_buttons_down(int(os.getenv("REFRESH_OLD")),
-                          [int(x) for x in os.getenv("PREP_IDS", "").split() if x.isdigit()])
+        move_buttons_down([int(x) for x in os.getenv("PREP_IDS", "").split() if x.isdigit()])
         sys.exit(0)
     if os.getenv("WEBHOOK_URL", "").strip():
         set_webhook(os.getenv("WEBHOOK_URL").strip())
@@ -221,7 +241,7 @@ if __name__ == "__main__":
     if gh_out:
         with open(gh_out, "a") as fh:
             fh.write(f"days={' '.join(map(str, days))}\n")
-            fh.write(f"old_btn={BTN_MSGS[0] if (BTN_MSGS and days) else ''}\n")
+            fh.write(f"old_btn={'1' if days else ''}\n")   # після кожного звіту на вимогу – короткі кнопки внизу
             fh.write(f"prep={' '.join(map(str, prep))}\n")
             # хто замовив — у сам звіт (26.11.2026): повідомлення «⏳ Готую…» після звіту видаляється
             clean = {d: re.sub(r"[;=\r\n]", " ", WHO.get(d, "")) for d in days}
