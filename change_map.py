@@ -801,7 +801,7 @@ def render(change_files: list[Path], out: Path, title: str, subtitle: str, size:
     total = w1 + 14 + bar + 14 + w2
     sx = ox + mw - total
     sy2 = min(ly + 46, H - 40)
-    foot = "За даними DeepStateMap.live · АКМЦ"
+    foot = "За даними DeepStateMap · АКМЦ"
     ff = _font("500", 26)
     fw = d.textlength(foot, font=ff)
     if ox + fw + 24 > sx:   # не вміщається в один рядок з підписом джерела – без слова «масштаб» (12.11.2026)
