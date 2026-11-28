@@ -57,12 +57,6 @@
   }
  },
  "seen_cards": {
-  "1j6VzP2UqMpiiE0H7heKhMLdhyhqg9z5t": {
-   "13NW_VCMx7nqFx2xr1hEj5rKth95rMNwQ": "2026-11-18T08:52:16.436Z",
-   "1CXBg4vpynEJ4-TBrnWOV4LdEfh_Ii1fu": "2026-11-18T08:52:10.353Z",
-   "1vov21ooqTW7nd3IYQmWwPI8yt9CU3VIw": "2026-11-18T08:52:05.550Z",
-   "1suaYznOaJdHYcMGM9metgAXdopntvLt_": "2026-11-18T08:51:25.280Z"
-  },
   "1tpZEq9duveTq9PilxY92nbKw_NxcnHAz": {},
   "1P3hBBrO_tRPxWLAck7DmL-pSOlFkPrcz": {},
   "1MeRqUWqIPxNuWHF6xcdMNyDDqnh6F9Yn": {
@@ -77,23 +71,23 @@
  },
  "seen_cal": {
   "c3iockoqedsq3o9cc6ogmn68n4_20261128": {
-   "sig": "a59c708236ee",
+   "sig": "f737f43c7b99",
    "sec": {
-    "tg": "062879734221",
-    "fb": "062879734221",
-    "fby": "253ac4d1d25c",
-    "ig": "f7a673d9594a",
+    "tg": "e3dcf7d23d75",
+    "fb": "e3dcf7d23d75",
+    "fby": "27ef541589b4",
+    "ig": "a456df7000b9",
     "topic": "199c6784eefe",
     "threads": "c8c953c37edc"
    }
   },
   "go1vdb90cesf3ja6gl3rih7k0k_20261201": {
-   "sig": "59cf3f0fc439",
+   "sig": "82ec33eb938f",
    "sec": {
-    "tg": "837c7a9f8acf",
+    "tg": "7b1b6265f0d8",
     "fb": "5fadca1ec88c",
     "fby": "36b39f6ac5ba",
-    "ig": "69a5de3ed8e8",
+    "ig": "e495710cba4a",
     "topic": "31f4645934bd",
     "threads": "d86b2d96abc3",
     "stories": "da39a3ee5e6b"
@@ -207,5 +201,5 @@
    "sec": {}
   }
  },
- "seen_cal_ts": "2026-11-27T16:52:13Z"
+ "seen_cal_ts": "2026-11-28T08:34:45Z"
 }
