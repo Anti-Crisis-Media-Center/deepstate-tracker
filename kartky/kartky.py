@@ -723,6 +723,11 @@ def _calendar_changes(st: dict) -> list[str]:
             what = "нова подія"
         d = date.fromisoformat(day)
         probs = []
+        if d.isoformat() in st.get("published", {}):
+            # уже опубліковано: папку бот переніс в «Опубліковано», перевіряти картки нема сенсу (28.11)
+            out.append(f"🗓 <b>{human_date(d)} – {html.escape((ev.get('summary') or '').strip())}</b>\n   {what}"
+                       "\n   ✅ уже опубліковано сьогодні – зміни підуть у наступному році")
+            continue
         for pl in build_plan(d):
             if pl["event_id"] != ev["id"]:
                 continue
@@ -757,7 +762,7 @@ def watch_cards(st: dict) -> None:
         parts.append("🎨 <b>Картки на Google Диску</b>\n\n" + "\n\n".join(cards))
     if cal:
         parts.append("✏️ <b>Тексти в Google Календарі</b>\n\n" + "\n\n".join(cal))
-    parts.append("<i>9:16 потрібна лише для подій із #СТОРІЗ. Повна перевірка – у превʼю о 18:00 напередодні дати.</i>")
+    parts.append("<i>Повна перевірка – у превʼю о 18:00 напередодні дати.</i>")
     review_text("\n\n".join(parts)[:4000])
 
 def fb_credentials(page: str | None = None) -> tuple[str, str]:
