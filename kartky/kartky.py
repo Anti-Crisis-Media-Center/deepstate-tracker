@@ -975,12 +975,12 @@ def run_preview(d: date, st: dict) -> None:
             text += ("\n\n🧪 <b>Тестовий режим:</b> у соцмережі нічого не піде, вранці лише звіт." if TEST else "")
             text += ("\n\nЩоб скасувати — кнопка нижче" if btn else "\n\nЩоб скасувати") + \
                 " або рядок <code>#СТОП</code> в описі події."
-            cal = f'<a href="{p["link"]}">Google Календарі</a>' if p.get("link") else "Google Календарі"
+            cal = f'<a href="{p["link"]}">Google Календарі АКМЦ</a>' if p.get("link") else "Google Календарі АКМЦ"
             fid = (p.get("folder") or p.get("root") or {}).get("id")
-            drv = (f'<a href="https://drive.google.com/drive/folders/{fid}">папці дати на Google Диску</a>'
-                   if fid else "папці дати на Google Диску")
+            drv = (f'<a href="https://drive.google.com/drive/folders/{fid}">папці дати на Google Диску АКМЦ</a>'
+                   if fid else "папці дати на Google Диску АКМЦ")
             text += (f"\n\n✏️ <i>Щось не так? Текст – у {cal} (до 8:30, обирайте «Усі події»), "
-                     f"картки – у {drv}. Якщо щось не виходить – дзвоніть, пишіть Юлі.</i>")
+                     f"картки – у {drv}. Якщо щось не виходить – пишіть Юлі.</i>")
         review_text(text, stop_button(d) if (btn and p["nets"] and not p["stop"]) else None)
     if not FORCE:   # ручний тестовий запуск не рахується — справжнє превʼю однаково прийде о 18:00
         st.setdefault("previewed", {})[key] = datetime.now(KYIV).isoformat(timespec="minutes")
