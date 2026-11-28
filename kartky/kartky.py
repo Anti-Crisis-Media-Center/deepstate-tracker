@@ -414,7 +414,7 @@ def build_plan(d: date) -> list[dict]:
     for ev in events:
         title = (ev.get("summary") or "").strip()
         parsed = parse_description(ev.get("description") or "")
-        p = {"title": title, "event_id": ev.get("id"), "parsed": parsed, "nets": {}, "warn": [], "skip": [],
+        p = {"title": title, "event_id": ev.get("id"), "link": ev.get("htmlLink"), "parsed": parsed, "nets": {}, "warn": [], "skip": [],
              "folder": None, "root": root, "stop": "stop" in parsed}
         upd = (ev.get("updated") or "")[:4]
         texts = [n for n in ("tg", "fb", "ig", "threads") if parsed.get(n, {}).get("plain")]
@@ -969,7 +969,13 @@ def run_preview(d: date, st: dict) -> None:
         if p["nets"] and not p["stop"]:
             text += ("\n\n🧪 <b>Тестовий режим:</b> у соцмережі нічого не піде, вранці лише звіт." if TEST else "")
             text += ("\n\nЩоб скасувати — кнопка нижче" if btn else "\n\nЩоб скасувати") + \
-                " або рядок <code>#СТОП</code> в описі події. Виправлення в календарі й папці бот підхопить до ранку."
+                " або рядок <code>#СТОП</code> в описі події."
+            cal = f'<a href="{p["link"]}">Google Календарі</a>' if p.get("link") else "Google Календарі"
+            fid = (p.get("folder") or p.get("root") or {}).get("id")
+            drv = (f'<a href="https://drive.google.com/drive/folders/{fid}">папці дати на Google Диску</a>'
+                   if fid else "папці дати на Google Диску")
+            text += (f"\n\n✏️ <i>Щось не так? Текст – у {cal} (до 8:30, обирайте «Усі події»), "
+                     f"картки – у {drv}. Якщо щось не виходить – дзвоніть, пишіть Юлі.</i>")
         review_text(text, stop_button(d) if (btn and p["nets"] and not p["stop"]) else None)
     if not FORCE:   # ручний тестовий запуск не рахується — справжнє превʼю однаково прийде о 18:00
         st.setdefault("previewed", {})[key] = datetime.now(KYIV).isoformat(timespec="minutes")
