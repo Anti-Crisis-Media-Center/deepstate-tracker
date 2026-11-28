@@ -977,9 +977,9 @@ def run_preview(d: date, st: dict) -> None:
                 " або рядок <code>#СТОП</code> в описі події."
             cal = f'<a href="{p["link"]}">Google Календарі АКМЦ</a>' if p.get("link") else "Google Календарі АКМЦ"
             fid = (p.get("folder") or p.get("root") or {}).get("id")
-            drv = (f'<a href="https://drive.google.com/drive/folders/{fid}">папці дати на Google Диску АКМЦ</a>'
-                   if fid else "папці дати на Google Диску АКМЦ")
-            text += (f"\n\n✏️ <i>Щось не так? Текст – у {cal} (до 8:30, обирайте «Усі події»), "
+            drv = (f'<a href="https://drive.google.com/drive/folders/{fid}">папці на Google Диску АКМЦ</a>'
+                   if fid else "папці на Google Диску АКМЦ")
+            text += (f"\n\n✏️ <i>Щось не так? Тексти – у {cal}, "
                      f"картки – у {drv}. Якщо щось не виходить – пишіть Юлі.</i>")
         review_text(text, stop_button(d) if (btn and p["nets"] and not p["stop"]) else None)
     if not FORCE:   # ручний тестовий запуск не рахується — справжнє превʼю однаково прийде о 18:00
