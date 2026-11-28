@@ -20,7 +20,8 @@
   "2026-11-24": "no-events",
   "2026-11-25": "2026-11-25T08:31+02:00",
   "2026-11-26": "no-events",
-  "2026-11-27": "no-events"
+  "2026-11-27": "no-events",
+  "2026-11-28": "2026-11-28T08:30+02:00"
  },
  "done": {
   "2026-11-20:3phudm9c5373679quk1i81ojp9_20261120": {
@@ -46,6 +47,13 @@
    "ig": "https://www.instagram.com/p/DgJ4-CUjo4U/",
    "threads": "https://www.threads.com/@acmc.ua/post/DgJ4_cRkVEq + коментар",
    "stories": "опубліковано: Facebook біла, Facebook жовта, Instagram"
+  },
+  "2026-11-28:c3iockoqedsq3o9cc6ogmn68n4_20261128": {
+   "tg": "https://t.me/acmc_ua/6712",
+   "fb": "https://www.facebook.com/111460408546782_1141087685582202",
+   "fby": "https://www.facebook.com/414302258746592_1608681971275093",
+   "ig": "https://www.instagram.com/p/DgRnW10kkOp/",
+   "threads": "https://www.threads.com/@acmc.ua/post/DgRnYngmwfj"
   }
  },
  "seen_cards": {
