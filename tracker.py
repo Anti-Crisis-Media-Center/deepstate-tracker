@@ -2950,7 +2950,10 @@ def main() -> int:
                                                  extra_urls=[threads_url_for(x) for x in EXTRA_MAPS.get(day_map, [])]))
     # жовта FB (з 25.11.2026): щодня о 8:00 – лише дні зі змінами (дні без змін – вимкненим перемикачем FB_YELLOW_QUIET)
     yellow_names = {k: place_names([today], k) for k in OBLASTS if results[k]["newly_km2"] or results[k]["deocc_km2"]}
-    if not quiet:
+    # 28.11.2026: на жовтій «день зі змінами» – лише нові окуповані/деокуповані ділянки. Новий район проникнення
+    # (сіра зона) згадуємо тільки в Telegram, тож через нього на жовтій виходив допис «без змін» з обкладинкою
+    map_changed = any(results[k]["newly_km2"] or results[k]["deocc_km2"] for k in OBLASTS)
+    if map_changed:
         step("Жовта FB", lambda: post_fb_yellow(build_fb_teaser(fmt_date(today), results, yellow_names, FB_YELLOW_CTA),
                                                 ig_version(day_map) or COVER_IMAGE, today,
                                                 [ig_version(x) for x in EXTRA_MAPS.get(day_map, [])] if day_map else None))
