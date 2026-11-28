@@ -1246,7 +1246,7 @@ IG_DAILY_POSTS = os.getenv("IG_DAILY_POSTS", "0") == "1"   # щоденні до
 FB_STORIES = os.getenv("FB_STORIES", "1") != "0"  # сторіз у Facebook увімкнено (4.11.2026)
 FB_YELLOW_STORIES = os.getenv("FB_YELLOW_STORIES", "1") != "0"  # сторіз на жовтій (вимкнути: "0")
 # 25.11.2026 (Юля): на жовтій сторіз стартують одразу в новому дизайні (з мапою, хвиля 2), а не зі старою обкладинкою
-FB_YELLOW_STORIES_FROM = os.getenv("FB_YELLOW_STORIES_FROM", "2026-11-30")
+FB_YELLOW_STORIES_FROM = os.getenv("FB_YELLOW_STORIES_FROM", "2026-12-07")   # 28.11.2026: перенесено з 30.11 разом із рештою хвилі 2
 
 
 def _short_places(places: list, n: int = 3) -> str:
